@@ -1,0 +1,61 @@
+math := {}
+
+math.abs: func(x: number) -> number
+
+math.acos: func(x: number) -> number
+
+math.asin: func(x: number) -> number
+
+math.atan: func(y: number) -> number
+
+math.atan2: func(y: number, x: number) -> number
+
+math.ceil: func(x: number) -> number
+
+math.cos: func(x: number) -> number
+
+math.cosh: func(x: number) -> number
+
+math.deg: func(x: number) -> number
+
+math.exp: func(x: number) -> number
+
+math.floor: func(x: number) -> number
+
+math.fmod: func(x: number, y: number) -> number
+
+math.frexp: func(x: number) -> (number, number)
+
+math.ldexp: func(m: number, e: number) -> number
+
+math.log: func(x: number, base: number) -> number
+
+math.max: func(a: number, b: number) -> number
+
+math.min: func(a: number, b: number) -> number
+
+math.modf: func(x: number) -> number
+
+math.pow: func(x: number, y: number) -> number
+
+math.rad: func(x: number) -> number
+
+math.random: func() -> number
+// math.random: func(m: number) -> number
+// math.random: func(m: number, n: number) -> number
+
+math.randomseed: func(x: number)
+
+math.sin: func(x: number) -> number
+
+math.sinh: func(x: number) -> number
+
+math.sqrt: func(x: number) -> number
+
+math.tan: func(x: number) -> number
+
+math.tanh: func(x: number) -> number
+
+math.type: func(x: any) -> string
+
+math.ult: func(m: number, n: number) -> boolean
