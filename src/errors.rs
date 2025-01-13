@@ -34,10 +34,10 @@ pub enum CheckErr {
     EmptyError,
     #[error("no such val '{0}'")]
     NoSuchVal(String),
-    #[error("type mismatch.\nexpected: {expected:?}\nrecieved: {recieved:?}")]
+    #[error("type mismatch\nexpected: {expected:?}\nrecieved: {recieved:?}")]
     MismatchedTypes{
-		expected: Option<Type>,
-		recieved: Option<Type>,
+		expected: Type,
+		recieved: Type,
 	},
     #[error("wrong number of returns")]
     ReturnCount,

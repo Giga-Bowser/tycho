@@ -3,7 +3,7 @@ use std::rc::Rc;
 #[derive(Debug, Clone)]
 pub struct Function {
     pub params: Vec<(String, Type)>,
-    pub returns: Vec<Type>,
+    pub returns: Box<Type>,
 }
 
 #[derive(Debug, Clone)]
@@ -50,7 +50,8 @@ pub enum Type {
     User(User),
     Adaptable,
     Variadic,
-    Multiple,
+    Multiple(Vec<Type>),
+    Optional(Box<Type>),
 }
 
 impl PartialEq for Type {
@@ -60,6 +61,21 @@ impl PartialEq for Type {
             || std::mem::discriminant(rhs) == std::mem::discriminant(&Self::Adaptable)
         {
             return true;
+        }
+
+        match (self, rhs) {
+            (Type::Optional(opt), other) | (other, Type::Optional(opt)) => {
+                if std::mem::discriminant(other) == std::mem::discriminant(&Self::Nil) {
+                    return true;
+                }
+
+                if std::mem::discriminant(other) == std::mem::discriminant(&**opt) {
+                    return true;
+                }
+
+                return false;
+            }
+            _ => (),
         }
 
         if std::mem::discriminant(self) != std::mem::discriminant(rhs) {
@@ -91,6 +107,15 @@ impl Type {
 
         if std::mem::discriminant(rhs) == std::mem::discriminant(&Self::Adaptable) {
             return true;
+        }
+
+        if let Self::Optional(base) = self {
+            return std::mem::discriminant(rhs) == std::mem::discriminant(&**base)
+                || std::mem::discriminant(rhs) == std::mem::discriminant(&Type::Nil);
+        }
+
+        if let Self::Optional(base) = rhs {
+            return std::mem::discriminant(self) == std::mem::discriminant(&**base)
         }
 
         if std::mem::discriminant(self) != std::mem::discriminant(rhs) {

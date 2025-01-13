@@ -14,7 +14,7 @@ pub struct Parser<'src> {
     pub pool: ExprPool<'src>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum OpKind {
     Add,
     Sub,
@@ -32,7 +32,7 @@ pub enum OpKind {
     Or,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum UnOpKind {
     Neg,
     Len,
@@ -131,7 +131,7 @@ fn get_unop(tok: &TokenKind) -> Option<UnOpKind> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Default)]
 pub struct ExprPool<'src>(pub Vec<Node<'src>>);
 
 pub type ExprRef = usize;
@@ -152,47 +152,47 @@ impl<'src> std::ops::Index<ExprRef> for ExprPool<'src> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BinOp {
     pub op: OpKind,
     pub lhs: ExprRef,
     pub rhs: ExprRef,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct UnOp {
     pub op: UnOpKind,
     pub val: ExprRef,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Assign<'a> {
     pub lhs: Box<SuffixedName<'a>>,
     pub rhs: ExprRef,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Index {
     pub key: ExprRef,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Access<'a> {
-    pub str: &'a str,
+    pub field_name: &'a str,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Call {
     pub args: Vec<ExprRef>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Method<'a> {
-    pub name: &'a str,
+    pub method_name: &'a str,
     pub args: Vec<ExprRef>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Suffix<'a> {
     Index(Index),
     Access(Access<'a>),
@@ -200,26 +200,32 @@ pub enum Suffix<'a> {
     Method(Method<'a>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MethodDecl<'a> {
     pub struct_name: &'a str,
     pub method_name: &'a str,
-    pub constructor: Box<FuncNode<'a>>,
+    pub func: Box<FuncNode<'a>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct StructNode<'a> {
     pub type_: Box<User>,
     pub constructor: Option<FuncNode<'a>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
+pub struct StructAccess<'a> {
+    pub name: &'a str,
+    pub accesses: Vec<Access<'a>>,
+}
+
+#[derive(Debug, Clone)]
 pub struct SuffixedName<'a> {
     pub name: &'a str,
     pub suffixes: Vec<Suffix<'a>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Declare<'a> {
     pub lhs: Box<SuffixedName<'a>>,
     pub type_: Box<Type>,
@@ -227,65 +233,65 @@ pub struct Declare<'a> {
 }
 
 /// a more advanced decl, like math.min := ...
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SuffixedDecl<'a> {
     pub lhs: SuffixedExpr<'a>,
     pub type_: Box<Type>,
     pub rhs: Option<ExprRef>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FuncNode<'a> {
     pub type_: Box<Function>,
     pub body: Vec<Node<'a>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct StructConstructor<'a> {
     pub type_: Box<Function>,
     pub body: Vec<Node<'a>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Else<'a> {
     Else(Vec<Node<'a>>),
     ElseIf(IfNode<'a>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct IfNode<'a> {
     pub condition: ExprRef,
     pub body: Vec<Node<'a>>,
     pub else_: Option<Box<Else<'a>>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct WhileNode<'a> {
     pub condition: ExprRef,
     pub body: Vec<Node<'a>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum FieldNode<'a> {
     Field { key: &'a str, val: ExprRef },
     ExprField { key: ExprRef, val: ExprRef },
     ValField { val: ExprRef },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RangeExpr {
     pub lhs: ExprRef,
     pub rhs: ExprRef,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RangeFor<'a> {
     pub var: &'a str,
     pub range: Box<RangeExpr>,
     pub body: Vec<Node<'a>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct KeyValFor<'a> {
     /// this should be 'keyname, valname' in one str
     pub names: &'a str,
@@ -293,30 +299,30 @@ pub struct KeyValFor<'a> {
     pub body: Vec<Node<'a>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MultiDecl<'a> {
-    pub lhs_arr: Vec<SuffixedExpr<'a>>,
+    pub lhs_arr: Vec<&'a str>,
     pub rhs_arr: Vec<ExprRef>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MultiAssign<'a> {
     pub lhs_arr: Vec<SuffixedExpr<'a>>,
     pub rhs_arr: Vec<ExprRef>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SuffixedExpr<'a> {
     pub val: ExprRef,
     pub suffixes: Vec<Suffix<'a>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TableNode<'a> {
     pub fields: Vec<FieldNode<'a>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum SimpleExpr<'a> {
     Num(&'a str),
     Str(&'a str),
@@ -328,7 +334,7 @@ pub enum SimpleExpr<'a> {
     SuffixedExpr(SuffixedExpr<'a>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Node<'a> {
     BinOp(BinOp),
     UnOp(UnOp),
@@ -359,7 +365,7 @@ impl<'src> Parser<'src> {
         Ok(MethodDecl {
             struct_name,
             method_name,
-            constructor: Box::new(self.func_constructor(typelist)?),
+            func: Box::new(self.func_constructor(typelist)?),
         })
     }
 
@@ -490,7 +496,22 @@ impl<'src> Parser<'src> {
 
                     let rhs_arr = self.parse_expr_list(typelist)?;
 
-                    Ok(Node::MultiDecl(MultiDecl { lhs_arr, rhs_arr }))
+                    let mut new_lhs_arr = Vec::new();
+
+                    for SuffixedExpr { val, suffixes } in lhs_arr.into_iter() {
+                        if let Node::Name(name) = self.pool[val] {
+                            assert!(suffixes.is_empty());
+
+                            new_lhs_arr.push(name)
+                        } else {
+                            return Err(ParseError::EmptyError);
+                        }
+                    }
+
+                    Ok(Node::MultiDecl(MultiDecl {
+                        lhs_arr: new_lhs_arr,
+                        rhs_arr,
+                    }))
                 }
                 Equal => {
                     self.tokens.pop_front();
@@ -505,7 +526,7 @@ impl<'src> Parser<'src> {
             };
         }
 
-        return Ok(Node::SuffixedExpr(sufexpr));
+        Ok(Node::SuffixedExpr(sufexpr))
     }
 
     fn parse_suffixed_expr(
@@ -519,7 +540,7 @@ impl<'src> Parser<'src> {
                 Dot => {
                     self.tokens.pop_front();
                     suffixes.push(Suffix::Access(Access {
-                        str: self.tokens.pop_name()?,
+                        field_name: self.tokens.pop_name()?,
                     }));
                 }
                 Colon => {
@@ -540,7 +561,7 @@ impl<'src> Parser<'src> {
                         }
 
                         suffixes.push(Suffix::Method(Method {
-                            name,
+                            method_name: name,
                             args: self.parse_func_args(typelist)?,
                         }));
                     } else {
@@ -801,7 +822,7 @@ impl<'src> Parser<'src> {
         Ok(FuncNode {
             type_: Box::new(Function {
                 params,
-                returns: Vec::new(),
+                returns: Box::default(),
             }),
             body,
         })
@@ -836,7 +857,7 @@ impl<'src> Parser<'src> {
 
         let type_ = Box::new(User { fields });
 
-        return match self.tokens[0].kind {
+        match self.tokens[0].kind {
             RCurly => {
                 self.tokens.pop_front();
                 Ok(StructNode {
@@ -853,10 +874,13 @@ impl<'src> Parser<'src> {
                 token: (&self.tokens[0]).into(),
                 expected_kinds: vec![RCurly, Constructor],
             })),
-        };
+        }
     }
 
-    fn func_constructor(&mut self, typelist: &TypeList<'src>) -> Result<FuncNode<'src>, ParseError> {
+    fn func_constructor(
+        &mut self,
+        typelist: &TypeList<'src>,
+    ) -> Result<FuncNode<'src>, ParseError> {
         self.tokens.pop_front(); // pop 'func'
         self.tokens.expect(LParen)?;
 
@@ -891,7 +915,7 @@ impl<'src> Parser<'src> {
             }
         }
 
-        let returns = self.parse_return_type(typelist)?;
+        let returns = Box::new(self.parse_return_type(typelist)?);
 
         self.tokens.expect(LCurly)?;
 
@@ -911,17 +935,16 @@ impl<'src> Parser<'src> {
         })
     }
 
-    fn parse_return_type(&mut self, typelist: &TypeList<'_>) -> Result<Vec<Type>, ParseError> {
-        let mut result = Vec::new();
-
+    fn parse_return_type(&mut self, typelist: &TypeList<'_>) -> Result<Type, ParseError> {
         if self.tokens[0].kind != Arrow {
-            return Ok(result);
+            return Ok(Type::Nil);
         }
 
         self.tokens.pop_front(); // pop '->'
 
         if self.tokens[0].kind == LParen {
             self.tokens.pop_front();
+            let mut result = Vec::new();
             result.push(self.parse_type(typelist)?);
 
             while self.tokens[0].kind == Comma {
@@ -930,15 +953,15 @@ impl<'src> Parser<'src> {
             }
 
             self.tokens.expect(RParen)?;
-        } else {
-            result.push(self.parse_type(typelist)?);
-        }
 
-        Ok(result)
+            Ok(Type::Multiple(result))
+        } else {
+            Ok(self.parse_type(typelist)?)
+        }
     }
 
-    fn parse_type(&mut self, typelist: &TypeList<'_>) -> Result<Type, ParseError> {
-        return match self.tokens[0].kind {
+    fn parse_basic_type(&mut self, typelist: &TypeList<'_>) -> Result<Type, ParseError> {
+        match self.tokens[0].kind {
             Name => {
                 let name = self.tokens[0].str;
 
@@ -988,7 +1011,7 @@ impl<'src> Parser<'src> {
 
                     return Ok(Type::Function(Function {
                         params: args,
-                        returns: self.parse_return_type(typelist)?,
+                        returns: Box::new(self.parse_return_type(typelist)?),
                     }));
                 }
 
@@ -1012,14 +1035,25 @@ impl<'src> Parser<'src> {
 
                 Ok(Type::Function(Function {
                     params: args,
-                    returns: self.parse_return_type(typelist)?,
+                    returns: Box::new(self.parse_return_type(typelist)?),
                 }))
             }
             _ => Err(ParseError::UnexpectedToken(UnexpectedToken {
                 token: (&self.tokens[0]).into(),
                 expected_kinds: vec![Name, Nil, LSquare, Func],
             })),
-        };
+        }
+    }
+
+    fn parse_type(&mut self, typelist: &TypeList<'_>) -> Result<Type, ParseError> {
+        let mut result = self.parse_basic_type(typelist)?;
+
+        if self.tokens[0].kind == Question {
+            self.tokens.pop_front();
+            result = Type::Optional(Box::new(result));
+        }
+
+        Ok(result)
     }
 
     fn if_stat(&mut self, typelist: &TypeList<'src>) -> Result<IfNode<'src>, ParseError> {
@@ -1062,6 +1096,8 @@ impl<'src> Parser<'src> {
         scoped_typelist = typelist.clone(); // reset typelist for next if
 
         let mut else_body = Vec::new();
+
+        self.tokens.expect(LCurly)?;
 
         while self.tokens[0].kind != RCurly {
             else_body.push(self.statement(&mut scoped_typelist)?);
@@ -1236,10 +1272,10 @@ impl<'src> Parser<'src> {
                     )?));
                 }
 
-                return self.parse_expr_statement(typelist);
+                self.parse_expr_statement(typelist)
             }
-            If => return Ok(Node::IfNode(self.if_stat(typelist)?)),
-            While => return Ok(Node::WhileNode(self.while_stat(typelist)?)),
+            If => Ok(Node::IfNode(self.if_stat(typelist)?)),
+            While => Ok(Node::WhileNode(self.while_stat(typelist)?)),
             For => self.for_stat(typelist),
             Return => {
                 self.tokens.pop_front();
@@ -1259,9 +1295,7 @@ impl<'src> Parser<'src> {
 
                 Ok(Node::Block(body))
             }
-            _ => {
-                return self.parse_expr_statement(typelist);
-            }
+            _ => self.parse_expr_statement(typelist),
         }
     }
 }

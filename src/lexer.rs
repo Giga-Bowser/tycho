@@ -128,6 +128,9 @@ pub enum TokenKind {
     #[token(">")]
     Greater,
 
+    #[token("?")]
+    Question,
+
     #[token("[")]
     LSquare,
 
@@ -155,7 +158,7 @@ impl PartialEq for TokenKind {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Token<'source> {
     pub kind: TokenKind,
     pub str: &'source str,
@@ -177,7 +180,7 @@ impl From<&Token<'_>> for PermaToken {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Tokens<'source>(pub VecDeque<Token<'source>>);
 
 impl<'source> Index<usize> for Tokens<'source> {

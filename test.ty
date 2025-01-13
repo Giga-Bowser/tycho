@@ -161,8 +161,8 @@ PIDController := struct {
     ki: number,
     kd: number,
     integral: number,
-    previousError: number,
-    previousOutput: number,
+    previousError: number?,
+    previousOutput: number?,
     previousTime: number,
     dt: number,
     shouldRunIntegral: boolean
@@ -192,9 +192,9 @@ PIDController:clear := func(time: number) {
 PIDController:pid := func(
     input: number,
     setpoint: number,
-    thresh: number,
-    maxChange: number,
-    maxOutput: number
+    thresh: number?,
+    maxChange: number?,
+    maxOutput: number?
 ) -> number {
 	threshold := thresh || 0
 	error := setpoint - input
