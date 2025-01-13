@@ -26,9 +26,9 @@ use structopt::StructOpt;
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
-type TypeEnv<'a> = HashMap<String, Type, BuildHasherDefault<FxHasher>>;
+type TypeList<'a> = HashMap<String, Type, BuildHasherDefault<FxHasher>>;
 
-fn add_defines(file_path: PathBuf, type_env: &mut TypeEnv) {
+fn add_defines(file_path: PathBuf, type_env: &mut TypeList) {
     let contents = fs::read_to_string(file_path.clone())
         .unwrap_or_else(|_| panic!("Sould have been able to read file {}", file_path.display()));
 
@@ -42,7 +42,7 @@ fn add_defines(file_path: PathBuf, type_env: &mut TypeEnv) {
         })
         .collect();
 
-    let mut typelist = TypeEnv::default();
+    let mut typelist = TypeList::default();
     typelist.insert("number".to_owned(), Type::Number);
     typelist.insert("string".to_owned(), Type::String);
     typelist.insert("boolean".to_owned(), Type::Boolean);
@@ -84,7 +84,7 @@ pub struct Opt {
 fn main() {
     let args = Opt::from_args();
 
-    let mut type_env_orig = TypeEnv::default();
+    let mut type_env_orig = TypeList::default();
 
     for filename in args.includes {
         add_defines(filename, &mut type_env_orig)
@@ -109,7 +109,7 @@ fn main() {
     //
     // println!();
 
-    let mut typelist = TypeEnv::default();
+    let mut typelist = TypeList::default();
     typelist.insert("number".to_owned(), Type::Number);
     typelist.insert("string".to_owned(), Type::String);
     typelist.insert("boolean".to_owned(), Type::Boolean);

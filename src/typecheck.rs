@@ -3,7 +3,7 @@ use std::rc::Rc;
 use crate::errors::*;
 use crate::parser::*;
 use crate::types::*;
-use crate::TypeEnv;
+use crate::TypeList;
 
 pub struct TypeChecker<'src> {
     pub pool: ExprPool<'src>,
@@ -13,7 +13,7 @@ impl<'src> TypeChecker<'src> {
     fn check_decl(
         &self,
         decl: &Declare<'src>,
-        type_env: &mut TypeEnv<'src>,
+        type_env: &mut TypeList<'src>,
     ) -> Result<(), CheckErr> {
         if let Some(val) = decl.val {
             if let Node::SimpleExpr(SimpleExpr::StructNode(StructNode { type_, .. })) =
@@ -78,7 +78,7 @@ impl<'src> TypeChecker<'src> {
         }
     }
 
-    fn check_expr(&self, expr: ExprRef, type_env: &TypeEnv<'src>) -> Result<Type, CheckErr> {
+    fn check_expr(&self, expr: ExprRef, type_env: &TypeList<'src>) -> Result<Type, CheckErr> {
         match &self.pool[expr] {
             Node::BinOp(binop) => self.check_binop(binop, type_env),
             Node::UnOp(unop) => match unop.op {
@@ -106,7 +106,7 @@ impl<'src> TypeChecker<'src> {
     fn check_field(
         &self,
         field_node: &FieldNode<'src>,
-        type_env: &TypeEnv<'src>,
+        type_env: &TypeList<'src>,
     ) -> Result<TableType, CheckErr> {
         Ok(TableType {
             key_type: Rc::new(self.check_field_key(field_node, type_env)?),
@@ -117,7 +117,7 @@ impl<'src> TypeChecker<'src> {
     fn check_field_key(
         &self,
         field_node: &FieldNode<'src>,
-        type_env: &TypeEnv<'src>,
+        type_env: &TypeList<'src>,
     ) -> Result<Type, CheckErr> {
         match field_node {
             FieldNode::Field { .. } => Ok(Type::String),
@@ -129,7 +129,7 @@ impl<'src> TypeChecker<'src> {
     fn check_field_val(
         &self,
         field_node: &FieldNode<'src>,
-        type_env: &TypeEnv<'src>,
+        type_env: &TypeList<'src>,
     ) -> Result<Type, CheckErr> {
         match field_node {
             FieldNode::Field { val, .. }
@@ -141,7 +141,7 @@ impl<'src> TypeChecker<'src> {
     fn check_table(
         &self,
         table_node: &TableNode<'src>,
-        type_env: &TypeEnv<'src>,
+        type_env: &TypeList<'src>,
     ) -> Result<TableType, CheckErr> {
         if table_node.fields.is_empty() {
             return Ok(TableType {
@@ -178,7 +178,7 @@ impl<'src> TypeChecker<'src> {
     fn check_simple_expr(
         &self,
         simple_expr: &SimpleExpr<'src>,
-        type_env: &TypeEnv<'src>,
+        type_env: &TypeList<'src>,
     ) -> Result<Type, CheckErr> {
         match simple_expr {
             SimpleExpr::Num(..) => Ok(Type::Number),
@@ -199,7 +199,7 @@ impl<'src> TypeChecker<'src> {
     fn check_func(
         &self,
         func: &'src FuncNode<'src>,
-        mut type_env: TypeEnv<'src>,
+        mut type_env: TypeList<'src>,
     ) -> Result<Type, CheckErr> {
         for (name, type_) in &func.type_.params {
             type_env.insert(name.to_owned(), type_.clone());
@@ -221,7 +221,7 @@ impl<'src> TypeChecker<'src> {
     fn check_func_body(
         &self,
         body: &Vec<Node<'src>>,
-        mut type_env: TypeEnv<'src>,
+        mut type_env: TypeList<'src>,
         return_types: &Vec<Type>,
     ) -> Result<bool, CheckErr> {
         for stat in body {
@@ -275,7 +275,7 @@ impl<'src> TypeChecker<'src> {
     fn check_suffixed_expr(
         &self,
         suffixed_expr: &SuffixedExpr<'src>,
-        type_env: &TypeEnv<'src>,
+        type_env: &TypeList<'src>,
     ) -> Result<Type, CheckErr> {
         let mut type_ = &self.check_expr(suffixed_expr.val, type_env)?;
 
@@ -350,7 +350,7 @@ impl<'src> TypeChecker<'src> {
         Ok(type_.clone())
     }
 
-    fn check_binop(&self, binop: &BinOp, type_env: &TypeEnv<'src>) -> Result<Type, CheckErr> {
+    fn check_binop(&self, binop: &BinOp, type_env: &TypeList<'src>) -> Result<Type, CheckErr> {
         match binop.op {
             OpKind::Add | OpKind::Sub | OpKind::Mul | OpKind::Div | OpKind::Pow => {
                 let lhs_type = self.check_expr(binop.lhs, type_env)?;
@@ -393,7 +393,7 @@ impl<'src> TypeChecker<'src> {
     fn check_if_node(
         &self,
         if_node: &IfNode<'src>,
-        type_env: &TypeEnv<'src>,
+        type_env: &TypeList<'src>,
     ) -> Result<(), CheckErr> {
         let condition_type = self.check_expr(if_node.condition, type_env)?;
         if !condition_type.can_equal(&Type::Boolean) {
@@ -415,7 +415,7 @@ impl<'src> TypeChecker<'src> {
     pub fn check_statement(
         &self,
         stat: &Node<'src>,
-        type_env: &mut TypeEnv<'src>,
+        type_env: &mut TypeList<'src>,
     ) -> Result<(), CheckErr> {
         match stat {
             Node::Declare(decl) => self.check_decl(decl, type_env),
