@@ -152,6 +152,12 @@ impl<'src> std::ops::Index<ExprRef> for ExprPool<'src> {
     }
 }
 
+impl<'src> std::ops::IndexMut<ExprRef> for ExprPool<'src> {
+    fn index_mut(&mut self, index: ExprRef) -> &mut Node<'src> {
+        &mut self.0[index]
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct BinOp {
     pub op: OpKind,
@@ -211,6 +217,7 @@ pub struct MethodDecl<'a> {
 pub struct StructNode<'a> {
     pub type_: Box<User>,
     pub constructor: Option<FuncNode<'a>>,
+    pub name: Option<&'a str>,
 }
 
 #[derive(Debug, Clone)]
@@ -381,13 +388,14 @@ impl<'src> Parser<'src> {
 
             let val = self.parse_expr(typelist)?;
 
-            if let Node::SimpleExpr(SimpleExpr::StructNode(StructNode { ref type_, .. })) =
-                self.pool[val]
+            if let Node::SimpleExpr(SimpleExpr::StructNode(StructNode { type_, name, .. })) =
+                &mut self.pool[val]
             {
                 if !lhs.suffixes.is_empty() {
                     return Err(ParseError::EmptyError);
                 }
                 typelist.insert(lhs.name.to_owned(), Type::User(*type_.clone()));
+                *name = Some(lhs.name);
             }
 
             return Ok(Declare {
@@ -412,15 +420,17 @@ impl<'src> Parser<'src> {
         let val = self.parse_expr(typelist)?;
 
         if let Node::SimpleExpr(SimpleExpr::StructNode(StructNode {
-            type_: ref struct_type,
+            type_: struct_type,
+            name,
             ..
-        })) = self.pool[val]
+        })) = &mut self.pool[val]
         {
             if !lhs.suffixes.is_empty() {
                 return Err(ParseError::EmptyError);
             }
 
             typelist.insert(lhs.name.to_owned(), Type::User(*struct_type.clone()));
+            *name = Some(lhs.name);
         }
 
         Ok(Declare {
@@ -841,6 +851,7 @@ impl<'src> Parser<'src> {
             return Ok(StructNode {
                 type_: Box::new(User { fields }),
                 constructor: None,
+                name: None,
             });
         }
 
@@ -863,12 +874,17 @@ impl<'src> Parser<'src> {
                 Ok(StructNode {
                     type_,
                     constructor: None,
+                    name: None,
                 })
             }
             Constructor => {
                 let constructor = Some(self.parse_struct_constructor(typelist)?);
                 self.tokens.expect(RCurly)?;
-                Ok(StructNode { type_, constructor })
+                Ok(StructNode {
+                    type_,
+                    constructor,
+                    name: None,
+                })
             }
             _ => Err(ParseError::UnexpectedToken(UnexpectedToken {
                 token: (&self.tokens[0]).into(),

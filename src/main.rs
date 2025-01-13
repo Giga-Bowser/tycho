@@ -1,3 +1,4 @@
+mod compiler;
 mod errors;
 mod lexer;
 mod parser;
@@ -7,6 +8,7 @@ mod typecheck;
 mod types;
 mod util;
 
+use crate::compiler::Compiler;
 use crate::lexer::*;
 use crate::parser::*;
 use crate::pretty::Printer;
@@ -228,8 +230,85 @@ fn bench_check() {
     );
 }
 
+fn bench_compile() {
+    let args = Opt::from_args();
+
+    let mut type_env = TypeEnv::default();
+
+    for filename in args.includes {
+        add_defines(filename, &mut type_env)
+    }
+
+    let contents = fs::read_to_string(args.file.clone())
+        .unwrap_or_else(|_| panic!("Sould have been able to read file {}", args.file.display()));
+
+    let lex = TokenKind::lexer(&contents);
+
+    let tokens: Tokens = lex
+        .spanned()
+        .map(|(t, r)| Token {
+            kind: t.unwrap(),
+            str: unsafe { contents.get_unchecked(r) },
+        })
+        .collect();
+
+    let mut typelist = TypeList::default();
+    typelist.insert("number".to_owned(), Type::Number);
+    typelist.insert("string".to_owned(), Type::String);
+    typelist.insert("boolean".to_owned(), Type::Boolean);
+    typelist.insert("any".to_owned(), Type::Any);
+
+    let mut parser = Parser {
+        tokens,
+        pool: ExprPool(Vec::new()),
+    };
+
+    let mut stats = Vec::new();
+
+    while parser.tokens[0].kind != TokenKind::EndOfFile {
+        stats.push(parser.statement(&mut typelist).unwrap());
+    }
+
+    let typechecker = TypeChecker { pool: parser.pool };
+    for stat in &stats {
+        match typechecker.check_statement(stat, &mut type_env) {
+            Ok(()) => (),
+            Err(_) => {
+                let printer = Printer {
+                    pool: typechecker.pool,
+                };
+                panic!("\n{}", printer.print(stat))
+            }
+        }
+    }
+
+    let compiler = Compiler::new(typechecker.pool);
+
+    let mut total = Duration::default();
+    let mut result = String::new();
+    for _ in 0..args.number {
+        result = String::new();
+        let start = Instant::now();
+
+        for stat in &stats {
+            result += &std::hint::black_box(compiler.compile_statement(std::hint::black_box(stat)));
+            result.push('\n');
+        }
+        let end = Instant::now();
+        total += end - start;
+    }
+
+    println!(
+        "avg compile time: {:.3}",
+        total.as_micros() as f32 / args.number as f32
+    );
+
+    print!("{result}");
+}
+
 fn main() {
     bench_lex();
     bench_parse();
     bench_check();
+    bench_compile();
 }
