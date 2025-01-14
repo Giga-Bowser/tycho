@@ -63,6 +63,7 @@ impl<'src> Compiler<'src> {
                 self.compile_expr(binop.rhs),
             ),
             Node::UnOp(UnOp { op, val }) => op.to_string() + &self.compile_expr(*val),
+            Node::ParenExpr(ParenExpr { val }) => format!("({})", self.compile_expr(*val)),
             Node::SimpleExpr(simple_expr) => self.compile_simple_expr(simple_expr),
             Node::Name(str) => (*str).to_owned(),
 

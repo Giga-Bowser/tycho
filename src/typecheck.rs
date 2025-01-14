@@ -90,6 +90,7 @@ impl<'src> TypeChecker<'src> {
                 }
                 UnOpKind::Len => Ok(Type::Number),
             },
+            Node::ParenExpr(paren_expr) => self.check_expr(paren_expr.val, type_env),
             Node::SimpleExpr(simple_expr) => self.check_simple_expr(simple_expr, type_env),
             Node::Name(str) => match type_env.get(str) {
                 Some(type_) => Ok(type_.clone()),

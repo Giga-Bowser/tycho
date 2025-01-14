@@ -172,6 +172,11 @@ pub struct UnOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct ParenExpr {
+    pub val: ExprRef,
+}
+
+#[derive(Debug, Clone)]
 pub struct Assign<'a> {
     pub lhs: Box<SuffixedName<'a>>,
     pub rhs: ExprRef,
@@ -345,6 +350,7 @@ pub enum SimpleExpr<'a> {
 pub enum Node<'a> {
     BinOp(BinOp),
     UnOp(UnOp),
+    ParenExpr(ParenExpr),
     Assign(Assign<'a>),
     Break,
     SimpleExpr(SimpleExpr<'a>),
@@ -651,10 +657,10 @@ impl<'src> Parser<'src> {
             }
             LParen => {
                 self.tokens.pop_front();
-                let temp = self.parse_expr(typelist);
+                let val = self.parse_expr(typelist)?;
                 self.tokens.expect(RParen)?;
 
-                temp
+                Ok(self.pool.add(Node::ParenExpr(ParenExpr { val })))
             }
             _ => Err(ParseError::UnexpectedToken(UnexpectedToken {
                 token: (&self.tokens[0]).into(),
