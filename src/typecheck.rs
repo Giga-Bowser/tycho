@@ -675,6 +675,14 @@ impl<'src> TypeChecker<'src> {
             Node::SuffixedExpr(suffixed_expr) => {
                 self.check_suffixed_expr(suffixed_expr, type_env).map(drop)
             }
+            Node::Block(statements) => {
+                let start_len = type_env.len();
+                for stat in statements {
+                    self.check_statement(stat, type_env)?;
+                }
+                type_env.truncate(start_len);
+                Ok(())
+            }
             _ => Ok(()),
         }
     }
