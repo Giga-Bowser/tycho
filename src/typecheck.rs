@@ -1,9 +1,6 @@
 use std::rc::Rc;
 
-use crate::errors::*;
-use crate::parser::*;
-use crate::type_env::*;
-use crate::types::*;
+use crate::{errors::CheckErr, parser::*, type_env::TypeEnv, types::*};
 
 pub struct TypeChecker<'src> {
     pub pool: ExprPool<'src>,

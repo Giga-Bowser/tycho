@@ -1,5 +1,6 @@
-use crate::{lexer::*, types::Type};
 use thiserror::Error;
+
+use crate::{lexer::*, types::Type};
 
 macro_rules! thingy {
     ($enum: ident, $target: ident) => {

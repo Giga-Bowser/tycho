@@ -1,4 +1,4 @@
-use crate::types::*;
+use crate::types::Type;
 
 #[derive(Clone, Debug, Default)]
 pub struct TypeEnv<'a> {

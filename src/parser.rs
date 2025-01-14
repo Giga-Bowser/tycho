@@ -1,13 +1,16 @@
 #![deny(unused_must_use)]
 
-use std::rc::Rc;
-use std::{slice, str};
+use std::{rc::Rc, slice, str};
 
-use crate::errors::{ParseError, UnexpectedToken};
-use crate::lexer::TokenKind::*;
-use crate::lexer::*;
-use crate::types::*;
-use crate::TypeList;
+use crate::{
+    errors::{ParseError, UnexpectedToken},
+    lexer::{
+        TokenKind::{self, *},
+        Tokens,
+    },
+    types::*,
+    TypeList,
+};
 
 pub struct Parser<'src> {
     pub tokens: Tokens<'src>,

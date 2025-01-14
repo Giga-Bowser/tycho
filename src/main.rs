@@ -1,3 +1,16 @@
+use std::{
+    collections::HashMap,
+    fs,
+    hash::BuildHasherDefault,
+    path::PathBuf,
+    time::{Duration, Instant},
+};
+
+use logos::Logos;
+use mimalloc::MiMalloc;
+use rustc_hash::FxHasher;
+use structopt::StructOpt;
+
 mod compiler;
 mod errors;
 mod lexer;
@@ -8,24 +21,15 @@ mod typecheck;
 mod types;
 mod util;
 
-use crate::compiler::Compiler;
-use crate::lexer::*;
-use crate::parser::*;
-use crate::pretty::Printer;
-use crate::type_env::*;
-use crate::typecheck::*;
-use crate::types::*;
-
-use logos::Logos;
-use mimalloc::MiMalloc;
-use rustc_hash::FxHasher;
-use std::collections::HashMap;
-use std::fs;
-use std::hash::BuildHasherDefault;
-use std::path::PathBuf;
-use std::time::Duration;
-use std::time::Instant;
-use structopt::StructOpt;
+use crate::{
+    compiler::Compiler,
+    lexer::{Token, TokenKind, Tokens},
+    parser::{ExprPool, Parser},
+    pretty::Printer,
+    type_env::TypeEnv,
+    typecheck::TypeChecker,
+    types::Type,
+};
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
