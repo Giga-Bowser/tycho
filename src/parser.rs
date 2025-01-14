@@ -365,10 +365,17 @@ pub enum Node<'a> {
 impl<'src> Parser<'src> {
     fn parse_method_decl(
         &mut self,
-        struct_name: &'src str,
-        method_name: &'src str,
         typelist: &TypeList<'src>,
     ) -> Result<MethodDecl<'src>, ParseError> {
+        let struct_name = self.tokens[0].str;
+
+        self.tokens.pop_front(); // name
+        self.tokens.pop_front(); // colon
+        let method_name = self.tokens[0].str;
+
+        self.tokens.pop_front(); // method name
+        self.tokens.pop_front(); // colon
+        self.tokens.expect(Equal)?;
         Ok(MethodDecl {
             struct_name,
             method_name,
@@ -1272,23 +1279,10 @@ impl<'src> Parser<'src> {
                     && self.tokens[2].kind == Name
                     && self.tokens[3].kind == Colon
                 {
-                    let struct_name = self.tokens[0].str;
-
-                    self.tokens.pop_front(); // name
-                    self.tokens.pop_front(); // colon
-                    let method_name = self.tokens[0].str;
-
-                    self.tokens.pop_front(); // method name
-                    self.tokens.pop_front(); // colon
-                    self.tokens.expect(Equal)?;
-                    return Ok(Node::MethodDecl(self.parse_method_decl(
-                        struct_name,
-                        method_name,
-                        typelist,
-                    )?));
+                    Ok(Node::MethodDecl(self.parse_method_decl(typelist)?))
+                } else {
+                    self.parse_expr_statement(typelist)
                 }
-
-                self.parse_expr_statement(typelist)
             }
             If => Ok(Node::IfNode(self.if_stat(typelist)?)),
             While => Ok(Node::WhileNode(self.while_stat(typelist)?)),
