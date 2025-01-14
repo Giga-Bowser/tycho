@@ -109,8 +109,8 @@ fn bench_lex() {
         total += end - start;
     }
 
-    println!(
-        "avg lex time: {:.3}",
+    eprintln!(
+        "avg lex time: {:.3} us",
         total.as_micros() as f32 / args.number as f32
     );
 }
@@ -158,8 +158,8 @@ fn bench_parse() {
         total += end - start;
     }
 
-    println!(
-        "avg parse time: {:.3}",
+    eprintln!(
+        "avg parse time: {:.3} us",
         total.as_micros() as f32 / args.number as f32
     );
 }
@@ -224,8 +224,8 @@ fn bench_check() {
         total += end - start;
     }
 
-    println!(
-        "avg check time: {:.3}",
+    eprintln!(
+        "avg check time: {:.3} us",
         total.as_micros() as f32 / args.number as f32
     );
 }
@@ -298,8 +298,8 @@ fn bench_compile() {
         total += end - start;
     }
 
-    println!(
-        "avg compile time: {:.3}",
+    eprintln!(
+        "avg compile time: {:.3} us",
         total.as_micros() as f32 / args.number as f32
     );
 
