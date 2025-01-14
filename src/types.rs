@@ -115,7 +115,7 @@ impl Type {
         }
 
         if let Self::Optional(base) = rhs {
-            return std::mem::discriminant(self) == std::mem::discriminant(&**base)
+            return std::mem::discriminant(self) == std::mem::discriminant(&**base);
         }
 
         if std::mem::discriminant(self) != std::mem::discriminant(rhs) {

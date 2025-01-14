@@ -193,12 +193,8 @@ impl<'src> TypeChecker<'src> {
         }
     }
 
-    fn check_func(
-        &self,
-        func: &'src FuncNode<'src>,
-        type_env: &TypeEnv,
-    ) -> Result<Type, CheckErr> {
-		let mut new_env = TypeEnv::new_with_parent(type_env);
+    fn check_func(&self, func: &'src FuncNode<'src>, type_env: &TypeEnv) -> Result<Type, CheckErr> {
+        let mut new_env = TypeEnv::new_with_parent(type_env);
         for (name, type_) in &func.type_.params {
             new_env.push(name.to_owned(), type_.clone());
         }
@@ -207,7 +203,8 @@ impl<'src> TypeChecker<'src> {
             return Ok(Type::Nil);
         }
 
-        let has_return = self.check_func_body(&func.body, &mut new_env, func.type_.returns.as_ref())?;
+        let has_return =
+            self.check_func_body(&func.body, &mut new_env, func.type_.returns.as_ref())?;
 
         if !has_return {
             return Err(CheckErr::NoReturn);
@@ -355,7 +352,9 @@ impl<'src> TypeChecker<'src> {
                         });
                     }
                 }
-                Suffix::Method(Method { method_name: name, .. }) => {
+                Suffix::Method(Method {
+                    method_name: name, ..
+                }) => {
                     if name == &"new" {
                         continue;
                     } else if let Some(method) = type_.get_field(name) {
@@ -427,7 +426,9 @@ impl<'src> TypeChecker<'src> {
                         });
                     }
                 }
-                Suffix::Method(Method { method_name: name, .. }) => {
+                Suffix::Method(Method {
+                    method_name: name, ..
+                }) => {
                     if name == &"new" {
                         continue;
                     } else if let Some(method) = type_.get_field(name) {
@@ -468,7 +469,7 @@ impl<'src> TypeChecker<'src> {
             OpKind::Equ | OpKind::Neq | OpKind::Gre | OpKind::Grq | OpKind::Les | OpKind::Leq => {
                 let lhs_type = self.check_expr(binop.lhs, type_env)?;
                 let rhs_type = self.check_expr(binop.rhs, type_env)?;
-				
+
                 if lhs_type != rhs_type {
                     Err(CheckErr::MismatchedTypes {
                         expected: lhs_type,
@@ -482,11 +483,7 @@ impl<'src> TypeChecker<'src> {
         }
     }
 
-    fn check_if_node(
-        &self,
-        if_node: &IfNode<'src>,
-        type_env: &TypeEnv,
-    ) -> Result<(), CheckErr> {
+    fn check_if_node(&self, if_node: &IfNode<'src>, type_env: &TypeEnv) -> Result<(), CheckErr> {
         let condition_type = self.check_expr(if_node.condition, type_env)?;
         if !condition_type.can_equal(&Type::Boolean) {
             return Err(CheckErr::MismatchedTypes {
@@ -494,8 +491,8 @@ impl<'src> TypeChecker<'src> {
                 recieved: condition_type,
             });
         }
-		
-		let mut new_env = TypeEnv::new_with_parent(type_env);
+
+        let mut new_env = TypeEnv::new_with_parent(type_env);
 
         for stat in &if_node.body {
             self.check_statement(stat, &mut new_env)?;
@@ -537,8 +534,8 @@ impl<'src> TypeChecker<'src> {
                 recieved: rhs_type,
             });
         }
-		
-		let mut new_env = TypeEnv::new_with_parent(type_env);
+
+        let mut new_env = TypeEnv::new_with_parent(type_env);
 
         new_env.push(range_for.var.to_owned(), Type::Number);
 
@@ -641,8 +638,8 @@ impl<'src> TypeChecker<'src> {
         type_env.pop(); // remove "self"
 
         let Type::User(User { fields }) = type_env.get_mut(method_decl.struct_name).unwrap() else {
-			unreachable!()
-		};
+            unreachable!()
+        };
 
         fields.push((method_decl.method_name.to_owned(), method_type));
 

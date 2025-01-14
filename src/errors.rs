@@ -35,10 +35,7 @@ pub enum CheckErr {
     #[error("no such val '{0}'")]
     NoSuchVal(String),
     #[error("type mismatch\nexpected: {expected:?}\nrecieved: {recieved:?}")]
-    MismatchedTypes{
-		expected: Type,
-		recieved: Type,
-	},
+    MismatchedTypes { expected: Type, recieved: Type },
     #[error("wrong number of returns")]
     ReturnCount,
     #[error("can't iterate over non-iterable")]
