@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-logos = "0.13.0"
+logos = "0.15.0"
 mimalloc = { version = "*", default-features = false }
-rustc-hash = "1.1.0"
+rustc-hash = "2.1.0"
 structopt = "0.3.26"
-thiserror = "1.0.43"
+thiserror = "2.0.11"
