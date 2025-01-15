@@ -19,17 +19,27 @@ impl<'src> Compiler<'src> {
     pub fn compile_statement(&self, statement: &Statement) -> String {
         match statement {
             Statement::Declare(decl) => self.compile_decl(decl),
-            Statement::MethodDecl(method_decl) => self.compile_method_decl(method_decl),
             Statement::MultiDecl(multi_decl) => self.compile_multi_decl(multi_decl),
-            Statement::MultiAssign(multi_assign) => self.compile_multi_assign(multi_assign),
+            Statement::MethodDecl(method_decl) => self.compile_method_decl(method_decl),
             Statement::Assign(Assign { lhs, rhs }) => format!(
                 "{} = {}",
                 self.compile_suffixed_name(lhs),
                 self.compile_expr(*rhs)
             ),
-            Statement::IfStat(if_stat) => self.compile_if_stat(if_stat),
-            Statement::RangeFor(range_for) => self.compile_range_for(range_for),
-            Statement::KeyValFor(keyval_for) => self.compile_keyval_for(keyval_for),
+            Statement::MultiAssign(multi_assign) => self.compile_multi_assign(multi_assign),
+            Statement::ExprStat(suffixed_expr) => self.compile_suffixed_expr(suffixed_expr),
+            Statement::Block(statements) => {
+                let mut result = "do".to_owned();
+                self.indent();
+                for stat in statements {
+                    result += &self.newline();
+                    result += &self.compile_statement(stat);
+                }
+                self.dedent();
+                result += &self.newline();
+                result += "end";
+                result
+            }
             Statement::Return(return_exprs) => {
                 if return_exprs.is_empty() {
                     "return".to_owned()
@@ -44,20 +54,11 @@ impl<'src> Compiler<'src> {
                     )
                 }
             }
-            Statement::ExprStat(suffixed_expr) => self.compile_suffixed_expr(suffixed_expr),
-            Statement::Block(statements) => {
-                let mut result = "do".to_owned();
-                self.indent();
-                for stat in statements {
-                    result += &self.newline();
-                    result += &self.compile_statement(stat);
-                }
-                self.dedent();
-                result += &self.newline();
-                result += "end";
-                result
-            }
-            other => todo!("{other:?}"),
+            Statement::Break => "break".to_owned(),
+            Statement::IfStat(if_stat) => self.compile_if_stat(if_stat),
+            Statement::WhileStat(while_stat) => self.compile_while_stat(while_stat),
+            Statement::RangeFor(range_for) => self.compile_range_for(range_for),
+            Statement::KeyValFor(keyval_for) => self.compile_keyval_for(keyval_for),
         }
     }
 
@@ -92,7 +93,19 @@ impl<'src> Compiler<'src> {
         lhs
     }
 
-    fn compile_method_decl(&self, method_decl: &MethodDecl<'_>) -> String {
+    fn compile_multi_decl(&self, multi_decl: &MultiDecl) -> String {
+        let lhs_result = multi_decl.lhs_arr.join(", ");
+        let rhs_result = multi_decl
+            .rhs_arr
+            .iter()
+            .map(|expr| self.compile_expr(*expr))
+            .collect::<Vec<String>>()
+            .join(", ");
+
+        format!("local {lhs_result} = {rhs_result}")
+    }
+
+    fn compile_method_decl(&self, method_decl: &MethodDecl) -> String {
         // let Some(val) = method_decl.val else {
         //     // no val is assigned, this means this statement is only useful for type checking
         //     // we can just return an empty string
@@ -115,19 +128,7 @@ impl<'src> Compiler<'src> {
         result
     }
 
-    fn compile_multi_decl(&self, multi_decl: &MultiDecl<'_>) -> String {
-        let lhs_result = multi_decl.lhs_arr.join(", ");
-        let rhs_result = multi_decl
-            .rhs_arr
-            .iter()
-            .map(|expr| self.compile_expr(*expr))
-            .collect::<Vec<String>>()
-            .join(", ");
-
-        format!("local {lhs_result} = {rhs_result}")
-    }
-
-    fn compile_multi_assign(&self, multi_assign: &MultiAssign<'_>) -> String {
+    fn compile_multi_assign(&self, multi_assign: &MultiAssign) -> String {
         let lhs_result = multi_assign
             .lhs_arr
             .iter()
@@ -144,7 +145,7 @@ impl<'src> Compiler<'src> {
         format!("{lhs_result} = {rhs_result}")
     }
 
-    fn compile_if_stat(&self, if_stat: &IfStat<'_>) -> String {
+    fn compile_if_stat(&self, if_stat: &IfStat) -> String {
         let condition = self.compile_expr(if_stat.condition);
         let if_body = self.compile_block(&if_stat.body);
         if let Some(else_node) = &if_stat.else_ {
@@ -163,7 +164,13 @@ impl<'src> Compiler<'src> {
         }
     }
 
-    fn compile_range_for(&self, range_for: &RangeFor<'_>) -> String {
+    fn compile_while_stat(&self, while_stat: &WhileStat) -> String {
+        let condition = self.compile_expr(while_stat.condition);
+        let while_body = self.compile_block(&while_stat.body);
+        format!("while {condition} do{while_body}end",)
+    }
+
+    fn compile_range_for(&self, range_for: &RangeFor) -> String {
         format!(
             "for {} = {}, {} do{}end",
             range_for.var,
@@ -173,7 +180,7 @@ impl<'src> Compiler<'src> {
         )
     }
 
-    fn compile_keyval_for(&self, keyval_for: &KeyValFor<'_>) -> String {
+    fn compile_keyval_for(&self, keyval_for: &KeyValFor) -> String {
         format!(
             "for {} in pairs({}) do{}end",
             keyval_for.names,
