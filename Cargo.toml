@@ -9,8 +9,3 @@ mimalloc = { version = "*", default-features = false }
 rustc-hash = "1.1.0"
 structopt = "0.3.26"
 thiserror = "1.0.43"
-
-
-[profile.release]
-lto = true
-codegen-units = 1
