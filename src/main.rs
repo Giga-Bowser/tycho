@@ -64,7 +64,7 @@ fn add_defines(file_path: PathBuf, type_env: &mut TypeEnv) {
     let mut stats = Vec::new();
 
     while parser.tokens[0].kind != TokenKind::EndOfFile {
-        stats.push(parser.statement(&mut typelist).unwrap());
+        stats.push(parser.parse_statement(&mut typelist).unwrap());
     }
 
     let typechecker = TypeChecker { pool: parser.pool };
@@ -154,7 +154,7 @@ fn bench_parse() {
         let start = Instant::now();
 
         while parser.tokens[0].kind != TokenKind::EndOfFile {
-            parser.statement(&mut typelist).unwrap();
+            parser.parse_statement(&mut typelist).unwrap();
         }
 
         let end = Instant::now();
@@ -204,7 +204,7 @@ fn bench_check() {
     let mut stats = Vec::new();
 
     while parser.tokens[0].kind != TokenKind::EndOfFile {
-        stats.push(parser.statement(&mut typelist).unwrap());
+        stats.push(parser.parse_statement(&mut typelist).unwrap());
     }
 
     let typechecker = TypeChecker { pool: parser.pool };
@@ -270,7 +270,7 @@ fn bench_compile() {
     let mut stats = Vec::new();
 
     while parser.tokens[0].kind != TokenKind::EndOfFile {
-        stats.push(parser.statement(&mut typelist).unwrap());
+        stats.push(parser.parse_statement(&mut typelist).unwrap());
     }
 
     let typechecker = TypeChecker { pool: parser.pool };

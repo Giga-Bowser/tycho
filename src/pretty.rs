@@ -47,8 +47,8 @@ impl Printer<'_> {
             Node::Break => todo!(),
             Node::MethodDecl(method_decl) => self.print_method_decl(prefix, method_decl, is_end),
             Node::Declare(decl) => self.print_decl(prefix, decl, is_end),
-            Node::IfNode(if_node) => self.print_if_node(prefix, if_node, is_end),
-            // Node::WhileNode(_) => todo!(),
+            Node::IfStat(if_stat) => self.print_if_stat(prefix, if_stat, is_end),
+            // Node::WhileStat(_) => todo!(),
             // Node::Block(_) => todo!(),
             Node::Return(returns) => self.print_return(prefix, returns, is_end),
             // Node::RangeFor(_) => todo!(),
@@ -414,7 +414,7 @@ impl Printer<'_> {
         )
     }
 
-    fn print_if_node(&self, prefix: String, if_node: &IfNode, is_end: bool) -> String {
+    fn print_if_stat(&self, prefix: String, if_stat: &IfStat, is_end: bool) -> String {
         let new_prefix = prefix.clone() + if is_end { "    " } else { "│   " };
 
         let mut result = format!(
@@ -422,22 +422,22 @@ impl Printer<'_> {
             prefix,
             if is_end { "└── " } else { "├── " },
             "if",
-            self.print_expr(new_prefix.clone(), if_node.condition, false),
+            self.print_expr(new_prefix.clone(), if_stat.condition, false),
         );
 
-        if !if_node.body.is_empty() {
-            for stat in if_node.body.iter().take(if_node.body.len() - 1) {
+        if !if_stat.body.is_empty() {
+            for stat in if_stat.body.iter().take(if_stat.body.len() - 1) {
                 result += &self.print_statement(new_prefix.clone(), stat, false);
             }
 
             result += &self.print_statement(
                 new_prefix.clone(),
-                if_node.body.last().unwrap(),
-                if_node.else_.is_none(),
+                if_stat.body.last().unwrap(),
+                if_stat.else_.is_none(),
             );
         }
 
-        if let Some(else_) = &if_node.else_ {
+        if let Some(else_) = &if_stat.else_ {
             result += &format!("{}else\n", new_prefix);
             match else_.as_ref() {
                 Else::Else(body) => {
@@ -449,8 +449,8 @@ impl Printer<'_> {
                         result += &self.print_statement(new_prefix, body.last().unwrap(), true);
                     }
                 }
-                Else::ElseIf(else_if_node) => {
-                    result += &self.print_if_node(new_prefix, else_if_node, is_end)
+                Else::ElseIf(else_if_stat) => {
+                    result += &self.print_if_stat(new_prefix, else_if_stat, is_end)
                 }
             }
         }

@@ -7,6 +7,48 @@ pub struct TypeChecker<'src> {
 }
 
 impl<'src> TypeChecker<'src> {
+    pub fn check_statement(
+        &self,
+        stat: &Node<'src>,
+        type_env: &mut TypeEnv,
+    ) -> Result<(), CheckErr> {
+        match stat {
+            Node::Declare(decl) => self.check_decl(decl, type_env),
+            Node::MethodDecl(method_decl) => self.check_method_decl(method_decl, type_env),
+            Node::MultiDecl(multi_decl) => self.check_multi_decl(multi_decl, type_env),
+            Node::IfStat(if_stat) => self.check_if_stat(if_stat, type_env),
+            Node::WhileStat(while_stat) => self.check_while_stat(while_stat, type_env),
+            Node::RangeFor(range_for) => self.check_range_for(range_for, type_env),
+            Node::KeyValFor(keyval_for) => self.check_keyval_for(keyval_for, type_env),
+            Node::Assign(Assign { lhs, rhs }) => {
+                let lhs_type = self.check_suffixed_name(lhs, type_env)?;
+                let rhs_type = self.check_expr(*rhs, type_env)?;
+                if !lhs_type.can_equal(&rhs_type) {
+                    Err(CheckErr::MismatchedTypes {
+                        expected: lhs_type,
+                        recieved: rhs_type,
+                    })
+                } else {
+                    Ok(())
+                }
+            }
+            Node::MultiAssign(multi_assign) => self.check_multi_assign(multi_assign, type_env),
+            // TODO: investigate if making a more expression-statement specific checking function is worth it
+            Node::SuffixedExpr(suffixed_expr) => {
+                self.check_suffixed_expr(suffixed_expr, type_env).map(drop)
+            }
+            Node::Block(statements) => {
+                let start_len = type_env.len();
+                for stat in statements {
+                    self.check_statement(stat, type_env)?;
+                }
+                type_env.truncate(start_len);
+                Ok(())
+            }
+            _ => Ok(()),
+        }
+    }
+
     fn check_decl(&self, decl: &Declare<'src>, type_env: &mut TypeEnv) -> Result<(), CheckErr> {
         if let Some(val) = decl.val {
             if let Node::SimpleExpr(SimpleExpr::StructNode(StructNode { type_, .. })) =
@@ -70,6 +112,102 @@ impl<'src> TypeChecker<'src> {
                 unreachable!()
             }
         }
+    }
+
+    fn check_method_decl(
+        &self,
+        method_decl: &MethodDecl<'src>,
+        type_env: &mut TypeEnv,
+    ) -> Result<(), CheckErr> {
+        let type_ = type_env.get(method_decl.struct_name).unwrap();
+
+        let method_type = if let Type::User(_) = type_ {
+            type_env.push("self".to_owned(), type_.clone());
+            self.check_func(&method_decl.func, type_env)?
+        } else {
+            return Err(CheckErr::CustomError(
+                "cannot declare method on non-struct type".to_owned(),
+            ));
+        };
+        type_env.pop(); // remove "self"
+
+        let Type::User(User { fields }) = type_env.get_mut(method_decl.struct_name).unwrap() else {
+            unreachable!()
+        };
+
+        fields.push((method_decl.method_name.to_owned(), method_type));
+
+        Ok(())
+    }
+
+    fn check_multi_decl(
+        &self,
+        multi_decl: &MultiDecl<'src>,
+        type_env: &mut TypeEnv,
+    ) -> Result<(), CheckErr> {
+        // ok so we need to basically flatten the types. so for example
+        // a, b, c := twoReturnFunction(), oneReturnFunction()
+        // a, b, c := (type1, type2), type3
+        // a, b, c := type1, type2, type3
+        let mut types = Vec::new();
+
+        for rhs in &multi_decl.rhs_arr {
+            let type_ = self.check_expr(*rhs, type_env)?;
+            if let Type::Multiple(mult) = type_ {
+                types.extend(mult);
+            } else {
+                types.push(type_);
+            }
+        }
+
+        for (i, name) in multi_decl.lhs_arr.iter().enumerate() {
+            if i < types.len() {
+                type_env.push((*name).to_owned(), types[i].clone());
+            } else {
+                type_env.push((*name).to_owned(), Type::Nil);
+            }
+        }
+
+        Ok(())
+    }
+
+    fn check_multi_assign(
+        &self,
+        multi_assign: &MultiAssign<'src>,
+        type_env: &mut TypeEnv,
+    ) -> Result<(), CheckErr> {
+        // ok so we need to basically flatten the types. so for example
+        // a, b, c := twoReturnFunction(), oneReturnFunction()
+        // a, b, c := (type1, type2), type3
+        // a, b, c := type1, type2, type3
+        let mut types = Vec::new();
+
+        for rhs in &multi_assign.rhs_arr {
+            let type_ = self.check_expr(*rhs, type_env)?;
+            if let Type::Multiple(mult) = type_ {
+                types.extend(mult);
+            } else {
+                types.push(type_);
+            }
+        }
+
+        for (i, suffixed_expr) in multi_assign.lhs_arr.iter().enumerate() {
+            let expected = self.check_suffixed_expr(suffixed_expr, type_env)?;
+            let recieved = if i < types.len() {
+                &types[i]
+            } else {
+                &Type::Nil
+            };
+
+            if !expected.can_equal(recieved) {
+                return Err(CheckErr::MismatchedTypes {
+                    expected,
+                    recieved: recieved.clone(),
+                });
+            }
+        }
+
+        Ok(())
     }
 
     fn check_expr(&self, expr: ExprRef, type_env: &TypeEnv) -> Result<Type, CheckErr> {
@@ -220,12 +358,12 @@ impl<'src> TypeChecker<'src> {
         let start_len = type_env.len();
         for stat in body {
             match stat {
-                Node::IfNode(IfNode { body: if_body, .. }) => {
+                Node::IfStat(IfStat { body: if_body, .. }) => {
                     if self.check_func_body(if_body, type_env, return_type)? {
                         return Ok(true);
                     }
                 }
-                Node::WhileNode(WhileNode {
+                Node::WhileStat(WhileStat {
                     body: while_body, ..
                 }) => {
                     if self.check_func_body(while_body, type_env, return_type)? {
@@ -481,8 +619,8 @@ impl<'src> TypeChecker<'src> {
         }
     }
 
-    fn check_if_node(&self, if_node: &IfNode<'src>, type_env: &TypeEnv) -> Result<(), CheckErr> {
-        let condition_type = self.check_expr(if_node.condition, type_env)?;
+    fn check_if_stat(&self, if_stat: &IfStat<'src>, type_env: &TypeEnv) -> Result<(), CheckErr> {
+        let condition_type = self.check_expr(if_stat.condition, type_env)?;
         if !condition_type.can_equal(&Type::Boolean) {
             return Err(CheckErr::MismatchedTypes {
                 expected: Type::Boolean,
@@ -492,11 +630,11 @@ impl<'src> TypeChecker<'src> {
 
         let mut new_env = TypeEnv::new_with_parent(type_env);
 
-        for stat in &if_node.body {
+        for stat in &if_stat.body {
             self.check_statement(stat, &mut new_env)?;
         }
 
-        match &if_node.else_ {
+        match &if_stat.else_ {
             Some(else_) => match else_.as_ref() {
                 Else::Else(body) => {
                     for stat in body {
@@ -505,10 +643,32 @@ impl<'src> TypeChecker<'src> {
 
                     Ok(())
                 }
-                Else::ElseIf(else_if_node) => self.check_if_node(else_if_node, type_env),
+                Else::ElseIf(else_if_stat) => self.check_if_stat(else_if_stat, type_env),
             },
             None => Ok(()),
         }
+    }
+
+    fn check_while_stat(
+        &self,
+        while_stat: &WhileStat<'_>,
+        type_env: &mut TypeEnv<'_>,
+    ) -> Result<(), CheckErr> {
+        let condition_type = self.check_expr(while_stat.condition, type_env)?;
+        if !condition_type.can_equal(&Type::Boolean) {
+            return Err(CheckErr::MismatchedTypes {
+                expected: Type::Boolean,
+                recieved: condition_type,
+            });
+        }
+
+        let mut new_env = TypeEnv::new_with_parent(type_env);
+
+        for stat in &while_stat.body {
+            self.check_statement(stat, &mut new_env)?;
+        }
+
+        Ok(())
     }
 
     fn check_range_for(
@@ -584,103 +744,6 @@ impl<'src> TypeChecker<'src> {
             Ok(())
         } else {
             Err(CheckErr::NotIterable)
-        }
-    }
-
-    fn check_multi_decl(
-        &self,
-        multi_decl: &MultiDecl<'src>,
-        type_env: &mut TypeEnv,
-    ) -> Result<(), CheckErr> {
-        // ok so we need to basically flatten the types. so for example
-        // a, b, c := twoReturnFunction(), oneReturnFunction()
-        // a, b, c := (type1, type2), type3
-        // a, b, c := type1, type2, type3
-        let mut types = Vec::new();
-
-        for rhs in &multi_decl.rhs_arr {
-            let type_ = self.check_expr(*rhs, type_env)?;
-            if let Type::Multiple(mult) = type_ {
-                types.extend(mult);
-            } else {
-                types.push(type_);
-            }
-        }
-
-        for (i, name) in multi_decl.lhs_arr.iter().enumerate() {
-            if i < types.len() {
-                type_env.push((*name).to_owned(), types[i].clone());
-            } else {
-                type_env.push((*name).to_owned(), Type::Nil);
-            }
-        }
-
-        Ok(())
-    }
-
-    fn check_method_decl(
-        &self,
-        method_decl: &MethodDecl<'src>,
-        type_env: &mut TypeEnv,
-    ) -> Result<(), CheckErr> {
-        let type_ = type_env.get(method_decl.struct_name).unwrap();
-
-        let method_type = if let Type::User(_) = type_ {
-            type_env.push("self".to_owned(), type_.clone());
-            self.check_func(&method_decl.func, type_env)?
-        } else {
-            return Err(CheckErr::CustomError(
-                "cannot declare method on non-struct type".to_owned(),
-            ));
-        };
-        type_env.pop(); // remove "self"
-
-        let Type::User(User { fields }) = type_env.get_mut(method_decl.struct_name).unwrap() else {
-            unreachable!()
-        };
-
-        fields.push((method_decl.method_name.to_owned(), method_type));
-
-        Ok(())
-    }
-
-    pub fn check_statement(
-        &self,
-        stat: &Node<'src>,
-        type_env: &mut TypeEnv,
-    ) -> Result<(), CheckErr> {
-        match stat {
-            Node::Declare(decl) => self.check_decl(decl, type_env),
-            Node::MethodDecl(method_decl) => self.check_method_decl(method_decl, type_env),
-            Node::IfNode(if_node) => self.check_if_node(if_node, type_env),
-            Node::RangeFor(range_for) => self.check_range_for(range_for, type_env),
-            Node::KeyValFor(keyval_for) => self.check_keyval_for(keyval_for, type_env),
-            Node::Assign(Assign { lhs, rhs }) => {
-                let lhs_type = self.check_suffixed_name(lhs, type_env)?;
-                let rhs_type = self.check_expr(*rhs, type_env)?;
-                if !lhs_type.can_equal(&rhs_type) {
-                    Err(CheckErr::MismatchedTypes {
-                        expected: lhs_type,
-                        recieved: rhs_type,
-                    })
-                } else {
-                    Ok(())
-                }
-            }
-            Node::MultiDecl(multi_decl) => self.check_multi_decl(multi_decl, type_env),
-            // TODO: investigate if making a more expression-statement specific checking function is worth it
-            Node::SuffixedExpr(suffixed_expr) => {
-                self.check_suffixed_expr(suffixed_expr, type_env).map(drop)
-            }
-            Node::Block(statements) => {
-                let start_len = type_env.len();
-                for stat in statements {
-                    self.check_statement(stat, type_env)?;
-                }
-                type_env.truncate(start_len);
-                Ok(())
-            }
-            _ => Ok(()),
         }
     }
 }

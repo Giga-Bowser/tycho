@@ -228,11 +228,11 @@ pub struct StructNode<'a> {
     pub name: Option<&'a str>,
 }
 
-#[derive(Debug, Clone)]
-pub struct StructAccess<'a> {
-    pub name: &'a str,
-    pub accesses: Vec<Access<'a>>,
-}
+// #[derive(Debug, Clone)]
+// pub struct StructAccess<'a> {
+//     pub name: &'a str,
+//     pub accesses: Vec<Access<'a>>,
+// }
 
 #[derive(Debug, Clone)]
 pub struct SuffixedName<'a> {
@@ -247,13 +247,13 @@ pub struct Declare<'a> {
     pub val: Option<ExprRef>,
 }
 
-/// a more advanced decl, like math.min := ...
-#[derive(Debug, Clone)]
-pub struct SuffixedDecl<'a> {
-    pub lhs: SuffixedExpr<'a>,
-    pub type_: Box<Type>,
-    pub rhs: Option<ExprRef>,
-}
+// /// a more advanced decl, like math.min := ...
+// #[derive(Debug, Clone)]
+// pub struct SuffixedDecl<'a> {
+//     pub lhs: SuffixedExpr<'a>,
+//     pub type_: Box<Type>,
+//     pub rhs: Option<ExprRef>,
+// }
 
 #[derive(Debug, Clone)]
 pub struct FuncNode<'a> {
@@ -261,27 +261,27 @@ pub struct FuncNode<'a> {
     pub body: Vec<Node<'a>>,
 }
 
-#[derive(Debug, Clone)]
-pub struct StructConstructor<'a> {
-    pub type_: Box<Function>,
-    pub body: Vec<Node<'a>>,
-}
+// #[derive(Debug, Clone)]
+// pub struct StructConstructor<'a> {
+//     pub type_: Box<Function>,
+//     pub body: Vec<Node<'a>>,
+// }
 
 #[derive(Debug, Clone)]
 pub enum Else<'a> {
     Else(Vec<Node<'a>>),
-    ElseIf(IfNode<'a>),
+    ElseIf(IfStat<'a>),
 }
 
 #[derive(Debug, Clone)]
-pub struct IfNode<'a> {
+pub struct IfStat<'a> {
     pub condition: ExprRef,
     pub body: Vec<Node<'a>>,
     pub else_: Option<Box<Else<'a>>>,
 }
 
 #[derive(Debug, Clone)]
-pub struct WhileNode<'a> {
+pub struct WhileStat<'a> {
     pub condition: ExprRef,
     pub body: Vec<Node<'a>>,
 }
@@ -359,8 +359,8 @@ pub enum Node<'a> {
     SimpleExpr(SimpleExpr<'a>),
     MethodDecl(MethodDecl<'a>),
     Declare(Declare<'a>),
-    IfNode(IfNode<'a>),
-    WhileNode(WhileNode<'a>),
+    IfStat(IfStat<'a>),
+    WhileStat(WhileStat<'a>),
     Block(Vec<Node<'a>>),
     Return(Vec<ExprRef>),
     RangeFor(RangeFor<'a>),
@@ -372,6 +372,46 @@ pub enum Node<'a> {
 }
 
 impl<'src> Parser<'src> {
+    pub fn parse_statement(
+        &mut self,
+        typelist: &mut TypeList<'src>,
+    ) -> Result<Node<'src>, ParseError> {
+        match self.tokens[0].kind {
+            Name => {
+                if self.tokens[1].kind == Colon
+                    && self.tokens[2].kind == Name
+                    && self.tokens[3].kind == Colon
+                {
+                    Ok(Node::MethodDecl(self.parse_method_decl(typelist)?))
+                } else {
+                    self.parse_expr_statement(typelist)
+                }
+            }
+            If => Ok(Node::IfStat(self.if_stat(typelist)?)),
+            While => Ok(Node::WhileStat(self.while_stat(typelist)?)),
+            For => self.for_stat(typelist),
+            Return => {
+                self.tokens.pop_front();
+                Ok(Node::Return(self.parse_expr_list(typelist)?))
+            }
+            Break => {
+                self.tokens.pop_front();
+                Ok(Node::Break)
+            }
+            LCurly => {
+                self.tokens.pop_front();
+                let mut body = Vec::new();
+
+                while self.tokens[0].kind != RCurly {
+                    body.push(self.parse_statement(typelist)?);
+                }
+
+                Ok(Node::Block(body))
+            }
+            _ => self.parse_expr_statement(typelist),
+        }
+    }
+
     fn parse_method_decl(
         &mut self,
         typelist: &TypeList<'src>,
@@ -469,6 +509,155 @@ impl<'src> Parser<'src> {
             lhs: Box::new(lhs),
             rhs,
         })
+    }
+
+    fn if_stat(&mut self, typelist: &TypeList<'src>) -> Result<IfStat<'src>, ParseError> {
+        self.tokens.pop_front(); // pop 'if'
+
+        let condition = self.parse_expr(typelist)?;
+
+        self.tokens.expect(LCurly)?;
+
+        let mut scoped_typelist = typelist.clone();
+
+        let mut body = Vec::new();
+
+        while self.tokens[0].kind != RCurly {
+            body.push(self.parse_statement(&mut scoped_typelist)?);
+        }
+
+        self.tokens.pop_front(); // pop '}'
+
+        if self.tokens[0].kind != Else {
+            return Ok(IfStat {
+                condition,
+                body,
+                else_: None,
+            });
+        }
+
+        self.tokens.pop_front(); // pop 'else'
+
+        if self.tokens[0].kind == If {
+            let else_ = Some(Box::new(Else::ElseIf(self.if_stat(typelist)?)));
+
+            return Ok(IfStat {
+                condition,
+                body,
+                else_,
+            });
+        }
+
+        scoped_typelist = typelist.clone(); // reset typelist for next if
+
+        let mut else_body = Vec::new();
+
+        self.tokens.expect(LCurly)?;
+
+        while self.tokens[0].kind != RCurly {
+            else_body.push(self.parse_statement(&mut scoped_typelist)?);
+        }
+
+        self.tokens.pop_front(); // pop '}'
+
+        let else_ = Some(Box::new(Else::Else(else_body)));
+
+        Ok(IfStat {
+            condition,
+            body,
+            else_,
+        })
+    }
+
+    fn while_stat(&mut self, typelist: &TypeList<'src>) -> Result<WhileStat<'src>, ParseError> {
+        self.tokens.pop_front(); // pop 'while'
+
+        let condition = self.parse_expr(typelist)?;
+
+        self.tokens.expect(LCurly)?;
+
+        let mut scoped_typelist = typelist.clone();
+
+        let mut body = Vec::new();
+
+        while self.tokens[0].kind != RCurly {
+            body.push(self.parse_statement(&mut scoped_typelist)?);
+        }
+
+        self.tokens.pop_front(); // pop '}'
+
+        Ok(WhileStat { condition, body })
+    }
+
+    fn for_stat(&mut self, typelist: &TypeList<'src>) -> Result<Node<'src>, ParseError> {
+        self.tokens.pop_front(); // pop 'for'
+
+        let first_name = self.tokens.pop_name()?;
+
+        match self.tokens[0].kind {
+            Comma => {
+                self.tokens.pop_front();
+
+                let second_name = self.tokens.pop_name()?;
+
+                let len = second_name.as_ptr() as usize - first_name.as_ptr() as usize
+                    + second_name.len();
+
+                // this is gross
+                let names = unsafe {
+                    str::from_utf8_unchecked(slice::from_raw_parts(first_name.as_ptr(), len))
+                };
+
+                self.tokens.expect(In)?;
+
+                let iter = self.parse_expr(typelist)?;
+
+                self.tokens.expect(LCurly)?;
+
+                let mut scoped_typelist = typelist.clone();
+
+                let mut body = Vec::new();
+
+                while self.tokens[0].kind != RCurly {
+                    body.push(self.parse_statement(&mut scoped_typelist)?);
+                }
+
+                self.tokens.pop_front(); // '}'
+
+                Ok(Node::KeyValFor(KeyValFor { names, iter, body }))
+            }
+            In => {
+                self.tokens.pop_front();
+
+                let lhs = self.parse_range_expr(typelist)?;
+
+                self.tokens.expect(DotDot)?;
+
+                let rhs = self.parse_range_expr(typelist)?;
+
+                self.tokens.expect(LCurly)?;
+
+                let mut scoped_typelist = typelist.clone();
+
+                let mut body = Vec::new();
+
+                while self.tokens[0].kind != RCurly {
+                    body.push(self.parse_statement(&mut scoped_typelist)?);
+                }
+
+                self.tokens.pop_front(); // '}'
+
+                Ok(Node::RangeFor(RangeFor {
+                    var: first_name,
+                    range: Box::new(RangeExpr { lhs, rhs }),
+                    body,
+                }))
+            }
+            _ => Err(ParseError::UnexpectedToken(UnexpectedToken {
+                token: (&self.tokens[0]).into(),
+                expected_kinds: vec![Comma, In],
+            })),
+        }
     }
 
     fn parse_expr_statement(
@@ -840,7 +1029,7 @@ impl<'src> Parser<'src> {
         let mut body = Vec::new();
 
         while self.tokens[0].kind != RCurly {
-            body.push(self.statement(&mut scoped_typelist)?);
+            body.push(self.parse_statement(&mut scoped_typelist)?);
         }
 
         self.tokens.pop_front();
@@ -956,7 +1145,7 @@ impl<'src> Parser<'src> {
         let mut body = Vec::new();
 
         while self.tokens[0].kind != RCurly {
-            body.push(self.statement(&mut scoped_typelist)?);
+            body.push(self.parse_statement(&mut scoped_typelist)?);
         }
 
         self.tokens.pop_front();
@@ -1088,84 +1277,6 @@ impl<'src> Parser<'src> {
         Ok(result)
     }
 
-    fn if_stat(&mut self, typelist: &TypeList<'src>) -> Result<IfNode<'src>, ParseError> {
-        self.tokens.pop_front(); // pop 'if'
-
-        let condition = self.parse_expr(typelist)?;
-
-        self.tokens.expect(LCurly)?;
-
-        let mut scoped_typelist = typelist.clone();
-
-        let mut body = Vec::new();
-
-        while self.tokens[0].kind != RCurly {
-            body.push(self.statement(&mut scoped_typelist)?);
-        }
-
-        self.tokens.pop_front(); // pop '}'
-
-        if self.tokens[0].kind != Else {
-            return Ok(IfNode {
-                condition,
-                body,
-                else_: None,
-            });
-        }
-
-        self.tokens.pop_front(); // pop 'else'
-
-        if self.tokens[0].kind == If {
-            let else_ = Some(Box::new(Else::ElseIf(self.if_stat(typelist)?)));
-
-            return Ok(IfNode {
-                condition,
-                body,
-                else_,
-            });
-        }
-
-        scoped_typelist = typelist.clone(); // reset typelist for next if
-
-        let mut else_body = Vec::new();
-
-        self.tokens.expect(LCurly)?;
-
-        while self.tokens[0].kind != RCurly {
-            else_body.push(self.statement(&mut scoped_typelist)?);
-        }
-
-        self.tokens.pop_front(); // pop '}'
-
-        let else_ = Some(Box::new(Else::Else(else_body)));
-
-        Ok(IfNode {
-            condition,
-            body,
-            else_,
-        })
-    }
-
-    fn while_stat(&mut self, typelist: &TypeList<'src>) -> Result<WhileNode<'src>, ParseError> {
-        self.tokens.pop_front(); // pop 'while'
-
-        let condition = self.parse_expr(typelist)?;
-
-        self.tokens.expect(LCurly)?;
-
-        let mut scoped_typelist = typelist.clone();
-
-        let mut body = Vec::new();
-
-        while self.tokens[0].kind != RCurly {
-            body.push(self.statement(&mut scoped_typelist)?);
-        }
-
-        self.tokens.pop_front(); // pop '}'
-
-        Ok(WhileNode { condition, body })
-    }
-
     /// expr without concat operator
     fn parse_range_expr(&mut self, typelist: &TypeList<'src>) -> Result<ExprRef, ParseError> {
         self.range_expr_impl(typelist, 0)
@@ -1208,113 +1319,5 @@ impl<'src> Parser<'src> {
         }
 
         Ok(result)
-    }
-
-    fn for_stat(&mut self, typelist: &TypeList<'src>) -> Result<Node<'src>, ParseError> {
-        self.tokens.pop_front(); // pop 'for'
-
-        let first_name = self.tokens.pop_name()?;
-
-        match self.tokens[0].kind {
-            Comma => {
-                self.tokens.pop_front();
-
-                let second_name = self.tokens.pop_name()?;
-
-                let len = second_name.as_ptr() as usize - first_name.as_ptr() as usize
-                    + second_name.len();
-
-                // this is gross
-                let names = unsafe {
-                    str::from_utf8_unchecked(slice::from_raw_parts(first_name.as_ptr(), len))
-                };
-
-                self.tokens.expect(In)?;
-
-                let iter = self.parse_expr(typelist)?;
-
-                self.tokens.expect(LCurly)?;
-
-                let mut scoped_typelist = typelist.clone();
-
-                let mut body = Vec::new();
-
-                while self.tokens[0].kind != RCurly {
-                    body.push(self.statement(&mut scoped_typelist)?);
-                }
-
-                self.tokens.pop_front(); // '}'
-
-                Ok(Node::KeyValFor(KeyValFor { names, iter, body }))
-            }
-            In => {
-                self.tokens.pop_front();
-
-                let lhs = self.parse_range_expr(typelist)?;
-
-                self.tokens.expect(DotDot)?;
-
-                let rhs = self.parse_range_expr(typelist)?;
-
-                self.tokens.expect(LCurly)?;
-
-                let mut scoped_typelist = typelist.clone();
-
-                let mut body = Vec::new();
-
-                while self.tokens[0].kind != RCurly {
-                    body.push(self.statement(&mut scoped_typelist)?);
-                }
-
-                self.tokens.pop_front(); // '}'
-
-                Ok(Node::RangeFor(RangeFor {
-                    var: first_name,
-                    range: Box::new(RangeExpr { lhs, rhs }),
-                    body,
-                }))
-            }
-            _ => Err(ParseError::UnexpectedToken(UnexpectedToken {
-                token: (&self.tokens[0]).into(),
-                expected_kinds: vec![Comma, In],
-            })),
-        }
-    }
-
-    pub fn statement(&mut self, typelist: &mut TypeList<'src>) -> Result<Node<'src>, ParseError> {
-        match self.tokens[0].kind {
-            Name => {
-                if self.tokens[1].kind == Colon
-                    && self.tokens[2].kind == Name
-                    && self.tokens[3].kind == Colon
-                {
-                    Ok(Node::MethodDecl(self.parse_method_decl(typelist)?))
-                } else {
-                    self.parse_expr_statement(typelist)
-                }
-            }
-            If => Ok(Node::IfNode(self.if_stat(typelist)?)),
-            While => Ok(Node::WhileNode(self.while_stat(typelist)?)),
-            For => self.for_stat(typelist),
-            Return => {
-                self.tokens.pop_front();
-                Ok(Node::Return(self.parse_expr_list(typelist)?))
-            }
-            Break => {
-                self.tokens.pop_front();
-                Ok(Node::Break)
-            }
-            LCurly => {
-                self.tokens.pop_front();
-                let mut body = Vec::new();
-
-                while self.tokens[0].kind != RCurly {
-                    body.push(self.statement(typelist)?);
-                }
-
-                Ok(Node::Block(body))
-            }
-            _ => self.parse_expr_statement(typelist),
-        }
     }
 }

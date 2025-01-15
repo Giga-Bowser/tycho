@@ -21,12 +21,13 @@ impl<'src> Compiler<'src> {
             Node::Declare(decl) => self.compile_decl(decl),
             Node::MethodDecl(method_decl) => self.compile_method_decl(method_decl),
             Node::MultiDecl(multi_decl) => self.compile_multi_decl(multi_decl),
+            Node::MultiAssign(multi_assign) => self.compile_multi_assign(multi_assign),
             Node::Assign(Assign { lhs, rhs }) => format!(
                 "{} = {}",
                 self.compile_suffixed_name(lhs),
                 self.compile_expr(*rhs)
             ),
-            Node::IfNode(if_node) => self.compile_if_node(if_node),
+            Node::IfStat(if_stat) => self.compile_if_stat(if_stat),
             Node::RangeFor(range_for) => self.compile_range_for(range_for),
             Node::KeyValFor(keyval_for) => self.compile_keyval_for(keyval_for),
             Node::Return(return_exprs) => {
@@ -126,18 +127,35 @@ impl<'src> Compiler<'src> {
         format!("local {lhs_result} = {rhs_result}")
     }
 
-    fn compile_if_node(&self, if_node: &IfNode<'_>) -> String {
-        let condition = self.compile_expr(if_node.condition);
-        let if_body = self.compile_block(&if_node.body);
-        if let Some(else_node) = &if_node.else_ {
+    fn compile_multi_assign(&self, multi_assign: &MultiAssign<'_>) -> String {
+        let lhs_result = multi_assign
+            .lhs_arr
+            .iter()
+            .map(|suffixed_expr| self.compile_suffixed_expr(suffixed_expr))
+            .collect::<Vec<String>>()
+            .join(", ");
+        let rhs_result = multi_assign
+            .rhs_arr
+            .iter()
+            .map(|expr| self.compile_expr(*expr))
+            .collect::<Vec<String>>()
+            .join(", ");
+
+        format!("{lhs_result} = {rhs_result}")
+    }
+
+    fn compile_if_stat(&self, if_stat: &IfStat<'_>) -> String {
+        let condition = self.compile_expr(if_stat.condition);
+        let if_body = self.compile_block(&if_stat.body);
+        if let Some(else_node) = &if_stat.else_ {
             match else_node.as_ref() {
                 Else::Else(else_body) => {
                     let else_body = self.compile_block(else_body);
                     format!("if {condition} then{if_body}else{else_body}end")
                 }
-                Else::ElseIf(elseif_node) => {
-                    let elseif_node = self.compile_if_node(elseif_node);
-                    format!("if {condition} then{if_body}else{elseif_node}")
+                Else::ElseIf(else_if_stat) => {
+                    let else_if_stat = self.compile_if_stat(else_if_stat);
+                    format!("if {condition} then{if_body}else{else_if_stat}")
                 }
             }
         } else {
@@ -255,7 +273,6 @@ impl<'src> Compiler<'src> {
 
     fn compile_table(&self, table_node: &TableNode) -> String {
         let mut result = String::new();
-
         result += "{";
         result += &self.newline();
         for field in &table_node.fields {
@@ -352,7 +369,7 @@ impl<'src> Compiler<'src> {
                 _ => {
                     let lhs = self.jit_expr(bin_op.lhs)?;
                     let lhs_range = lhs.as_bytes().as_ptr_range();
-                    
+
                     let rhs = self.jit_expr(bin_op.rhs)?;
                     let rhs_range = rhs.as_bytes().as_ptr_range();
 
