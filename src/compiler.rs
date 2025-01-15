@@ -16,21 +16,21 @@ impl<'src> Compiler<'src> {
         }
     }
 
-    pub fn compile_statement(&self, statement: &Node) -> String {
+    pub fn compile_statement(&self, statement: &Statement) -> String {
         match statement {
-            Node::Declare(decl) => self.compile_decl(decl),
-            Node::MethodDecl(method_decl) => self.compile_method_decl(method_decl),
-            Node::MultiDecl(multi_decl) => self.compile_multi_decl(multi_decl),
-            Node::MultiAssign(multi_assign) => self.compile_multi_assign(multi_assign),
-            Node::Assign(Assign { lhs, rhs }) => format!(
+            Statement::Declare(decl) => self.compile_decl(decl),
+            Statement::MethodDecl(method_decl) => self.compile_method_decl(method_decl),
+            Statement::MultiDecl(multi_decl) => self.compile_multi_decl(multi_decl),
+            Statement::MultiAssign(multi_assign) => self.compile_multi_assign(multi_assign),
+            Statement::Assign(Assign { lhs, rhs }) => format!(
                 "{} = {}",
                 self.compile_suffixed_name(lhs),
                 self.compile_expr(*rhs)
             ),
-            Node::IfStat(if_stat) => self.compile_if_stat(if_stat),
-            Node::RangeFor(range_for) => self.compile_range_for(range_for),
-            Node::KeyValFor(keyval_for) => self.compile_keyval_for(keyval_for),
-            Node::Return(return_exprs) => {
+            Statement::IfStat(if_stat) => self.compile_if_stat(if_stat),
+            Statement::RangeFor(range_for) => self.compile_range_for(range_for),
+            Statement::KeyValFor(keyval_for) => self.compile_keyval_for(keyval_for),
+            Statement::Return(return_exprs) => {
                 if return_exprs.is_empty() {
                     "return".to_owned()
                 } else {
@@ -44,8 +44,8 @@ impl<'src> Compiler<'src> {
                     )
                 }
             }
-            Node::SuffixedExpr(suffixed_expr) => self.compile_suffixed_expr(suffixed_expr),
-            Node::Block(statements) => {
+            Statement::ExprStat(suffixed_expr) => self.compile_suffixed_expr(suffixed_expr),
+            Statement::Block(statements) => {
                 let mut result = "do".to_owned();
                 self.indent();
                 for stat in statements {
@@ -69,7 +69,7 @@ impl<'src> Compiler<'src> {
         };
 
         if decl.lhs.suffixes.is_empty() {
-            if let Node::SimpleExpr(SimpleExpr::FuncNode(func)) = &self.pool[val] {
+            if let Expr::Simple(SimpleExpr::FuncNode(func)) = &self.pool[val] {
                 let name = decl.lhs.name;
                 return format!(
                     "local {name}{}{name} = {}",
@@ -188,18 +188,16 @@ impl<'src> Compiler<'src> {
         }
 
         match &self.pool[expr] {
-            Node::BinOp(binop) => format!(
+            Expr::BinOp(binop) => format!(
                 "({} {} {})",
                 self.compile_expr(binop.lhs),
                 binop.op.to_lua(),
                 self.compile_expr(binop.rhs),
             ),
-            Node::UnOp(UnOp { op, val }) => op.to_string() + &self.compile_expr(*val),
-            Node::ParenExpr(ParenExpr { val }) => format!("({})", self.compile_expr(*val)),
-            Node::SimpleExpr(simple_expr) => self.compile_simple_expr(simple_expr),
-            Node::Name(str) => (*str).to_owned(),
-
-            other => unreachable!("{other:?} found in expr"),
+            Expr::UnOp(UnOp { op, val }) => op.to_string() + &self.compile_expr(*val),
+            Expr::Paren(ParenExpr { val }) => format!("({})", self.compile_expr(*val)),
+            Expr::Simple(simple_expr) => self.compile_simple_expr(simple_expr),
+            Expr::Name(str) => (*str).to_owned(),
         }
     }
 
@@ -231,7 +229,7 @@ impl<'src> Compiler<'src> {
         result
     }
 
-    fn compile_block(&self, block: &[Node]) -> String {
+    fn compile_block(&self, block: &[Statement]) -> String {
         let mut result = String::new();
         self.indent();
         for statement in block {
@@ -364,7 +362,7 @@ impl<'src> Compiler<'src> {
 
     fn jit_expr(&self, expr: ExprRef) -> Option<&'src str> {
         match &self.pool[expr] {
-            Node::BinOp(bin_op) => match bin_op.op {
+            Expr::BinOp(bin_op) => match bin_op.op {
                 OpKind::Neq | OpKind::And | OpKind::Or => None,
                 _ => {
                     let lhs = self.jit_expr(bin_op.lhs)?;
@@ -384,22 +382,21 @@ impl<'src> Compiler<'src> {
                     })
                 }
             },
-            Node::UnOp(un_op) => {
+            Expr::UnOp(un_op) => {
                 let val = self.jit_expr(un_op.val)?;
                 let ptr = unsafe { val.as_ptr().sub(1) };
                 Some(unsafe { str::from_utf8_unchecked(slice::from_raw_parts(ptr, val.len() + 1)) })
             }
-            Node::ParenExpr(paren_expr) => {
+            Expr::Paren(paren_expr) => {
                 let val = self.jit_expr(paren_expr.val)?;
                 let ptr = unsafe { val.as_ptr().sub(1) };
                 Some(unsafe { str::from_utf8_unchecked(slice::from_raw_parts(ptr, val.len() + 2)) })
             }
-            Node::SimpleExpr(
+            Expr::Simple(
                 SimpleExpr::Num(s) | SimpleExpr::Str(s) | SimpleExpr::Bool(s) | SimpleExpr::Nil(s),
             )
-            | Node::Name(s) => Some(s),
-            Node::SuffixedExpr(suffixed_expr)
-            | Node::SimpleExpr(SimpleExpr::SuffixedExpr(suffixed_expr)) => {
+            | Expr::Name(s) => Some(s),
+            Expr::Simple(SimpleExpr::SuffixedExpr(suffixed_expr)) => {
                 if suffixed_expr.suffixes.is_empty() {
                     self.jit_expr(suffixed_expr.val)
                 } else {

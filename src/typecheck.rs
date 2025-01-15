@@ -9,18 +9,18 @@ pub struct TypeChecker<'src> {
 impl<'src> TypeChecker<'src> {
     pub fn check_statement(
         &self,
-        stat: &Node<'src>,
+        stat: &Statement<'src>,
         type_env: &mut TypeEnv,
     ) -> Result<(), CheckErr> {
         match stat {
-            Node::Declare(decl) => self.check_decl(decl, type_env),
-            Node::MethodDecl(method_decl) => self.check_method_decl(method_decl, type_env),
-            Node::MultiDecl(multi_decl) => self.check_multi_decl(multi_decl, type_env),
-            Node::IfStat(if_stat) => self.check_if_stat(if_stat, type_env),
-            Node::WhileStat(while_stat) => self.check_while_stat(while_stat, type_env),
-            Node::RangeFor(range_for) => self.check_range_for(range_for, type_env),
-            Node::KeyValFor(keyval_for) => self.check_keyval_for(keyval_for, type_env),
-            Node::Assign(Assign { lhs, rhs }) => {
+            Statement::Declare(decl) => self.check_decl(decl, type_env),
+            Statement::MethodDecl(method_decl) => self.check_method_decl(method_decl, type_env),
+            Statement::MultiDecl(multi_decl) => self.check_multi_decl(multi_decl, type_env),
+            Statement::IfStat(if_stat) => self.check_if_stat(if_stat, type_env),
+            Statement::WhileStat(while_stat) => self.check_while_stat(while_stat, type_env),
+            Statement::RangeFor(range_for) => self.check_range_for(range_for, type_env),
+            Statement::KeyValFor(keyval_for) => self.check_keyval_for(keyval_for, type_env),
+            Statement::Assign(Assign { lhs, rhs }) => {
                 let lhs_type = self.check_suffixed_name(lhs, type_env)?;
                 let rhs_type = self.check_expr(*rhs, type_env)?;
                 if !lhs_type.can_equal(&rhs_type) {
@@ -32,12 +32,12 @@ impl<'src> TypeChecker<'src> {
                     Ok(())
                 }
             }
-            Node::MultiAssign(multi_assign) => self.check_multi_assign(multi_assign, type_env),
+            Statement::MultiAssign(multi_assign) => self.check_multi_assign(multi_assign, type_env),
             // TODO: investigate if making a more expression-statement specific checking function is worth it
-            Node::SuffixedExpr(suffixed_expr) => {
+            Statement::ExprStat(suffixed_expr) => {
                 self.check_suffixed_expr(suffixed_expr, type_env).map(drop)
             }
-            Node::Block(statements) => {
+            Statement::Block(statements) => {
                 let start_len = type_env.len();
                 for stat in statements {
                     self.check_statement(stat, type_env)?;
@@ -51,8 +51,7 @@ impl<'src> TypeChecker<'src> {
 
     fn check_decl(&self, decl: &Declare<'src>, type_env: &mut TypeEnv) -> Result<(), CheckErr> {
         if let Some(val) = decl.val {
-            if let Node::SimpleExpr(SimpleExpr::StructNode(StructNode { type_, .. })) =
-                &self.pool[val]
+            if let Expr::Simple(SimpleExpr::StructNode(StructNode { type_, .. })) = &self.pool[val]
             {
                 type_env.push(decl.lhs.name.to_owned(), Type::User(*type_.clone()));
                 return Ok(());
@@ -212,8 +211,8 @@ impl<'src> TypeChecker<'src> {
 
     fn check_expr(&self, expr: ExprRef, type_env: &TypeEnv) -> Result<Type, CheckErr> {
         match &self.pool[expr] {
-            Node::BinOp(binop) => self.check_binop(binop, type_env),
-            Node::UnOp(unop) => match unop.op {
+            Expr::BinOp(binop) => self.check_binop(binop, type_env),
+            Expr::UnOp(unop) => match unop.op {
                 UnOpKind::Neg => {
                     if std::mem::discriminant(&self.check_expr(unop.val, type_env)?)
                         != std::mem::discriminant(&Type::Number)
@@ -225,14 +224,12 @@ impl<'src> TypeChecker<'src> {
                 }
                 UnOpKind::Len => Ok(Type::Number),
             },
-            Node::ParenExpr(paren_expr) => self.check_expr(paren_expr.val, type_env),
-            Node::SimpleExpr(simple_expr) => self.check_simple_expr(simple_expr, type_env),
-            Node::Name(str) => match type_env.get(str) {
+            Expr::Paren(paren_expr) => self.check_expr(paren_expr.val, type_env),
+            Expr::Simple(simple_expr) => self.check_simple_expr(simple_expr, type_env),
+            Expr::Name(str) => match type_env.get(str) {
                 Some(type_) => Ok(type_.clone()),
                 None => Err(CheckErr::NoSuchVal((*str).to_owned())),
             },
-            Node::SuffixedExpr(suffixed_expr) => self.check_suffixed_expr(suffixed_expr, type_env),
-            _ => unreachable!(),
         }
     }
 
@@ -351,36 +348,36 @@ impl<'src> TypeChecker<'src> {
 
     fn check_func_body(
         &self,
-        body: &Vec<Node<'src>>,
+        body: &Vec<Statement<'src>>,
         type_env: &mut TypeEnv,
         return_type: &Type,
     ) -> Result<bool, CheckErr> {
         let start_len = type_env.len();
         for stat in body {
             match stat {
-                Node::IfStat(IfStat { body: if_body, .. }) => {
+                Statement::IfStat(IfStat { body: if_body, .. }) => {
                     if self.check_func_body(if_body, type_env, return_type)? {
                         return Ok(true);
                     }
                 }
-                Node::WhileStat(WhileStat {
+                Statement::WhileStat(WhileStat {
                     body: while_body, ..
                 }) => {
                     if self.check_func_body(while_body, type_env, return_type)? {
                         return Ok(true);
                     }
                 }
-                Node::RangeFor(RangeFor { body, .. }) => {
+                Statement::RangeFor(RangeFor { body, .. }) => {
                     if self.check_func_body(body, type_env, return_type)? {
                         return Ok(true);
                     }
                 }
-                Node::KeyValFor(KeyValFor { body, .. }) => {
+                Statement::KeyValFor(KeyValFor { body, .. }) => {
                     if self.check_func_body(body, type_env, return_type)? {
                         return Ok(true);
                     }
                 }
-                Node::Return(vals) => {
+                Statement::Return(vals) => {
                     if vals.is_empty() {
                         return Err(CheckErr::ReturnCount);
                     }

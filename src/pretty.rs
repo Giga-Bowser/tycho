@@ -37,25 +37,27 @@ pub struct Printer<'src> {
 }
 
 impl Printer<'_> {
-    pub fn print(&self, stat: &Node) -> String {
+    pub fn print(&self, stat: &Statement) -> String {
         self.print_statement("".to_owned(), stat, true)
     }
 
-    pub fn print_statement(&self, prefix: String, stat: &Node, is_end: bool) -> String {
+    pub fn print_statement(&self, prefix: String, stat: &Statement, is_end: bool) -> String {
         match stat {
-            Node::Assign(assign) => self.print_assign(prefix, assign, is_end),
-            Node::Break => todo!(),
-            Node::MethodDecl(method_decl) => self.print_method_decl(prefix, method_decl, is_end),
-            Node::Declare(decl) => self.print_decl(prefix, decl, is_end),
-            Node::IfStat(if_stat) => self.print_if_stat(prefix, if_stat, is_end),
+            Statement::Assign(assign) => self.print_assign(prefix, assign, is_end),
+            Statement::Break => todo!(),
+            Statement::MethodDecl(method_decl) => {
+                self.print_method_decl(prefix, method_decl, is_end)
+            }
+            Statement::Declare(decl) => self.print_decl(prefix, decl, is_end),
+            Statement::IfStat(if_stat) => self.print_if_stat(prefix, if_stat, is_end),
             // Node::WhileStat(_) => todo!(),
             // Node::Block(_) => todo!(),
-            Node::Return(returns) => self.print_return(prefix, returns, is_end),
+            Statement::Return(returns) => self.print_return(prefix, returns, is_end),
             // Node::RangeFor(_) => todo!(),
             // Node::KeyValFor(_) => todo!(),
             // Node::MultiDecl(_) => todo!(),
             // Node::MultiAssign(_) => todo!(),
-            Node::SuffixedExpr(suffixed_expr) => {
+            Statement::ExprStat(suffixed_expr) => {
                 self.print_suffixed_expr(prefix, suffixed_expr, is_end)
             }
             other => format!(
@@ -187,10 +189,10 @@ impl Printer<'_> {
 
     fn print_expr(&self, prefix: String, expr: ExprRef, is_end: bool) -> String {
         match &self.pool[expr] {
-            Node::BinOp(binop) => self.print_binop(prefix, binop, is_end),
-            Node::UnOp(unop) => self.print_unop(prefix, unop, is_end),
-            Node::SimpleExpr(simple_expr) => self.print_simple_expr(prefix, simple_expr, is_end),
-            Node::Name(name) => format!(
+            Expr::BinOp(binop) => self.print_binop(prefix, binop, is_end),
+            Expr::UnOp(unop) => self.print_unop(prefix, unop, is_end),
+            Expr::Simple(simple_expr) => self.print_simple_expr(prefix, simple_expr, is_end),
+            Expr::Name(name) => format!(
                 "{}{}{}\n",
                 prefix,
                 if is_end { "└── " } else { "├── " },

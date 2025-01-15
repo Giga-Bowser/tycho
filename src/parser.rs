@@ -135,12 +135,12 @@ fn get_unop(tok: &TokenKind) -> Option<UnOpKind> {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct ExprPool<'src>(pub Vec<Node<'src>>);
+pub struct ExprPool<'src>(pub Vec<Expr<'src>>);
 
 pub type ExprRef = usize;
 
 impl<'src> ExprPool<'src> {
-    pub fn add(&mut self, expr: Node<'src>) -> ExprRef {
+    pub fn add(&mut self, expr: Expr<'src>) -> ExprRef {
         let idx = self.0.len() as ExprRef;
         self.0.push(expr);
         idx
@@ -148,7 +148,7 @@ impl<'src> ExprPool<'src> {
 }
 
 impl<'src> std::ops::Index<ExprRef> for ExprPool<'src> {
-    type Output = Node<'src>;
+    type Output = Expr<'src>;
 
     fn index(&self, index: ExprRef) -> &Self::Output {
         &self.0[index]
@@ -156,7 +156,7 @@ impl<'src> std::ops::Index<ExprRef> for ExprPool<'src> {
 }
 
 impl<'src> std::ops::IndexMut<ExprRef> for ExprPool<'src> {
-    fn index_mut(&mut self, index: ExprRef) -> &mut Node<'src> {
+    fn index_mut(&mut self, index: ExprRef) -> &mut Expr<'src> {
         &mut self.0[index]
     }
 }
@@ -258,7 +258,7 @@ pub struct Declare<'a> {
 #[derive(Debug, Clone)]
 pub struct FuncNode<'a> {
     pub type_: Box<Function>,
-    pub body: Vec<Node<'a>>,
+    pub body: Vec<Statement<'a>>,
 }
 
 // #[derive(Debug, Clone)]
@@ -269,21 +269,21 @@ pub struct FuncNode<'a> {
 
 #[derive(Debug, Clone)]
 pub enum Else<'a> {
-    Else(Vec<Node<'a>>),
+    Else(Vec<Statement<'a>>),
     ElseIf(IfStat<'a>),
 }
 
 #[derive(Debug, Clone)]
 pub struct IfStat<'a> {
     pub condition: ExprRef,
-    pub body: Vec<Node<'a>>,
+    pub body: Vec<Statement<'a>>,
     pub else_: Option<Box<Else<'a>>>,
 }
 
 #[derive(Debug, Clone)]
 pub struct WhileStat<'a> {
     pub condition: ExprRef,
-    pub body: Vec<Node<'a>>,
+    pub body: Vec<Statement<'a>>,
 }
 
 #[derive(Debug, Clone)]
@@ -303,7 +303,7 @@ pub struct RangeExpr {
 pub struct RangeFor<'a> {
     pub var: &'a str,
     pub range: Box<RangeExpr>,
-    pub body: Vec<Node<'a>>,
+    pub body: Vec<Statement<'a>>,
 }
 
 #[derive(Debug, Clone)]
@@ -311,7 +311,7 @@ pub struct KeyValFor<'a> {
     /// this should be 'keyname, valname' in one str
     pub names: &'a str,
     pub iter: ExprRef,
-    pub body: Vec<Node<'a>>,
+    pub body: Vec<Statement<'a>>,
 }
 
 #[derive(Debug, Clone)]
@@ -350,53 +350,57 @@ pub enum SimpleExpr<'a> {
 }
 
 #[derive(Debug, Clone)]
-pub enum Node<'a> {
+pub enum Expr<'a> {
     BinOp(BinOp),
     UnOp(UnOp),
-    ParenExpr(ParenExpr),
-    Assign(Assign<'a>),
-    Break,
-    SimpleExpr(SimpleExpr<'a>),
-    MethodDecl(MethodDecl<'a>),
+    Paren(ParenExpr),
+    Simple(SimpleExpr<'a>),
+    Name(&'a str),
+}
+
+#[derive(Debug, Clone)]
+pub enum Statement<'a> {
     Declare(Declare<'a>),
+    MultiDecl(MultiDecl<'a>),
+    MethodDecl(MethodDecl<'a>),
+    Assign(Assign<'a>),
+    MultiAssign(MultiAssign<'a>),
+    ExprStat(SuffixedExpr<'a>),
+    Block(Vec<Statement<'a>>),
+    Return(Vec<ExprRef>),
+    Break,
     IfStat(IfStat<'a>),
     WhileStat(WhileStat<'a>),
-    Block(Vec<Node<'a>>),
-    Return(Vec<ExprRef>),
     RangeFor(RangeFor<'a>),
     KeyValFor(KeyValFor<'a>),
-    Name(&'a str),
-    MultiDecl(MultiDecl<'a>),
-    MultiAssign(MultiAssign<'a>),
-    SuffixedExpr(SuffixedExpr<'a>),
 }
 
 impl<'src> Parser<'src> {
     pub fn parse_statement(
         &mut self,
         typelist: &mut TypeList<'src>,
-    ) -> Result<Node<'src>, ParseError> {
+    ) -> Result<Statement<'src>, ParseError> {
         match self.tokens[0].kind {
             Name => {
                 if self.tokens[1].kind == Colon
                     && self.tokens[2].kind == Name
                     && self.tokens[3].kind == Colon
                 {
-                    Ok(Node::MethodDecl(self.parse_method_decl(typelist)?))
+                    Ok(Statement::MethodDecl(self.parse_method_decl(typelist)?))
                 } else {
-                    self.parse_expr_statement(typelist)
+                    self.parse_expr_stat(typelist)
                 }
             }
-            If => Ok(Node::IfStat(self.if_stat(typelist)?)),
-            While => Ok(Node::WhileStat(self.while_stat(typelist)?)),
+            If => Ok(Statement::IfStat(self.if_stat(typelist)?)),
+            While => Ok(Statement::WhileStat(self.while_stat(typelist)?)),
             For => self.for_stat(typelist),
             Return => {
                 self.tokens.pop_front();
-                Ok(Node::Return(self.parse_expr_list(typelist)?))
+                Ok(Statement::Return(self.parse_expr_list(typelist)?))
             }
             Break => {
                 self.tokens.pop_front();
-                Ok(Node::Break)
+                Ok(Statement::Break)
             }
             LCurly => {
                 self.tokens.pop_front();
@@ -406,9 +410,9 @@ impl<'src> Parser<'src> {
                     body.push(self.parse_statement(typelist)?);
                 }
 
-                Ok(Node::Block(body))
+                Ok(Statement::Block(body))
             }
-            _ => self.parse_expr_statement(typelist),
+            _ => self.parse_expr_stat(typelist),
         }
     }
 
@@ -444,7 +448,7 @@ impl<'src> Parser<'src> {
 
             let val = self.parse_expr(typelist)?;
 
-            if let Node::SimpleExpr(SimpleExpr::StructNode(StructNode { type_, name, .. })) =
+            if let Expr::Simple(SimpleExpr::StructNode(StructNode { type_, name, .. })) =
                 &mut self.pool[val]
             {
                 if !lhs.suffixes.is_empty() {
@@ -475,7 +479,7 @@ impl<'src> Parser<'src> {
 
         let val = self.parse_expr(typelist)?;
 
-        if let Node::SimpleExpr(SimpleExpr::StructNode(StructNode {
+        if let Expr::Simple(SimpleExpr::StructNode(StructNode {
             type_: struct_type,
             name,
             ..
@@ -589,7 +593,7 @@ impl<'src> Parser<'src> {
         Ok(WhileStat { condition, body })
     }
 
-    fn for_stat(&mut self, typelist: &TypeList<'src>) -> Result<Node<'src>, ParseError> {
+    fn for_stat(&mut self, typelist: &TypeList<'src>) -> Result<Statement<'src>, ParseError> {
         self.tokens.pop_front(); // pop 'for'
 
         let first_name = self.tokens.pop_name()?;
@@ -624,7 +628,7 @@ impl<'src> Parser<'src> {
 
                 self.tokens.pop_front(); // '}'
 
-                Ok(Node::KeyValFor(KeyValFor { names, iter, body }))
+                Ok(Statement::KeyValFor(KeyValFor { names, iter, body }))
             }
             In => {
                 self.tokens.pop_front();
@@ -647,7 +651,7 @@ impl<'src> Parser<'src> {
 
                 self.tokens.pop_front(); // '}'
 
-                Ok(Node::RangeFor(RangeFor {
+                Ok(Statement::RangeFor(RangeFor {
                     var: first_name,
                     range: Box::new(RangeExpr { lhs, rhs }),
                     body,
@@ -660,15 +664,15 @@ impl<'src> Parser<'src> {
         }
     }
 
-    fn parse_expr_statement(
+    fn parse_expr_stat(
         &mut self,
         typelist: &mut TypeList<'src>,
-    ) -> Result<Node<'src>, ParseError> {
+    ) -> Result<Statement<'src>, ParseError> {
         let sufexpr = self.parse_suffixed_expr(typelist)?;
 
-        if let Node::Name(name) = self.pool[sufexpr.val] {
+        if let Expr::Name(name) = self.pool[sufexpr.val] {
             if self.tokens[0].kind == Colon {
-                return Ok(Node::Declare(self.parse_decl(
+                return Ok(Statement::Declare(self.parse_decl(
                     typelist,
                     SuffixedName {
                         name,
@@ -678,7 +682,7 @@ impl<'src> Parser<'src> {
             }
 
             if self.tokens[0].kind == Equal {
-                return Ok(Node::Assign(self.parse_assignment(
+                return Ok(Statement::Assign(self.parse_assignment(
                     typelist,
                     SuffixedName {
                         name,
@@ -688,7 +692,7 @@ impl<'src> Parser<'src> {
             }
 
             if self.tokens[0].kind != Comma {
-                return Ok(Node::SuffixedExpr(sufexpr));
+                return Ok(Statement::ExprStat(sufexpr));
             }
 
             let mut lhs_arr = vec![sufexpr];
@@ -697,7 +701,7 @@ impl<'src> Parser<'src> {
                 self.tokens.pop_front();
                 let temp = self.parse_suffixed_expr(typelist)?;
                 match self.pool[temp.val] {
-                    Node::Name(..) => {
+                    Expr::Name(..) => {
                         lhs_arr.push(temp);
                     }
                     _ => return Err(ParseError::EmptyError),
@@ -714,7 +718,7 @@ impl<'src> Parser<'src> {
                     let mut new_lhs_arr = Vec::new();
 
                     for SuffixedExpr { val, suffixes } in lhs_arr.into_iter() {
-                        if let Node::Name(name) = self.pool[val] {
+                        if let Expr::Name(name) = self.pool[val] {
                             assert!(suffixes.is_empty());
 
                             new_lhs_arr.push(name)
@@ -723,7 +727,7 @@ impl<'src> Parser<'src> {
                         }
                     }
 
-                    Ok(Node::MultiDecl(MultiDecl {
+                    Ok(Statement::MultiDecl(MultiDecl {
                         lhs_arr: new_lhs_arr,
                         rhs_arr,
                     }))
@@ -732,7 +736,7 @@ impl<'src> Parser<'src> {
                     self.tokens.pop_front();
                     let rhs_arr = self.parse_expr_list(typelist)?;
 
-                    Ok(Node::MultiAssign(MultiAssign { lhs_arr, rhs_arr }))
+                    Ok(Statement::MultiAssign(MultiAssign { lhs_arr, rhs_arr }))
                 }
                 _ => Err(ParseError::UnexpectedToken(UnexpectedToken {
                     token: (&self.tokens[0]).into(),
@@ -741,7 +745,7 @@ impl<'src> Parser<'src> {
             };
         }
 
-        Ok(Node::SuffixedExpr(sufexpr))
+        Ok(Statement::ExprStat(sufexpr))
     }
 
     fn parse_suffixed_expr(
@@ -845,14 +849,14 @@ impl<'src> Parser<'src> {
             Name => {
                 let name = self.tokens[0].str;
                 self.tokens.pop_front();
-                Ok(self.pool.add(Node::Name(name)))
+                Ok(self.pool.add(Expr::Name(name)))
             }
             LParen => {
                 self.tokens.pop_front();
                 let val = self.parse_expr(typelist)?;
                 self.tokens.expect(RParen)?;
 
-                Ok(self.pool.add(Node::ParenExpr(ParenExpr { val })))
+                Ok(self.pool.add(Expr::Paren(ParenExpr { val })))
             }
             _ => Err(ParseError::UnexpectedToken(UnexpectedToken {
                 token: (&self.tokens[0]).into(),
@@ -870,11 +874,11 @@ impl<'src> Parser<'src> {
             self.tokens.pop_front();
             let val = self.expr_impl(typelist, 12)?;
 
-            self.pool.add(Node::UnOp(UnOp { op, val }))
+            self.pool.add(Expr::UnOp(UnOp { op, val }))
         } else {
             let val = self.simple_expr(typelist)?;
 
-            self.pool.add(Node::SimpleExpr(val))
+            self.pool.add(Expr::Simple(val))
         };
 
         while let Some((op, prec)) = get_op(self.tokens[0].kind) {
@@ -886,7 +890,7 @@ impl<'src> Parser<'src> {
 
             let rhs = self.expr_impl(typelist, prec.right)?;
 
-            result = self.pool.add(Node::BinOp(BinOp {
+            result = self.pool.add(Expr::BinOp(BinOp {
                 op,
                 lhs: result,
                 rhs,
@@ -1291,11 +1295,11 @@ impl<'src> Parser<'src> {
             self.tokens.pop_front();
             let val = self.range_expr_impl(typelist, 12)?;
 
-            self.pool.add(Node::UnOp(UnOp { op, val }))
+            self.pool.add(Expr::UnOp(UnOp { op, val }))
         } else {
             let val = self.simple_expr(typelist)?;
 
-            self.pool.add(Node::SimpleExpr(val))
+            self.pool.add(Expr::Simple(val))
         };
 
         while let Some((op, prec)) = get_op(self.tokens[0].kind) {
@@ -1311,7 +1315,7 @@ impl<'src> Parser<'src> {
 
             let rhs = self.range_expr_impl(typelist, prec.right)?;
 
-            result = self.pool.add(Node::BinOp(BinOp {
+            result = self.pool.add(Expr::BinOp(BinOp {
                 op,
                 lhs: result,
                 rhs,
