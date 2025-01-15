@@ -35,15 +35,9 @@ pub enum OpKind {
     Or,
 }
 
-#[derive(Debug, Clone)]
-pub enum UnOpKind {
-    Neg,
-    Len,
-}
-
-impl From<OpKind> for &'static str {
-    fn from(val: OpKind) -> Self {
-        match val {
+impl OpKind {
+    pub fn to_lua(&self) -> &'static str {
+        match self {
             OpKind::Add => "+",
             OpKind::Sub => "-",
             OpKind::Mul => "*",
@@ -51,15 +45,21 @@ impl From<OpKind> for &'static str {
             OpKind::Pow => "^",
             OpKind::Cat => "..",
             OpKind::Equ => "==",
-            OpKind::Neq => "!=",
+            OpKind::Neq => "~=",
             OpKind::Gre => ">",
             OpKind::Grq => ">=",
             OpKind::Les => "<",
             OpKind::Leq => "<=",
-            OpKind::And => "&&",
-            OpKind::Or => "||",
+            OpKind::And => "and",
+            OpKind::Or => "or",
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub enum UnOpKind {
+    Neg,
+    Len,
 }
 
 impl From<UnOpKind> for &'static str {
