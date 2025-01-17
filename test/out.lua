@@ -1,3 +1,4 @@
+require("lualib.tycho")
 local factorial
 factorial = function(n)
 	if n == 0 then

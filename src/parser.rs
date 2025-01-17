@@ -2,14 +2,15 @@
 
 use std::{rc::Rc, slice, str};
 
+use rustc_hash::FxHashMap;
+
 use crate::{
     errors::{ParseError, UnexpectedToken},
     lexer::{
         TokenKind::{self, *},
         Tokens,
     },
-    types::*,
-    TypeList,
+    types::{Function, TableType, Type, User},
 };
 
 pub struct Parser<'src> {
@@ -374,6 +375,8 @@ pub enum Statement<'a> {
     RangeFor(RangeFor<'a>),
     KeyValFor(KeyValFor<'a>),
 }
+
+pub type TypeList<'a> = FxHashMap<String, Type>;
 
 impl<'src> Parser<'src> {
     pub fn parse_statement(
