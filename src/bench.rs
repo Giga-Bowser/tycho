@@ -9,7 +9,6 @@ use crate::{
     pretty::Printer,
     type_env::TypeEnv,
     typecheck::TypeChecker,
-    types::Type,
     util::add_defines,
     BenchOpt,
 };
@@ -84,11 +83,7 @@ fn bench_parse(args: &BenchOpt) -> f64 {
         })
         .collect();
 
-    let mut typelist = TypeList::default();
-    typelist.insert("number".to_owned(), Type::Number);
-    typelist.insert("string".to_owned(), Type::String);
-    typelist.insert("boolean".to_owned(), Type::Boolean);
-    typelist.insert("any".to_owned(), Type::Any);
+    let mut typelist = TypeList::with_core();
 
     let mut pool = ExprPool::new();
     let mut parser = Parser {
@@ -136,11 +131,7 @@ fn bench_check(args: &BenchOpt) -> f64 {
         })
         .collect();
 
-    let mut typelist = TypeList::default();
-    typelist.insert("number".to_owned(), Type::Number);
-    typelist.insert("string".to_owned(), Type::String);
-    typelist.insert("boolean".to_owned(), Type::Boolean);
-    typelist.insert("any".to_owned(), Type::Any);
+    let mut typelist = TypeList::with_core();
 
     let mut pool = ExprPool::new();
     let mut parser = Parser {
@@ -202,11 +193,7 @@ fn bench_compile(args: &BenchOpt) -> f64 {
         })
         .collect();
 
-    let mut typelist = TypeList::default();
-    typelist.insert("number".to_owned(), Type::Number);
-    typelist.insert("string".to_owned(), Type::String);
-    typelist.insert("boolean".to_owned(), Type::Boolean);
-    typelist.insert("any".to_owned(), Type::Any);
+    let mut typelist = TypeList::with_core();
 
     let mut pool = ExprPool::new();
     let mut parser = Parser {

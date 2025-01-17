@@ -9,7 +9,6 @@ use crate::{
     pretty::Printer,
     type_env::TypeEnv,
     typecheck::TypeChecker,
-    types::Type,
     util::{add_defines, duration_fmt},
     BuildOpt,
 };
@@ -52,11 +51,7 @@ fn build(args: &BuildOpt) {
         eprintln!("lexing done: {}", duration_fmt(lex_timer.elapsed()));
     }
 
-    let mut typelist = TypeList::default();
-    typelist.insert("number".to_owned(), Type::Number);
-    typelist.insert("string".to_owned(), Type::String);
-    typelist.insert("boolean".to_owned(), Type::Boolean);
-    typelist.insert("any".to_owned(), Type::Any);
+    let mut typelist = TypeList::with_core();
 
     let parse_timer = Instant::now();
 

@@ -7,7 +7,6 @@ use crate::{
     parser::{ExprPool, Parser, TypeList},
     type_env::TypeEnv,
     typecheck::TypeChecker,
-    types::Type,
 };
 
 #[macro_export]
@@ -35,11 +34,7 @@ pub fn add_defines(file_path: &Path, type_env: &mut TypeEnv) {
         })
         .collect();
 
-    let mut typelist = TypeList::default();
-    typelist.insert("number".to_owned(), Type::Number);
-    typelist.insert("string".to_owned(), Type::String);
-    typelist.insert("boolean".to_owned(), Type::Boolean);
-    typelist.insert("any".to_owned(), Type::Any);
+    let mut typelist = TypeList::with_core();
 
     let mut pool = ExprPool::new();
     let mut parser = Parser {
