@@ -8,6 +8,7 @@ mod compiler;
 mod driver;
 mod errors;
 mod lexer;
+mod mem_size;
 mod parser;
 mod pretty;
 mod type_env;

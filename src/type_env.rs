@@ -2,8 +2,8 @@ use crate::types::Type;
 
 #[derive(Clone, Debug, Default)]
 pub struct TypeEnv<'a> {
-    parent_scopes: Option<&'a TypeEnv<'a>>,
-    current_scope: Vec<(String, Type)>,
+    pub parent_scopes: Option<&'a TypeEnv<'a>>,
+    pub current_scope: Vec<(String, Type)>,
 }
 
 impl<'a> TypeEnv<'a> {
@@ -39,9 +39,7 @@ impl<'a> TypeEnv<'a> {
     }
 
     pub fn parent_len(&self) -> usize {
-        self.parent_scopes
-            .map(|parent_scopes| parent_scopes.len())
-            .unwrap_or(0)
+        self.parent_scopes.map(TypeEnv::len).unwrap_or(0)
     }
 
     pub fn push(&mut self, key: String, val: Type) {

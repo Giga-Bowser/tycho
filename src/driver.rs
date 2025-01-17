@@ -5,11 +5,12 @@ use logos::Logos;
 use crate::{
     compiler::Compiler,
     lexer::{Token, TokenKind, Tokens},
+    mem_size::DeepSize,
     parser::{ExprPool, Parser, TypeList},
     pretty::Printer,
     type_env::TypeEnv,
     typecheck::TypeChecker,
-    util::{add_defines, duration_fmt},
+    util::{add_defines, duration_fmt, ByteFmt},
     BuildOpt,
 };
 
@@ -49,6 +50,10 @@ fn build(args: &BuildOpt) {
 
     if args.verbose {
         eprintln!("lexing done: {}", duration_fmt(lex_timer.elapsed()));
+        eprintln!(
+            "tokens memory: {}",
+            ByteFmt(tokens.0.len() * size_of::<Token>())
+        );
     }
 
     let mut typelist = TypeList::with_core();
@@ -66,8 +71,12 @@ fn build(args: &BuildOpt) {
         stats.push(parser.parse_statement(&mut typelist).unwrap());
     }
 
+    stats.deep_size_of();
+
     if args.verbose {
         eprintln!("parsing done: {}", duration_fmt(parse_timer.elapsed()));
+        eprintln!("ast memory: {}", ByteFmt(stats.deep_size_of()));
+        eprintln!("pool memory: {}", ByteFmt(pool.vec.deep_size_of()));
     }
 
     let check_timer = Instant::now();
@@ -85,6 +94,7 @@ fn build(args: &BuildOpt) {
 
     if args.verbose {
         eprintln!("checking done: {}", duration_fmt(check_timer.elapsed()));
+        eprintln!("type env memory: {}", ByteFmt(type_env.deep_size_of()));
     }
 
     let compile_timer = Instant::now();
