@@ -34,7 +34,7 @@ pub struct BenchOpt {
     #[structopt(parse(from_os_str))]
     includes: Vec<PathBuf>,
 
-    #[structopt(default_value = "3")]
+    #[structopt(long, default_value = "3")]
     total_time: f64,
 }
 

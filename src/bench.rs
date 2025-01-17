@@ -43,8 +43,6 @@ fn report_results(results: &[(&str, f64)]) {
     }
 }
 
-const TOTAL_TIME: Duration = Duration::from_secs(1);
-
 fn bench_lex(args: &BenchOpt) -> f64 {
     let contents = std::fs::read_to_string(args.file.clone())
         .unwrap_or_else(|_| panic!("Sould have been able to read file {}", args.file.display()));
@@ -69,7 +67,7 @@ fn bench_lex(args: &BenchOpt) -> f64 {
         timer += end - start;
     }
 
-    counter as f64 / TOTAL_TIME.as_secs_f64()
+    counter as f64 / total_time.as_secs_f64()
 }
 
 fn bench_parse(args: &BenchOpt) -> f64 {
@@ -100,7 +98,8 @@ fn bench_parse(args: &BenchOpt) -> f64 {
 
     let mut counter = 0;
     let mut timer = Duration::default();
-    while timer < TOTAL_TIME {
+    let total_time = Duration::from_secs_f64(args.total_time);
+    while timer < total_time {
         *parser.pool = ExprPool::new();
         parser.tokens = tokens.clone();
 
@@ -115,7 +114,7 @@ fn bench_parse(args: &BenchOpt) -> f64 {
         timer += end - start;
     }
 
-    counter as f64 / TOTAL_TIME.as_secs_f64()
+    counter as f64 / total_time.as_secs_f64()
 }
 
 fn bench_check(args: &BenchOpt) -> f64 {
@@ -159,7 +158,8 @@ fn bench_check(args: &BenchOpt) -> f64 {
 
     let mut counter = 0;
     let mut timer = Duration::ZERO;
-    while timer < TOTAL_TIME {
+    let total_time = Duration::from_secs_f64(args.total_time);
+    while timer < total_time {
         let mut type_env = type_env_orig.clone();
 
         let start = Instant::now();
@@ -179,7 +179,7 @@ fn bench_check(args: &BenchOpt) -> f64 {
         timer += end - start;
     }
 
-    counter as f64 / TOTAL_TIME.as_secs_f64()
+    counter as f64 / total_time.as_secs_f64()
 }
 
 fn bench_compile(args: &BenchOpt) -> f64 {
@@ -235,7 +235,8 @@ fn bench_compile(args: &BenchOpt) -> f64 {
 
     let mut counter = 0;
     let mut timer = Duration::ZERO;
-    while timer < TOTAL_TIME {
+    let total_time = Duration::from_secs_f64(args.total_time);
+    while timer < total_time {
         let start = Instant::now();
 
         for stat in std::hint::black_box(&stats) {
@@ -247,5 +248,5 @@ fn bench_compile(args: &BenchOpt) -> f64 {
         timer += end - start;
     }
 
-    counter as f64 / TOTAL_TIME.as_secs_f64()
+    counter as f64 / total_time.as_secs_f64()
 }
