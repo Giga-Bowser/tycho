@@ -47,8 +47,12 @@ pub struct BuildOpt {
     includes: Vec<PathBuf>,
 
     /// Output file, stdout if not present
-    #[structopt(short = "o", parse(from_os_str))]
+    #[structopt(short, parse(from_os_str))]
     output: Option<PathBuf>,
+
+    /// Enable verbose output
+    #[structopt(short, long)]
+    verbose: bool,
 }
 
 fn main() {
@@ -59,7 +63,7 @@ fn main() {
             bench::bench_all(bench_opt);
         }
         TychoOpt::Build(build_opt) => {
-            driver::build(build_opt);
+            driver::main(build_opt);
         }
     }
 }
