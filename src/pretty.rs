@@ -32,11 +32,11 @@ impl Display for UnOpKind {
     }
 }
 
-pub struct Printer<'src> {
-    pub pool: ExprPool<'src>,
+pub struct Printer<'src, 'pool> {
+    pub pool: &'pool ExprPool<'src>,
 }
 
-impl Printer<'_> {
+impl Printer<'_, '_> {
     pub fn print(&self, stat: &Statement) -> String {
         self.print_statement("".to_owned(), stat, true)
     }

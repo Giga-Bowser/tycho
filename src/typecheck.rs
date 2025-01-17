@@ -2,11 +2,11 @@ use std::rc::Rc;
 
 use crate::{errors::CheckErr, parser::*, type_env::TypeEnv, types::*};
 
-pub struct TypeChecker<'src> {
-    pub pool: ExprPool<'src>,
+pub struct TypeChecker<'src, 'pool> {
+    pub pool: &'pool ExprPool<'src>,
 }
 
-impl<'src> TypeChecker<'src> {
+impl<'src> TypeChecker<'src, '_> {
     pub fn check_statement(
         &self,
         stat: &Statement<'src>,

@@ -37,9 +37,11 @@ pub fn build(args: BuildOpt) {
     typelist.insert("boolean".to_owned(), Type::Boolean);
     typelist.insert("any".to_owned(), Type::Any);
 
+    let mut pool = ExprPool::new();
+
     let mut parser = Parser {
         tokens,
-        pool: ExprPool(Vec::new()),
+        pool: &mut pool,
     };
 
     let mut stats = Vec::new();
@@ -48,20 +50,18 @@ pub fn build(args: BuildOpt) {
         stats.push(parser.parse_statement(&mut typelist).unwrap());
     }
 
-    let typechecker = TypeChecker { pool: parser.pool };
+    let typechecker = TypeChecker { pool: &pool };
     for stat in &stats {
         match typechecker.check_statement(stat, &mut type_env) {
             Ok(()) => (),
             Err(e) => {
-                let printer = Printer {
-                    pool: typechecker.pool,
-                };
+                let printer = Printer { pool: &pool };
                 panic!("typechecking error: {e}\n{}", printer.print(stat))
             }
         }
     }
 
-    let compiler = Compiler::new(typechecker.pool);
+    let compiler = Compiler::new(&pool);
 
     let mut output: Box<dyn std::io::Write> = match args.output {
         Some(file) => Box::new(std::fs::File::create(file).unwrap_or_else(|e| panic!("{e}"))),

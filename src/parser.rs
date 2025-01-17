@@ -13,9 +13,9 @@ use crate::{
     types::{Function, TableType, Type, User},
 };
 
-pub struct Parser<'src> {
+pub struct Parser<'src, 'pool> {
     pub tokens: Tokens<'src>,
-    pub pool: ExprPool<'src>,
+    pub pool: &'pool mut ExprPool<'src>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -136,11 +136,15 @@ fn get_unop(tok: &TokenKind) -> Option<UnOpKind> {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct ExprPool<'src>(pub Vec<Expr<'src>>);
+pub struct ExprPool<'src>(Vec<Expr<'src>>);
 
 pub type ExprRef = usize;
 
 impl<'src> ExprPool<'src> {
+    pub fn new() -> Self {
+        Self(Vec::new())
+    }
+
     pub fn add(&mut self, expr: Expr<'src>) -> ExprRef {
         let idx = self.0.len() as ExprRef;
         self.0.push(expr);
@@ -378,7 +382,7 @@ pub enum Statement<'a> {
 
 pub type TypeList<'a> = FxHashMap<String, Type>;
 
-impl<'src> Parser<'src> {
+impl<'src> Parser<'src, '_> {
     pub fn parse_statement(
         &mut self,
         typelist: &mut TypeList<'src>,

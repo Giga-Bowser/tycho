@@ -2,14 +2,14 @@ use std::{cell::Cell, slice, str};
 
 use crate::{format_to, parser::*};
 
-#[derive(Debug, Default)]
-pub struct Compiler<'src> {
-    pub pool: ExprPool<'src>,
+#[derive(Debug)]
+pub struct Compiler<'src, 'pool> {
+    pub pool: &'pool ExprPool<'src>,
     indent: Cell<usize>,
 }
 
-impl<'src> Compiler<'src> {
-    pub fn new(pool: ExprPool<'src>) -> Self {
+impl<'src, 'pool> Compiler<'src, 'pool> {
+    pub fn new(pool: &'pool ExprPool<'src>) -> Self {
         Self {
             pool,
             indent: 0.into(),

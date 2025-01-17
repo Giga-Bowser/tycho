@@ -41,9 +41,10 @@ pub fn add_defines(file_path: &Path, type_env: &mut TypeEnv) {
     typelist.insert("boolean".to_owned(), Type::Boolean);
     typelist.insert("any".to_owned(), Type::Any);
 
+    let mut pool = ExprPool::new();
     let mut parser = Parser {
         tokens,
-        pool: ExprPool(Vec::new()),
+        pool: &mut pool,
     };
 
     let mut stats = Vec::new();
@@ -52,7 +53,7 @@ pub fn add_defines(file_path: &Path, type_env: &mut TypeEnv) {
         stats.push(parser.parse_statement(&mut typelist).unwrap());
     }
 
-    let typechecker = TypeChecker { pool: parser.pool };
+    let typechecker = TypeChecker { pool: &pool };
 
     for stat in stats {
         match typechecker.check_statement(&stat, type_env) {

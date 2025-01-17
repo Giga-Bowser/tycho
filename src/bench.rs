@@ -92,15 +92,16 @@ fn bench_parse(args: &BenchOpt) -> f64 {
     typelist.insert("boolean".to_owned(), Type::Boolean);
     typelist.insert("any".to_owned(), Type::Any);
 
+    let mut pool = ExprPool::new();
     let mut parser = Parser {
         tokens: tokens.clone(),
-        pool: ExprPool(Vec::new()),
+        pool: &mut pool,
     };
 
     let mut counter = 0;
     let mut timer = Duration::default();
     while timer < TOTAL_TIME {
-        parser.pool.0 = Vec::new();
+        *parser.pool = ExprPool::new();
         parser.tokens = tokens.clone();
 
         let start = Instant::now();
@@ -142,9 +143,10 @@ fn bench_check(args: &BenchOpt) -> f64 {
     typelist.insert("boolean".to_owned(), Type::Boolean);
     typelist.insert("any".to_owned(), Type::Any);
 
+    let mut pool = ExprPool::new();
     let mut parser = Parser {
-        tokens,
-        pool: ExprPool(Vec::new()),
+        tokens: tokens.clone(),
+        pool: &mut pool,
     };
 
     let mut stats = Vec::new();
@@ -153,7 +155,7 @@ fn bench_check(args: &BenchOpt) -> f64 {
         stats.push(parser.parse_statement(&mut typelist).unwrap());
     }
 
-    let typechecker = TypeChecker { pool: parser.pool };
+    let typechecker = TypeChecker { pool: &pool };
 
     let mut counter = 0;
     let mut timer = Duration::ZERO;
@@ -166,9 +168,7 @@ fn bench_check(args: &BenchOpt) -> f64 {
             match typechecker.check_statement(stat, &mut type_env) {
                 Ok(()) => (),
                 Err(_) => {
-                    let printer = Printer {
-                        pool: typechecker.pool,
-                    };
+                    let printer = Printer { pool: &pool };
                     panic!("\n{}", printer.print(stat))
                 }
             }
@@ -208,9 +208,10 @@ fn bench_compile(args: &BenchOpt) -> f64 {
     typelist.insert("boolean".to_owned(), Type::Boolean);
     typelist.insert("any".to_owned(), Type::Any);
 
+    let mut pool = ExprPool::new();
     let mut parser = Parser {
-        tokens,
-        pool: ExprPool(Vec::new()),
+        tokens: tokens.clone(),
+        pool: &mut pool,
     };
 
     let mut stats = Vec::new();
@@ -219,20 +220,18 @@ fn bench_compile(args: &BenchOpt) -> f64 {
         stats.push(parser.parse_statement(&mut typelist).unwrap());
     }
 
-    let typechecker = TypeChecker { pool: parser.pool };
+    let typechecker = TypeChecker { pool: &pool };
     for stat in &stats {
         match typechecker.check_statement(stat, &mut type_env) {
             Ok(()) => (),
             Err(_) => {
-                let printer = Printer {
-                    pool: typechecker.pool,
-                };
+                let printer = Printer { pool: &pool };
                 panic!("\n{}", printer.print(stat))
             }
         }
     }
 
-    let compiler = Compiler::new(typechecker.pool);
+    let compiler = Compiler::new(&pool);
 
     let mut counter = 0;
     let mut timer = Duration::ZERO;
