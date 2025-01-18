@@ -348,7 +348,7 @@ impl<'src> TypeChecker<'src, '_> {
 
     fn check_func_body(
         &self,
-        body: &Vec<Statement<'src>>,
+        body: &[Statement<'src>],
         type_env: &mut TypeEnv,
         return_type: &Type,
     ) -> Result<bool, CheckErr> {
