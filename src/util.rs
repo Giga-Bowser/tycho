@@ -1,13 +1,4 @@
-use std::{fmt::Display, path::Path, time::Duration};
-
-use logos::Logos;
-
-use crate::{
-    lexer::{Token, TokenKind, Tokens},
-    parser::{ExprPool, Parser, TypeList},
-    type_env::TypeEnv,
-    typecheck::TypeChecker,
-};
+use std::{fmt::Display, time::Duration};
 
 #[macro_export]
 macro_rules! format_to {
@@ -18,44 +9,6 @@ macro_rules! format_to {
             _ = $buf.write_fmt(format_args!($lit $($arg)*))
         }
     };
-}
-
-pub fn add_defines(file_path: &Path, type_env: &mut TypeEnv) {
-    let contents = std::fs::read_to_string(file_path)
-        .unwrap_or_else(|_| panic!("Sould have been able to read file {}", file_path.display()));
-
-    let lex = TokenKind::lexer(&contents);
-
-    let tokens: Tokens = lex
-        .spanned()
-        .map(|(t, r)| Token {
-            kind: t.unwrap(),
-            str: unsafe { contents.get_unchecked(r) },
-        })
-        .collect();
-
-    let mut typelist = TypeList::with_core();
-
-    let mut pool = ExprPool::new();
-    let mut parser = Parser {
-        tokens,
-        pool: &mut pool,
-    };
-
-    let mut stats = Vec::new();
-
-    while parser.tokens[0].kind != TokenKind::EndOfFile {
-        stats.push(parser.parse_statement(&mut typelist).unwrap());
-    }
-
-    let typechecker = TypeChecker { pool: &pool };
-
-    for stat in stats {
-        match typechecker.check_statement(&stat, type_env) {
-            Ok(_) => (),
-            Err(err) => panic!("{}", err),
-        }
-    }
 }
 
 pub fn duration_fmt(duration: Duration) -> String {

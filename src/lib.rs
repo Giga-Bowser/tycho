@@ -1,23 +1,20 @@
 use std::path::PathBuf;
 
-use mimalloc::MiMalloc;
 use structopt::StructOpt;
 
-mod bench;
-mod compiler;
-mod driver;
 mod errors;
-mod lexer;
 mod mem_size;
-mod parser;
 mod pretty;
-mod type_env;
-mod typecheck;
 mod types;
 mod util;
 
-#[global_allocator]
-static GLOBAL: MiMalloc = MiMalloc;
+pub mod bench;
+pub mod compiler;
+pub mod driver;
+pub mod lexer;
+pub mod parser;
+pub mod type_env;
+pub mod typecheck;
 
 #[derive(StructOpt)]
 pub enum TychoOpt {
@@ -54,17 +51,4 @@ pub struct BuildOpt {
     /// Enable verbose output
     #[structopt(short, long)]
     verbose: bool,
-}
-
-fn main() {
-    let args = TychoOpt::from_args();
-
-    match args {
-        TychoOpt::Bench(bench_opt) => {
-            bench::bench_all(bench_opt);
-        }
-        TychoOpt::Build(build_opt) => {
-            driver::main(build_opt);
-        }
-    }
 }

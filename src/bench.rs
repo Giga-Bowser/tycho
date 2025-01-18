@@ -4,12 +4,12 @@ use logos::Logos;
 
 use crate::{
     compiler::Compiler,
+    driver::add_defines,
     lexer::{Token, TokenKind, Tokens},
     parser::{ExprPool, Parser, TypeList},
     pretty::Printer,
     type_env::TypeEnv,
     typecheck::TypeChecker,
-    util::add_defines,
     BenchOpt,
 };
 
