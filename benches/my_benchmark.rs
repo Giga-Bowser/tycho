@@ -160,17 +160,17 @@ fn benchmark_compiler(c: &mut Criterion) {
         statements.push(parser.parse_statement(&mut typelist).unwrap());
     }
 
-    let compiler = Compiler::new(&pool);
-
     c.bench_function("compile", |b| {
         b.iter_custom(|iters| {
             let mut elapsed = Duration::ZERO;
             for _i in 0..iters {
+                let mut compiler = Compiler::new(&pool);
                 let start = Instant::now();
                 for stat in &statements {
-                    black_box(compiler.compile_statement(black_box(stat)));
+                    compiler.compile_statement(black_box(stat));
                 }
                 elapsed += start.elapsed();
+                black_box(compiler.result);
             }
             elapsed
         })
@@ -219,14 +219,15 @@ fn benchmark_all(c: &mut Criterion) {
                 }
 
                 let typechecker = TypeChecker { pool: &pool };
-                let compiler = Compiler::new(&pool);
+                let mut compiler = Compiler::new(&pool);
                 for stat in &statements {
                     typechecker.check_statement(stat, &mut type_env).unwrap();
-                    black_box(compiler.compile_statement(black_box(stat)));
+                    compiler.compile_statement(black_box(stat));
                 }
-                black_box(type_env);
 
                 elapsed += start.elapsed();
+                black_box(compiler.result.as_str());
+                black_box(type_env);
             }
             elapsed
         })

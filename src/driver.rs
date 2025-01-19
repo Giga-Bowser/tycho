@@ -109,11 +109,10 @@ fn build(args: &BuildOpt) {
 
     let compile_timer = Instant::now();
 
-    let compiler = Compiler::new(&pool);
-    let mut result = "require(\"lualib.tycho\")\n".to_owned();
+    let mut compiler = Compiler::new(&pool);
     for stat in &stats {
-        result += &compiler.compile_statement(stat);
-        result.push('\n');
+        compiler.compile_statement(stat);
+        compiler.result.push('\n');
     }
 
     if args.verbose {
@@ -126,7 +125,7 @@ fn build(args: &BuildOpt) {
     };
 
     output
-        .write_all(result.as_bytes())
+        .write_all(compiler.result.as_bytes())
         .unwrap_or_else(|e| panic!("{e}"));
 }
 

@@ -11,6 +11,7 @@ use crate::{
 #[derive(Debug)]
 pub struct Compiler<'src, 'pool> {
     pub pool: &'pool ExprPool<'src>,
+    pub result: String,
     indent: Cell<usize>,
 }
 
@@ -18,49 +19,39 @@ impl<'src, 'pool> Compiler<'src, 'pool> {
     pub fn new(pool: &'pool ExprPool<'src>) -> Self {
         Self {
             pool,
+            result: "require(\"lualib.tycho\")\n".to_owned(),
             indent: 0.into(),
         }
     }
 
-    pub fn compile_statement(&self, statement: &Statement) -> String {
+    pub fn compile_statement(&mut self, statement: &Statement) {
         match statement {
             Statement::Declare(decl) => self.compile_decl(decl),
             Statement::MultiDecl(multi_decl) => self.compile_multi_decl(multi_decl),
             Statement::MethodDecl(method_decl) => self.compile_method_decl(method_decl),
-            Statement::Assign(Assign { lhs, rhs }) => format!(
-                "{} = {}",
-                self.compile_suffixed_name(lhs),
-                self.compile_expr(*rhs)
-            ),
+            Statement::Assign(assign) => self.compile_assign(assign),
             Statement::MultiAssign(multi_assign) => self.compile_multi_assign(multi_assign),
             Statement::ExprStat(suffixed_expr) => self.compile_suffixed_expr(suffixed_expr),
             Statement::Block(statements) => {
-                let mut result = "do".to_owned();
+                self.result += "do";
                 self.indent();
                 for stat in statements {
-                    result += &self.newline();
-                    result += &self.compile_statement(stat);
+                    self.result += &self.newline();
+                    self.compile_statement(stat);
                 }
                 self.dedent();
-                result += &self.newline();
-                result += "end";
-                result
+                self.result += &self.newline();
+                self.result += "end";
             }
             Statement::Return(return_exprs) => {
-                if return_exprs.is_empty() {
-                    "return".to_owned()
-                } else {
-                    format!(
-                        "return {}",
-                        return_exprs
-                            .iter()
-                            .map(|expr| self.compile_expr(*expr))
-                            .collect::<Vec<String>>()
-                            .join(", ")
-                    )
+                self.result += "return";
+                if !return_exprs.is_empty() {
+                    self.result.push(' ');
+
+                    self.expr_list(return_exprs, ", ");
                 }
             }
-            Statement::Break => "break".to_owned(),
+            Statement::Break => self.result += "break",
             Statement::IfStat(if_stat) => self.compile_if_stat(if_stat),
             Statement::WhileStat(while_stat) => self.compile_while_stat(while_stat),
             Statement::RangeFor(range_for) => self.compile_range_for(range_for),
@@ -68,158 +59,166 @@ impl<'src, 'pool> Compiler<'src, 'pool> {
         }
     }
 
-    fn compile_decl(&self, decl: &Declare) -> String {
+    fn compile_decl(&mut self, decl: &Declare) {
         let Some(val) = decl.val else {
             // no val is assigned, this means this statement is only useful for type checking
-            // we can just return an empty string
-            return "".to_owned();
+            return;
         };
 
         if decl.lhs.suffixes.is_empty() {
             if let Expr::Simple(SimpleExpr::FuncNode(func)) = &self.pool[val] {
                 let name = decl.lhs.name;
-                return format!(
-                    "local {name}{}{name} = {}",
-                    self.newline(),
-                    self.compile_func(func)
-                );
+                format_to!(self.result, "local {name}{}{name} = ", self.newline());
+                self.compile_func(func);
             } else {
-                return format!("local {} = {}", decl.lhs.name, self.compile_expr(val));
+                format_to!(self.result, "local {} = ", decl.lhs.name);
+                self.compile_expr(val);
             }
+            return;
         }
 
-        let mut lhs = decl.lhs.name.to_owned();
+        self.result += decl.lhs.name;
 
         for suffix in &decl.lhs.suffixes {
-            lhs += &self.compile_suffix(suffix);
+            self.compile_suffix(suffix);
         }
 
-        format_to!(lhs, " = {}", self.compile_expr(val));
-
-        lhs
+        self.result += " = ";
+        self.compile_expr(val);
     }
 
-    fn compile_multi_decl(&self, multi_decl: &MultiDecl) -> String {
+    fn compile_multi_decl(&mut self, multi_decl: &MultiDecl) {
         let lhs_result = multi_decl.lhs_arr.join(", ");
-        let rhs_result = multi_decl
-            .rhs_arr
-            .iter()
-            .map(|expr| self.compile_expr(*expr))
-            .collect::<Vec<String>>()
-            .join(", ");
 
-        format!("local {lhs_result} = {rhs_result}")
+        format_to!(self.result, "local {lhs_result} = ");
+        self.expr_list(&multi_decl.rhs_arr, ", ");
     }
 
-    fn compile_method_decl(&self, method_decl: &MethodDecl) -> String {
+    fn compile_method_decl(&mut self, method_decl: &MethodDecl) {
         // let Some(val) = method_decl.val else {
         //     // no val is assigned, this means this statement is only useful for type checking
         //     // we can just return an empty string
-        //     return "".to_owned();
+        //     self.result += &"".to_owned();
+        //     return
         // };
 
-        let mut result = format!(
+        format_to!(
+            self.result,
             "{}.{} = function(self",
-            method_decl.struct_name, method_decl.method_name
+            method_decl.struct_name,
+            method_decl.method_name
         );
 
         for (param_name, _) in &method_decl.func.type_.params {
-            result += ", ";
-            result += param_name;
+            self.result += ", ";
+            self.result += param_name;
         }
 
-        let block = self.compile_block(&method_decl.func.body);
-        format_to!(result, "){block}end");
-
-        result
+        self.result.push(')');
+        self.compile_block(&method_decl.func.body);
+        self.result.push_str("end");
     }
 
-    fn compile_multi_assign(&self, multi_assign: &MultiAssign) -> String {
-        let lhs_result = multi_assign
-            .lhs_arr
-            .iter()
-            .map(|suffixed_expr| self.compile_suffixed_expr(suffixed_expr))
-            .collect::<Vec<String>>()
-            .join(", ");
-        let rhs_result = multi_assign
-            .rhs_arr
-            .iter()
-            .map(|expr| self.compile_expr(*expr))
-            .collect::<Vec<String>>()
-            .join(", ");
-
-        format!("{lhs_result} = {rhs_result}")
+    fn compile_assign(&mut self, assign: &Assign) {
+        self.compile_suffixed_name(assign.lhs.as_ref());
+        self.result += " = ";
+        self.compile_expr(assign.rhs);
     }
 
-    fn compile_if_stat(&self, if_stat: &IfStat) -> String {
-        let condition = self.compile_expr(if_stat.condition);
-        let if_body = self.compile_block(&if_stat.body);
+    fn compile_multi_assign(&mut self, multi_assign: &MultiAssign) {
+        self.suffixed_expr_list(&multi_assign.lhs_arr, ", ");
+        self.result += " = ";
+        self.expr_list(&multi_assign.rhs_arr, ", ");
+    }
+
+    fn compile_if_stat(&mut self, if_stat: &IfStat) {
+        self.result += "if ";
+        self.compile_expr(if_stat.condition);
+        self.result += " then";
+        self.compile_block(&if_stat.body);
+
         if let Some(else_node) = &if_stat.else_ {
+            self.result += "else";
             match else_node.as_ref() {
                 ElseBranch::Else(else_body) => {
-                    let else_body = self.compile_block(else_body);
-                    format!("if {condition} then{if_body}else{else_body}end")
+                    self.compile_block(else_body);
+                    self.result += "end";
                 }
                 ElseBranch::ElseIf(else_if_stat) => {
-                    let else_if_stat = self.compile_if_stat(else_if_stat);
-                    format!("if {condition} then{if_body}else{else_if_stat}")
+                    self.compile_if_stat(else_if_stat);
                 }
             }
         } else {
-            format!("if {condition} then{if_body}end",)
+            self.result += "end";
         }
     }
 
-    fn compile_while_stat(&self, while_stat: &WhileStat) -> String {
-        let condition = self.compile_expr(while_stat.condition);
-        let while_body = self.compile_block(&while_stat.body);
-        format!("while {condition} do{while_body}end",)
+    fn compile_while_stat(&mut self, while_stat: &WhileStat) {
+        self.result += "while ";
+        self.compile_expr(while_stat.condition);
+        self.result += " do";
+        self.compile_block(&while_stat.body);
+        self.result += "end";
     }
 
-    fn compile_range_for(&self, range_for: &RangeFor) -> String {
-        format!(
-            "for {} = {}, {} do{}end",
-            range_for.var,
-            self.compile_expr(range_for.range.lhs),
-            self.compile_expr(range_for.range.rhs),
-            self.compile_block(&range_for.body)
-        )
+    fn compile_range_for(&mut self, range_for: &RangeFor) {
+        self.result += "for ";
+        self.result += range_for.var;
+        self.result += " = ";
+        self.compile_expr(range_for.range.lhs);
+        self.result += ", ";
+        self.compile_expr(range_for.range.rhs);
+        self.result += " do";
+        self.compile_block(&range_for.body);
+        self.result += "end";
     }
 
-    fn compile_keyval_for(&self, keyval_for: &KeyValFor) -> String {
-        format!(
-            "for {} in pairs({}) do{}end",
-            keyval_for.names,
-            self.compile_expr(keyval_for.iter),
-            self.compile_block(&keyval_for.body)
-        )
+    fn compile_keyval_for(&mut self, keyval_for: &KeyValFor) {
+        self.result += "for ";
+        self.result += keyval_for.names;
+        self.result += " in pairs(";
+        self.compile_expr(keyval_for.iter);
+        self.result += ") do";
+        self.compile_block(&keyval_for.body);
+        self.result += "end";
     }
 
-    fn compile_expr(&self, expr: ExprRef) -> String {
+    fn compile_expr(&mut self, expr: ExprRef) {
         if let Some(jitted) = self.jit_expr(expr) {
-            return jitted.to_owned();
+            self.result += jitted;
+            return;
         }
 
         match &self.pool[expr] {
-            Expr::BinOp(binop) => format!(
-                "({} {} {})",
-                self.compile_expr(binop.lhs),
-                binop.op.to_lua(),
-                self.compile_expr(binop.rhs),
-            ),
-            Expr::UnOp(UnOp { op, val }) => op.to_string() + &self.compile_expr(*val),
-            Expr::Paren(ParenExpr { val }) => format!("({})", self.compile_expr(*val)),
+            Expr::BinOp(binop) => {
+                self.result.push('(');
+                self.compile_expr(binop.lhs);
+                self.result.push(' ');
+                self.result += binop.op.to_lua();
+                self.result.push(' ');
+                self.compile_expr(binop.rhs);
+                self.result.push(')');
+            }
+            Expr::UnOp(UnOp { op, val }) => {
+                self.result += op.into();
+                self.compile_expr(*val);
+            }
+            Expr::Paren(ParenExpr { val }) => {
+                self.result.push('(');
+                self.compile_expr(*val);
+                self.result.push(')');
+            }
             Expr::Simple(simple_expr) => self.compile_simple_expr(simple_expr),
-            Expr::Name(str) => (*str).to_owned(),
+            Expr::Name(str) => self.result += str,
         }
     }
 
-    fn compile_simple_expr(&self, simple_expr: &SimpleExpr) -> String {
+    fn compile_simple_expr(&mut self, simple_expr: &SimpleExpr) {
         match simple_expr {
             SimpleExpr::Num(str)
             | SimpleExpr::Str(str)
             | SimpleExpr::Bool(str)
-            | SimpleExpr::Nil(str) => (*str).to_owned(),
+            | SimpleExpr::Nil(str) => self.result += str,
             SimpleExpr::FuncNode(func_node) => self.compile_func(func_node),
             SimpleExpr::TableNode(table_node) => self.compile_table(table_node),
             SimpleExpr::StructNode(struct_node) => self.compile_struct(struct_node),
@@ -227,134 +226,120 @@ impl<'src, 'pool> Compiler<'src, 'pool> {
         }
     }
 
-    fn compile_func(&self, func_node: &FuncNode) -> String {
-        let mut result = "function(".to_owned();
-        result += &func_node
-            .type_
-            .params
-            .iter()
-            .map(|(name, _)| name.as_str())
-            .collect::<Vec<&str>>()
-            .join(", ");
-        result += ")";
-        result += &self.compile_block(&func_node.body);
-        result += "end";
-        result
+    fn compile_func(&mut self, func_node: &FuncNode) {
+        self.result += "function(";
+        let params = &func_node.type_.params;
+
+        if !params.is_empty() {
+            self.result += &params[0].0;
+
+            for param in &params[1..] {
+                self.result += ", ";
+                self.result += &param.0;
+            }
+        }
+
+        self.result.push(')');
+        self.compile_block(&func_node.body);
+        self.result += "end";
     }
 
-    fn compile_block(&self, block: &[Statement]) -> String {
-        let mut result = String::new();
+    fn compile_block(&mut self, block: &[Statement]) {
         self.indent();
         for statement in block {
-            result += &self.newline();
-            result += &self.compile_statement(statement);
+            self.result += &self.newline();
+            self.compile_statement(statement);
         }
         self.dedent();
-        result += &self.newline();
-        result
+        self.result += &self.newline();
     }
 
-    fn compile_struct(&self, struct_node: &StructNode) -> String {
+    fn compile_struct(&mut self, struct_node: &StructNode) {
         let newline = self.newline();
         let name = struct_node.name.unwrap_or("_");
-        let mut result = format!("{{}}{newline}{name}.__index = {name}");
+        format_to!(self.result, "{{}}{newline}{name}.__index = {name}");
 
         if let Some(constructor) = &struct_node.constructor {
-            let mut param_list = String::new();
+            self.result += &newline;
+            format_to!(self.result, "{name}.new = function(_self");
             for (param_name, _) in &constructor.type_.params {
-                param_list.push_str(", ");
-                param_list += param_name;
+                self.result.push_str(", ");
+                self.result += param_name;
             }
-
-            let body = self.compile_block(&constructor.body);
-
-            result += &newline;
-            format_to!(
-                result,
-                "{name}.new = function(_self{param_list}){newline}\t"
-            );
-            format_to!(result, "local self = {{}}{body}\t");
-            format_to!(result, "setmetatable(self, _self){newline}\t");
-            format_to!(result, "_self.__index = _self{newline}\t");
-            format_to!(result, "return self{newline}end");
+            format_to!(self.result, "){newline}\t");
+            self.result += "local self = {}";
+            self.compile_block(&constructor.body);
+            self.result.push('\t');
+            format_to!(self.result, "setmetatable(self, _self){newline}\t");
+            format_to!(self.result, "_self.__index = _self{newline}\t");
+            format_to!(self.result, "return self{newline}end");
         }
-
-        result
     }
 
-    fn compile_table(&self, table_node: &TableNode) -> String {
-        let mut result = String::new();
-        result += "{";
-        result += &self.newline();
+    fn compile_table(&mut self, table_node: &TableNode) {
+        self.result += "{";
+        self.result += &self.newline();
         for field in &table_node.fields {
-            result.push('\t');
+            self.result.push('\t');
 
-            let field_str = match field {
-                FieldNode::Field { key, val } => format!("{key} = {}", &self.compile_expr(*val)),
-                FieldNode::ExprField { key, val } => format!(
-                    "[{}] = {}",
-                    &self.compile_expr(*key),
-                    &self.compile_expr(*val)
-                ),
+            match field {
+                FieldNode::Field { key, val } => {
+                    self.result += key;
+                    self.result += " = ";
+                    self.compile_expr(*val);
+                }
+                FieldNode::ExprField { key, val } => {
+                    self.result.push('[');
+                    self.compile_expr(*key);
+                    self.result += "] = ";
+                    self.compile_expr(*val);
+                }
                 FieldNode::ValField { val } => self.compile_expr(*val),
             };
 
-            result += &field_str;
-            result += &self.newline();
+            self.result += &self.newline();
         }
-        result.push('}');
-
-        result
+        self.result.push('}');
     }
 
-    fn compile_suffixed_expr(&self, suffixed_expr: &SuffixedExpr) -> String {
-        let mut result = self.compile_expr(suffixed_expr.val);
+    fn compile_suffixed_expr(&mut self, suffixed_expr: &SuffixedExpr) {
+        self.compile_expr(suffixed_expr.val);
 
         for suffix in &suffixed_expr.suffixes {
-            result += &self.compile_suffix(suffix);
+            self.compile_suffix(suffix);
         }
-
-        result
     }
 
-    fn compile_suffixed_name(&self, suffixed_expr: &SuffixedName) -> String {
-        let mut result = suffixed_expr.name.to_owned();
+    fn compile_suffixed_name(&mut self, suffixed_expr: &SuffixedName) {
+        self.result += suffixed_expr.name;
 
         for suffix in &suffixed_expr.suffixes {
-            result += &self.compile_suffix(suffix);
+            self.compile_suffix(suffix);
         }
-
-        result
     }
 
-    fn compile_suffix(&self, suffix: &Suffix) -> String {
+    fn compile_suffix(&mut self, suffix: &Suffix) {
         match suffix {
             Suffix::Method(Method {
                 method_name: name,
                 args,
             }) => {
-                format!(
-                    ":{name}({})",
-                    args.iter()
-                        .map(|&arg| self.compile_expr(arg))
-                        .collect::<Vec<String>>()
-                        .join(", ")
-                )
+                format_to!(self.result, ":{name}(");
+                self.expr_list(args, ", ");
+                self.result.push(')');
             }
             Suffix::Call(Call { args }) => {
-                format!(
-                    "({})",
-                    args.iter()
-                        .map(|&arg| self.compile_expr(arg))
-                        .collect::<Vec<String>>()
-                        .join(", ")
-                )
+                format_to!(self.result, "(");
+                self.expr_list(args, ", ");
+                self.result.push(')');
             }
             Suffix::Access(Access { field_name }) => {
-                format!(".{field_name}")
+                format_to!(self.result, ".{field_name}")
             }
             Suffix::Index(Index { key }) => {
-                format!("[{}]", self.compile_expr(*key))
+                self.result.push('[');
+                self.compile_expr(*key);
+                self.result.push(']');
             }
         }
     }
@@ -417,6 +402,32 @@ impl<'src, 'pool> Compiler<'src, 'pool> {
                 }
             }
             _ => None,
+        }
+    }
+
+    fn expr_list(&mut self, exprs: &[usize], sep: &'static str) {
+        if exprs.is_empty() {
+            return;
+        }
+
+        self.compile_expr(exprs[0]);
+
+        for expr in &exprs[1..] {
+            self.result += sep;
+            self.compile_expr(*expr);
+        }
+    }
+
+    fn suffixed_expr_list(&mut self, exprs: &[SuffixedExpr], sep: &'static str) {
+        if exprs.is_empty() {
+            return;
+        }
+
+        self.compile_suffixed_expr(&exprs[0]);
+
+        for expr in &exprs[1..] {
+            self.result += sep;
+            self.compile_suffixed_expr(expr);
         }
     }
 }
