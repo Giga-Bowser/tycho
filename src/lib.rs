@@ -8,7 +8,6 @@ mod pretty;
 mod types;
 mod util;
 
-pub mod bench;
 pub mod compiler;
 pub mod driver;
 pub mod lexer;
@@ -18,22 +17,8 @@ pub mod typecheck;
 
 #[derive(StructOpt)]
 pub enum TychoOpt {
-    /// Benchmark the compiler itself
-    Bench(BenchOpt),
     /// Build a file
     Build(BuildOpt),
-}
-
-#[derive(StructOpt)]
-pub struct BenchOpt {
-    #[structopt(parse(from_os_str))]
-    file: PathBuf,
-
-    #[structopt(parse(from_os_str))]
-    includes: Vec<PathBuf>,
-
-    #[structopt(long, default_value = "3")]
-    total_time: f64,
 }
 
 #[derive(StructOpt)]
