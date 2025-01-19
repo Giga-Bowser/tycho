@@ -1,5 +1,3 @@
-#![deny(unused_must_use)]
-
 pub mod ast;
 pub mod pool;
 

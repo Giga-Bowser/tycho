@@ -48,8 +48,8 @@ pub enum UnOpKind {
     Len,
 }
 
-impl From<UnOpKind> for &'static str {
-    fn from(val: UnOpKind) -> Self {
+impl From<&UnOpKind> for &'static str {
+    fn from(val: &UnOpKind) -> Self {
         match val {
             UnOpKind::Neg => "-",
             UnOpKind::Len => "#",
