@@ -27,8 +27,18 @@ fn build(args: &BuildOpt) {
 
     let include_timer = Instant::now();
 
-    for filename in &args.includes {
-        add_defines(filename, &mut type_env)
+    let mut include_files = args.includes.clone();
+
+    while let Some(cur) = include_files.pop() {
+        if cur.is_dir() {
+            include_files.extend(
+                std::fs::read_dir(cur)
+                    .unwrap()
+                    .filter_map(|entry| entry.map(|it| it.path()).ok()),
+            )
+        } else {
+            add_defines(&cur, &mut type_env);
+        }
     }
 
     if args.verbose {
