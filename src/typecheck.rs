@@ -38,11 +38,10 @@ impl<'src> TypeChecker<'src, '_> {
                 self.check_suffixed_expr(suffixed_expr, type_env).map(drop)
             }
             Statement::Block(statements) => {
-                let start_len = type_env.len();
+                let mut new_env = TypeEnv::new_with_parent(type_env);
                 for stat in statements {
-                    self.check_statement(stat, type_env)?;
+                    self.check_statement(stat, &mut new_env)?;
                 }
-                type_env.truncate(start_len);
                 Ok(())
             }
             _ => Ok(()),
@@ -634,8 +633,9 @@ impl<'src> TypeChecker<'src, '_> {
         match &if_stat.else_ {
             Some(else_) => match else_.as_ref() {
                 Else::Else(body) => {
+                    let mut new_env = TypeEnv::new_with_parent(type_env);
                     for stat in body {
-                        self.check_statement(stat, &mut TypeEnv::new_with_parent(type_env))?;
+                        self.check_statement(stat, &mut new_env)?;
                     }
 
                     Ok(())

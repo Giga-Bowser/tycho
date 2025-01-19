@@ -38,6 +38,10 @@ impl<'a> TypeEnv<'a> {
         self.parent_len() + self.current_scope.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.current_scope.is_empty() && self.parent_scopes.is_none()
+    }
+
     pub fn parent_len(&self) -> usize {
         self.parent_scopes.map(TypeEnv::len).unwrap_or(0)
     }
