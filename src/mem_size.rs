@@ -1,4 +1,4 @@
-use crate::parser::ExprRef;
+use crate::parser::pool::ExprRef;
 
 pub trait DeepSize {
     fn deep_size_of(&self) -> usize {
@@ -66,7 +66,7 @@ impl DeepSize for &str {
 
 mod parser {
     use super::*;
-    use crate::parser::*;
+    use crate::parser::ast::*;
 
     impl DeepSize for Statement<'_> {
         fn deep_size_of_children(&self) -> usize {
@@ -155,11 +155,11 @@ mod parser {
         }
     }
 
-    impl DeepSize for Else<'_> {
+    impl DeepSize for ElseBranch<'_> {
         fn deep_size_of_children(&self) -> usize {
             match self {
-                Else::Else(vec) => vec.deep_size_of_children(),
-                Else::ElseIf(if_stat) => if_stat.deep_size_of_children(),
+                ElseBranch::Else(vec) => vec.deep_size_of_children(),
+                ElseBranch::ElseIf(if_stat) => if_stat.deep_size_of_children(),
             }
         }
     }

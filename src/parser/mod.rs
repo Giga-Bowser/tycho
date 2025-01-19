@@ -1,8 +1,13 @@
 #![deny(unused_must_use)]
 
+pub mod ast;
+pub mod pool;
+
 use std::{rc::Rc, slice, str};
 
 use rustc_hash::FxHashMap;
+
+use self::{ast::*, pool::*};
 
 use crate::{
     errors::{ParseError, UnexpectedToken},
@@ -13,407 +18,9 @@ use crate::{
     types::{Function, TableType, Type, User},
 };
 
-#[derive(Debug, Clone)]
-pub struct TypeList {
-    map: FxHashMap<String, Type>,
-}
-
-impl TypeList {
-    pub fn with_core() -> Self {
-        Self {
-            map: FxHashMap::from_iter([
-                ("number".to_owned(), Type::Number),
-                ("string".to_owned(), Type::String),
-                ("boolean".to_owned(), Type::Boolean),
-                ("any".to_owned(), Type::Any),
-            ]),
-        }
-    }
-
-    pub fn insert(&mut self, k: String, v: Type) -> Option<Type> {
-        self.map.insert(k, v)
-    }
-
-    pub fn contains(&self, k: &str) -> bool {
-        self.map.contains_key(k)
-    }
-}
-
-impl std::ops::Index<&str> for TypeList {
-    type Output = Type;
-
-    fn index(&self, index: &str) -> &Self::Output {
-        self.map.index(index)
-    }
-}
-
 pub struct Parser<'src, 'pool> {
     pub tokens: Tokens<'src>,
     pub pool: &'pool mut ExprPool<'src>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum OpKind {
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Pow,
-    Cat,
-    Equ,
-    Neq,
-    Gre,
-    Grq,
-    Les,
-    Leq,
-    And,
-    Or,
-}
-
-impl OpKind {
-    pub fn to_lua(&self) -> &'static str {
-        match self {
-            OpKind::Add => "+",
-            OpKind::Sub => "-",
-            OpKind::Mul => "*",
-            OpKind::Div => "/",
-            OpKind::Pow => "^",
-            OpKind::Cat => "..",
-            OpKind::Equ => "==",
-            OpKind::Neq => "~=",
-            OpKind::Gre => ">",
-            OpKind::Grq => ">=",
-            OpKind::Les => "<",
-            OpKind::Leq => "<=",
-            OpKind::And => "and",
-            OpKind::Or => "or",
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum UnOpKind {
-    Neg,
-    Len,
-}
-
-impl From<UnOpKind> for &'static str {
-    fn from(val: UnOpKind) -> Self {
-        match val {
-            UnOpKind::Neg => "-",
-            UnOpKind::Len => "#",
-        }
-    }
-}
-
-pub struct Precedence {
-    pub left: u8,
-    pub right: u8,
-}
-
-fn get_op(tok: TokenKind) -> Option<(OpKind, Precedence)> {
-    match tok {
-        Plus => Some((
-            OpKind::Add,
-            Precedence {
-                left: 10,
-                right: 10,
-            },
-        )),
-        Minus => Some((
-            OpKind::Sub,
-            Precedence {
-                left: 10,
-                right: 10,
-            },
-        )),
-        Asterisk => Some((
-            OpKind::Mul,
-            Precedence {
-                left: 11,
-                right: 11,
-            },
-        )),
-        Slash => Some((
-            OpKind::Div,
-            Precedence {
-                left: 11,
-                right: 11,
-            },
-        )),
-        DotDot => Some((OpKind::Cat, Precedence { left: 9, right: 8 })),
-        Caret => Some((
-            OpKind::Pow,
-            Precedence {
-                left: 14,
-                right: 13,
-            },
-        )),
-        Equality => Some((OpKind::Equ, Precedence { left: 3, right: 3 })),
-        Inequality => Some((OpKind::Neq, Precedence { left: 3, right: 3 })),
-        Greater => Some((OpKind::Gre, Precedence { left: 3, right: 3 })),
-        GreterEqual => Some((OpKind::Grq, Precedence { left: 3, right: 3 })),
-        Less => Some((OpKind::Les, Precedence { left: 3, right: 3 })),
-        LessEqual => Some((OpKind::Leq, Precedence { left: 3, right: 3 })),
-        And => Some((OpKind::And, Precedence { left: 2, right: 2 })),
-        Or => Some((OpKind::Or, Precedence { left: 1, right: 1 })),
-        _ => None,
-    }
-}
-
-fn get_unop(tok: &TokenKind) -> Option<UnOpKind> {
-    match tok {
-        Minus => Some(UnOpKind::Neg),
-        Octothorpe => Some(UnOpKind::Len),
-        _ => None,
-    }
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct ExprPool<'src> {
-    pub vec: Vec<Expr<'src>>,
-}
-
-pub type ExprRef = usize;
-
-impl<'src> ExprPool<'src> {
-    pub fn new() -> Self {
-        Self { vec: Vec::new() }
-    }
-
-    pub fn add(&mut self, expr: Expr<'src>) -> ExprRef {
-        let idx = self.vec.len() as ExprRef;
-        self.vec.push(expr);
-        idx
-    }
-}
-
-impl<'src> std::ops::Index<ExprRef> for ExprPool<'src> {
-    type Output = Expr<'src>;
-
-    fn index(&self, index: ExprRef) -> &Self::Output {
-        &self.vec[index]
-    }
-}
-
-impl<'src> std::ops::IndexMut<ExprRef> for ExprPool<'src> {
-    fn index_mut(&mut self, index: ExprRef) -> &mut Expr<'src> {
-        &mut self.vec[index]
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct BinOp {
-    pub op: OpKind,
-    pub lhs: ExprRef,
-    pub rhs: ExprRef,
-}
-
-#[derive(Debug, Clone)]
-pub struct UnOp {
-    pub op: UnOpKind,
-    pub val: ExprRef,
-}
-
-#[derive(Debug, Clone)]
-pub struct ParenExpr {
-    pub val: ExprRef,
-}
-
-#[derive(Debug, Clone)]
-pub struct Assign<'a> {
-    pub lhs: Box<SuffixedName<'a>>,
-    pub rhs: ExprRef,
-}
-
-#[derive(Debug, Clone)]
-pub struct Index {
-    pub key: ExprRef,
-}
-
-#[derive(Debug, Clone)]
-pub struct Access<'a> {
-    pub field_name: &'a str,
-}
-
-#[derive(Debug, Clone)]
-pub struct Call {
-    pub args: Vec<ExprRef>,
-}
-
-#[derive(Debug, Clone)]
-pub struct Method<'a> {
-    pub method_name: &'a str,
-    pub args: Vec<ExprRef>,
-}
-
-#[derive(Debug, Clone)]
-pub enum Suffix<'a> {
-    Index(Index),
-    Access(Access<'a>),
-    Call(Call),
-    Method(Method<'a>),
-}
-
-#[derive(Debug, Clone)]
-pub struct MethodDecl<'a> {
-    pub struct_name: &'a str,
-    pub method_name: &'a str,
-    pub func: Box<FuncNode<'a>>,
-}
-
-#[derive(Debug, Clone)]
-pub struct StructNode<'a> {
-    pub type_: Box<User>,
-    pub constructor: Option<FuncNode<'a>>,
-    pub name: Option<&'a str>,
-}
-
-// #[derive(Debug, Clone)]
-// pub struct StructAccess<'a> {
-//     pub name: &'a str,
-//     pub accesses: Vec<Access<'a>>,
-// }
-
-#[derive(Debug, Clone)]
-pub struct SuffixedName<'a> {
-    pub name: &'a str,
-    pub suffixes: Vec<Suffix<'a>>,
-}
-
-#[derive(Debug, Clone)]
-pub struct Declare<'a> {
-    pub lhs: Box<SuffixedName<'a>>,
-    pub type_: Box<Type>,
-    pub val: Option<ExprRef>,
-}
-
-// /// a more advanced decl, like math.min := ...
-// #[derive(Debug, Clone)]
-// pub struct SuffixedDecl<'a> {
-//     pub lhs: SuffixedExpr<'a>,
-//     pub type_: Box<Type>,
-//     pub rhs: Option<ExprRef>,
-// }
-
-#[derive(Debug, Clone)]
-pub struct FuncNode<'a> {
-    pub type_: Box<Function>,
-    pub body: Vec<Statement<'a>>,
-}
-
-// #[derive(Debug, Clone)]
-// pub struct StructConstructor<'a> {
-//     pub type_: Box<Function>,
-//     pub body: Vec<Node<'a>>,
-// }
-
-#[derive(Debug, Clone)]
-pub enum Else<'a> {
-    Else(Vec<Statement<'a>>),
-    ElseIf(IfStat<'a>),
-}
-
-#[derive(Debug, Clone)]
-pub struct IfStat<'a> {
-    pub condition: ExprRef,
-    pub body: Vec<Statement<'a>>,
-    pub else_: Option<Box<Else<'a>>>,
-}
-
-#[derive(Debug, Clone)]
-pub struct WhileStat<'a> {
-    pub condition: ExprRef,
-    pub body: Vec<Statement<'a>>,
-}
-
-#[derive(Debug, Clone)]
-pub enum FieldNode<'a> {
-    Field { key: &'a str, val: ExprRef },
-    ExprField { key: ExprRef, val: ExprRef },
-    ValField { val: ExprRef },
-}
-
-#[derive(Debug, Clone)]
-pub struct RangeExpr {
-    pub lhs: ExprRef,
-    pub rhs: ExprRef,
-}
-
-#[derive(Debug, Clone)]
-pub struct RangeFor<'a> {
-    pub var: &'a str,
-    pub range: Box<RangeExpr>,
-    pub body: Vec<Statement<'a>>,
-}
-
-#[derive(Debug, Clone)]
-pub struct KeyValFor<'a> {
-    /// this should be 'keyname, valname' in one str
-    pub names: &'a str,
-    pub iter: ExprRef,
-    pub body: Vec<Statement<'a>>,
-}
-
-#[derive(Debug, Clone)]
-pub struct MultiDecl<'a> {
-    pub lhs_arr: Vec<&'a str>,
-    pub rhs_arr: Vec<ExprRef>,
-}
-
-#[derive(Debug, Clone)]
-pub struct MultiAssign<'a> {
-    pub lhs_arr: Vec<SuffixedExpr<'a>>,
-    pub rhs_arr: Vec<ExprRef>,
-}
-
-#[derive(Debug, Clone)]
-pub struct SuffixedExpr<'a> {
-    pub val: ExprRef,
-    pub suffixes: Vec<Suffix<'a>>,
-}
-
-#[derive(Debug, Clone)]
-pub struct TableNode<'a> {
-    pub fields: Vec<FieldNode<'a>>,
-}
-
-#[derive(Debug, Clone)]
-pub enum SimpleExpr<'a> {
-    Num(&'a str),
-    Str(&'a str),
-    Bool(&'a str),
-    Nil(&'a str),
-    FuncNode(FuncNode<'a>),
-    TableNode(TableNode<'a>),
-    StructNode(StructNode<'a>),
-    SuffixedExpr(SuffixedExpr<'a>),
-}
-
-#[derive(Debug, Clone)]
-pub enum Expr<'a> {
-    BinOp(BinOp),
-    UnOp(UnOp),
-    Paren(ParenExpr),
-    Simple(SimpleExpr<'a>),
-    Name(&'a str),
-}
-
-#[derive(Debug, Clone)]
-pub enum Statement<'a> {
-    Declare(Declare<'a>),
-    MultiDecl(MultiDecl<'a>),
-    MethodDecl(MethodDecl<'a>),
-    Assign(Assign<'a>),
-    MultiAssign(MultiAssign<'a>),
-    ExprStat(SuffixedExpr<'a>),
-    Block(Vec<Statement<'a>>),
-    Return(Vec<ExprRef>),
-    Break,
-    IfStat(IfStat<'a>),
-    WhileStat(WhileStat<'a>),
-    RangeFor(RangeFor<'a>),
-    KeyValFor(KeyValFor<'a>),
 }
 
 impl<'src> Parser<'src, '_> {
@@ -581,7 +188,7 @@ impl<'src> Parser<'src, '_> {
         self.tokens.pop_front(); // pop 'else'
 
         if self.tokens[0].kind == If {
-            let else_ = Some(Box::new(Else::ElseIf(self.if_stat(typelist)?)));
+            let else_ = Some(Box::new(ElseBranch::ElseIf(self.if_stat(typelist)?)));
 
             return Ok(IfStat {
                 condition,
@@ -602,7 +209,7 @@ impl<'src> Parser<'src, '_> {
 
         self.tokens.pop_front(); // pop '}'
 
-        let else_ = Some(Box::new(Else::Else(else_body)));
+        let else_ = Some(Box::new(ElseBranch::Else(else_body)));
 
         Ok(IfStat {
             condition,
@@ -1348,5 +955,102 @@ impl<'src> Parser<'src, '_> {
         }
 
         Ok(result)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct TypeList {
+    map: FxHashMap<String, Type>,
+}
+
+impl TypeList {
+    pub fn with_core() -> Self {
+        Self {
+            map: FxHashMap::from_iter([
+                ("number".to_owned(), Type::Number),
+                ("string".to_owned(), Type::String),
+                ("boolean".to_owned(), Type::Boolean),
+                ("any".to_owned(), Type::Any),
+            ]),
+        }
+    }
+
+    pub fn insert(&mut self, k: String, v: Type) -> Option<Type> {
+        self.map.insert(k, v)
+    }
+
+    pub fn contains(&self, k: &str) -> bool {
+        self.map.contains_key(k)
+    }
+}
+
+impl std::ops::Index<&str> for TypeList {
+    type Output = Type;
+
+    fn index(&self, index: &str) -> &Self::Output {
+        self.map.index(index)
+    }
+}
+
+pub struct Precedence {
+    pub left: u8,
+    pub right: u8,
+}
+
+fn get_op(tok: TokenKind) -> Option<(OpKind, Precedence)> {
+    match tok {
+        Plus => Some((
+            OpKind::Add,
+            Precedence {
+                left: 10,
+                right: 10,
+            },
+        )),
+        Minus => Some((
+            OpKind::Sub,
+            Precedence {
+                left: 10,
+                right: 10,
+            },
+        )),
+        Asterisk => Some((
+            OpKind::Mul,
+            Precedence {
+                left: 11,
+                right: 11,
+            },
+        )),
+        Slash => Some((
+            OpKind::Div,
+            Precedence {
+                left: 11,
+                right: 11,
+            },
+        )),
+        DotDot => Some((OpKind::Cat, Precedence { left: 9, right: 8 })),
+        Caret => Some((
+            OpKind::Pow,
+            Precedence {
+                left: 14,
+                right: 13,
+            },
+        )),
+        Equality => Some((OpKind::Equ, Precedence { left: 3, right: 3 })),
+        Inequality => Some((OpKind::Neq, Precedence { left: 3, right: 3 })),
+        Greater => Some((OpKind::Gre, Precedence { left: 3, right: 3 })),
+        GreterEqual => Some((OpKind::Grq, Precedence { left: 3, right: 3 })),
+        Less => Some((OpKind::Les, Precedence { left: 3, right: 3 })),
+        LessEqual => Some((OpKind::Leq, Precedence { left: 3, right: 3 })),
+        And => Some((OpKind::And, Precedence { left: 2, right: 2 })),
+        Or => Some((OpKind::Or, Precedence { left: 1, right: 1 })),
+        _ => None,
+    }
+}
+
+fn get_unop(tok: &TokenKind) -> Option<UnOpKind> {
+    match tok {
+        Minus => Some(UnOpKind::Neg),
+        Octothorpe => Some(UnOpKind::Len),
+        _ => None,
     }
 }

@@ -6,7 +6,7 @@ use crate::{
     compiler::Compiler,
     lexer::{Token, TokenKind, Tokens},
     mem_size::DeepSize,
-    parser::{ExprPool, Parser, TypeList},
+    parser::{pool::ExprPool, Parser, TypeList},
     pretty::Printer,
     type_env::TypeEnv,
     typecheck::TypeChecker,

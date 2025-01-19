@@ -1,6 +1,14 @@
 use std::rc::Rc;
 
-use crate::{errors::CheckErr, parser::*, type_env::TypeEnv, types::*};
+use crate::{
+    errors::CheckErr,
+    parser::{
+        ast::*,
+        pool::{ExprPool, ExprRef},
+    },
+    type_env::TypeEnv,
+    types::*,
+};
 
 pub struct TypeChecker<'src, 'pool> {
     pub pool: &'pool ExprPool<'src>,
@@ -632,7 +640,7 @@ impl<'src> TypeChecker<'src, '_> {
 
         match &if_stat.else_ {
             Some(else_) => match else_.as_ref() {
-                Else::Else(body) => {
+                ElseBranch::Else(body) => {
                     let mut new_env = TypeEnv::new_with_parent(type_env);
                     for stat in body {
                         self.check_statement(stat, &mut new_env)?;
@@ -640,7 +648,7 @@ impl<'src> TypeChecker<'src, '_> {
 
                     Ok(())
                 }
-                Else::ElseIf(else_if_stat) => self.check_if_stat(else_if_stat, type_env),
+                ElseBranch::ElseIf(else_if_stat) => self.check_if_stat(else_if_stat, type_env),
             },
             None => Ok(()),
         }

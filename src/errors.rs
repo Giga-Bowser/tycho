@@ -1,6 +1,9 @@
 use thiserror::Error;
 
-use crate::{lexer::*, types::Type};
+use crate::{
+    lexer::{PermaToken, TokenKind},
+    types::Type,
+};
 
 macro_rules! thingy {
     ($enum: ident, $target: ident) => {

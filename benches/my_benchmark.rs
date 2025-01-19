@@ -10,7 +10,7 @@ use tycho::{
     compiler::Compiler,
     driver::add_defines,
     lexer::{Token, TokenKind, Tokens},
-    parser::{ExprPool, Parser, TypeList},
+    parser::{pool::ExprPool, Parser, TypeList},
     type_env::TypeEnv,
     typecheck::TypeChecker,
 };

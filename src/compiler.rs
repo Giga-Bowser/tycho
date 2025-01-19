@@ -1,6 +1,12 @@
 use std::{cell::Cell, slice, str};
 
-use crate::{format_to, parser::*};
+use crate::{
+    format_to,
+    parser::{
+        ast::*,
+        pool::{ExprPool, ExprRef},
+    },
+};
 
 #[derive(Debug)]
 pub struct Compiler<'src, 'pool> {
@@ -150,11 +156,11 @@ impl<'src, 'pool> Compiler<'src, 'pool> {
         let if_body = self.compile_block(&if_stat.body);
         if let Some(else_node) = &if_stat.else_ {
             match else_node.as_ref() {
-                Else::Else(else_body) => {
+                ElseBranch::Else(else_body) => {
                     let else_body = self.compile_block(else_body);
                     format!("if {condition} then{if_body}else{else_body}end")
                 }
-                Else::ElseIf(else_if_stat) => {
+                ElseBranch::ElseIf(else_if_stat) => {
                     let else_if_stat = self.compile_if_stat(else_if_stat);
                     format!("if {condition} then{if_body}else{else_if_stat}")
                 }

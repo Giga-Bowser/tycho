@@ -1,6 +1,12 @@
 use std::fmt::Display;
 
-use crate::{parser::*, types::Type};
+use crate::{
+    parser::{
+        ast::*,
+        pool::{ExprPool, ExprRef},
+    },
+    types::Type,
+};
 
 impl Display for OpKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -442,7 +448,7 @@ impl Printer<'_, '_> {
         if let Some(else_) = &if_stat.else_ {
             result += &format!("{}else\n", new_prefix);
             match else_.as_ref() {
-                Else::Else(body) => {
+                ElseBranch::Else(body) => {
                     if !body.is_empty() {
                         for stat in body.iter().take(body.len() - 1) {
                             result += &self.print_statement(new_prefix.clone(), stat, false);
@@ -451,7 +457,7 @@ impl Printer<'_, '_> {
                         result += &self.print_statement(new_prefix, body.last().unwrap(), true);
                     }
                 }
-                Else::ElseIf(else_if_stat) => {
+                ElseBranch::ElseIf(else_if_stat) => {
                     result += &self.print_if_stat(new_prefix, else_if_stat, is_end)
                 }
             }
