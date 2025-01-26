@@ -3,11 +3,11 @@ use std::{path::Path, time::Instant};
 use logos::Logos;
 
 use crate::{
-    compiler::Compiler,
     lexer::{Token, TokenKind, Tokens},
     mem_size::DeepSize,
-    parser::{pool::ExprPool, Parser, TypeList},
+    parser::{ast, pool::ExprPool, Parser, TypeList},
     pretty::Printer,
+    transpiler::Transpiler,
     type_env::TypeEnv,
     typecheck::TypeChecker,
     util::{duration_fmt, ByteFmt},
@@ -109,11 +109,7 @@ fn build(args: &BuildOpt) {
 
     let compile_timer = Instant::now();
 
-    let mut compiler = Compiler::new(&pool);
-    for stat in &stats {
-        compiler.compile_statement(stat);
-        compiler.result.push('\n');
-    }
+    let result = transpile(&pool, stats);
 
     if args.verbose {
         eprintln!("compiling done: {}", duration_fmt(compile_timer.elapsed()));
@@ -125,8 +121,17 @@ fn build(args: &BuildOpt) {
     };
 
     output
-        .write_all(compiler.result.as_bytes())
+        .write_all(result.as_bytes())
         .unwrap_or_else(|e| panic!("{e}"));
+}
+
+fn transpile<'pool>(pool: &'pool ExprPool<'pool>, stats: Vec<ast::Statement<'_>>) -> String {
+    let mut compiler = Transpiler::new(pool);
+    for stat in &stats {
+        compiler.transpile_statement(stat);
+        compiler.result.push('\n');
+    }
+    compiler.result
 }
 
 pub fn add_defines(file_path: &Path, type_env: &mut TypeEnv) {

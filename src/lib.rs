@@ -8,10 +8,10 @@ mod pretty;
 mod types;
 mod util;
 
-pub mod compiler;
 pub mod driver;
 pub mod lexer;
 pub mod parser;
+pub mod transpiler;
 pub mod type_env;
 pub mod typecheck;
 

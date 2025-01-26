@@ -7,10 +7,10 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use logos::Logos;
 use mimalloc::MiMalloc;
 use tycho::{
-    compiler::Compiler,
     driver::add_defines,
     lexer::{Token, TokenKind, Tokens},
     parser::{pool::ExprPool, Parser, TypeList},
+    transpiler::Transpiler,
     type_env::TypeEnv,
     typecheck::TypeChecker,
 };
@@ -134,7 +134,7 @@ fn benchmark_typechecker(c: &mut Criterion) {
     });
 }
 
-fn benchmark_compiler(c: &mut Criterion) {
+fn benchmark_transpiler(c: &mut Criterion) {
     let contents = std::fs::read_to_string("test/test.ty").unwrap_or_else(|e| panic!("{e}"));
     let lex = TokenKind::lexer(&contents);
 
@@ -164,10 +164,10 @@ fn benchmark_compiler(c: &mut Criterion) {
         b.iter_custom(|iters| {
             let mut elapsed = Duration::ZERO;
             for _i in 0..iters {
-                let mut compiler = Compiler::new(&pool);
+                let mut compiler = Transpiler::new(&pool);
                 let start = Instant::now();
                 for stat in &statements {
-                    compiler.compile_statement(black_box(stat));
+                    compiler.transpile_statement(black_box(stat));
                 }
                 elapsed += start.elapsed();
                 black_box(compiler.result);
@@ -219,10 +219,10 @@ fn benchmark_all(c: &mut Criterion) {
                 }
 
                 let typechecker = TypeChecker { pool: &pool };
-                let mut compiler = Compiler::new(&pool);
+                let mut compiler = Transpiler::new(&pool);
                 for stat in &statements {
                     typechecker.check_statement(stat, &mut type_env).unwrap();
-                    compiler.compile_statement(black_box(stat));
+                    compiler.transpile_statement(black_box(stat));
                 }
 
                 elapsed += start.elapsed();
@@ -239,7 +239,7 @@ criterion_group!(
     benchmark_lexer,
     benchmark_parser,
     benchmark_typechecker,
-    benchmark_compiler,
+    benchmark_transpiler,
     benchmark_all
 );
 criterion_main!(benches);
