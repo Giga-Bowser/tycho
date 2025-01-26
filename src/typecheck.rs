@@ -233,7 +233,7 @@ impl<'src> TypeChecker<'src, '_> {
             },
             Expr::Paren(paren_expr) => self.check_expr(paren_expr.val, type_env),
             Expr::Simple(simple_expr) => self.check_simple_expr(simple_expr, type_env),
-            Expr::Name(str) => match type_env.get(str) {
+            Expr::Name(str) => match type_env.get(*str) {
                 Some(type_) => Ok(type_.clone()),
                 None => Err(CheckErr::NoSuchVal((*str).to_owned())),
             },
