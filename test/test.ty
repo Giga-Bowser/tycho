@@ -39,6 +39,17 @@ clampMag := func(value: number, min: number, max: number) -> number {
 	return sign(value) * clamp(math.abs(value), math.abs(min), math.abs(max))
 }
 
+while_break_example := func() {
+	i := 0
+	while i < 10 {
+		n := math.random(20)
+		if n > 15 {
+			break
+		}
+		i = i + 1
+	}
+}
+
 getTrapezoidSpeed := func(
 	startSpeed: number,
 	middleSpeed: number,

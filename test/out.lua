@@ -38,6 +38,17 @@ local clampMag
 clampMag = function(value, min, max)
 	return (sign(value) * clamp(math.abs(value), math.abs(min), math.abs(max)))
 end
+local while_break_example
+while_break_example = function()
+	local i = 0
+	while i < 10 do
+		local n = math.random(20)
+		if n > 15 then
+			break
+		end
+		i = i + 1
+	end
+end
 local getTrapezoidSpeed
 getTrapezoidSpeed = function(startSpeed, middleSpeed, endSpeed, totalDistance, rampUpDistance, rampDownDistance, currentDistance)
 	if rampDownDistance + rampUpDistance > totalDistance then
