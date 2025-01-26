@@ -5,7 +5,9 @@ use std::{
     hash::Hash,
 };
 
-use super::utils::uleb128;
+use bitflags::bitflags;
+
+use crate::luajit::utils::uleb128;
 
 const BC_MAGIC: [u8; 3] = [0x1B, b'L', b'J'];
 const BC_VERSION: u8 = 2;
@@ -116,7 +118,7 @@ pub struct Proto {
 impl Proto {
     pub fn read(vec: &mut VecDeque<u8>) -> Self {
         // read header
-        let flags = ProtoFlags::read(vec);
+        let flags = ProtoFlags::from_bits_retain(vec.pop_front().unwrap());
         let num_params = vec.pop_front().unwrap();
         let frame_size = vec.pop_front().unwrap();
         let upvalue_data_len = vec.pop_front().unwrap() as usize;
@@ -160,7 +162,7 @@ impl Proto {
 
     pub fn write(&self, vec: &mut Vec<u8>) {
         // write header
-        self.flags.write(vec);
+        vec.push(self.flags.bits());
         vec.push(self.num_params);
         vec.push(self.frame_size);
         vec.push(self.upvalue_data.len() as u8);
@@ -181,71 +183,17 @@ impl Proto {
     }
 }
 
-#[derive(Default)]
-pub struct ProtoFlags {
-    /// Has child prototypes.
-    pub child: bool,
-    /// Vararg function.
-    pub vararg: bool,
-    /// Uses BC_KCDATA for FFI datatypes.
-    pub ffi: bool,
-    /// JIT disabled for this function.
-    pub nojit: bool,
-    /// Patched bytecode with ILOOP etc.
-    pub iloop: bool,
-}
-
-impl std::fmt::Debug for ProtoFlags {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut flags = Vec::new();
-
-        if self.child {
-            flags.push("child");
-        }
-
-        if self.vararg {
-            flags.push("vararg");
-        }
-
-        if self.ffi {
-            flags.push("ffi");
-        }
-
-        if self.nojit {
-            flags.push("nojit");
-        }
-
-        if self.iloop {
-            flags.push("iloop");
-        }
-
-        write!(f, "[{}]", flags.join(", "))
-    }
-}
-
-impl ProtoFlags {
-    pub fn read(vec: &mut VecDeque<u8>) -> Self {
-        let byte = vec.pop_front().unwrap();
-
-        ProtoFlags {
-            child: byte & 0b00001 != 0,
-            vararg: byte & 0b00010 != 0,
-            ffi: byte & 0b00100 != 0,
-            nojit: byte & 0b01000 != 0,
-            iloop: byte & 0b10000 != 0,
-        }
-    }
-
-    pub fn write(&self, vec: &mut Vec<u8>) {
-        let mut flags = 0;
-
-        flags |= if self.child { 0b00001 } else { 0 };
-        flags |= if self.vararg { 0b00010 } else { 0 };
-        flags |= if self.ffi { 0b00100 } else { 0 };
-        flags |= if self.nojit { 0b01000 } else { 0 };
-        flags |= if self.iloop { 0b10000 } else { 0 };
-
-        vec.push(flags);
+bitflags! {
+    #[derive(Debug, Default)]
+    pub struct ProtoFlags: u8 {
+        const CHILD = 0b00000001;
+        const VARARG = 0b00000010;
+        const FFI = 0b00000100;
+        const NOJIT = 0b00001000;
+        const ILOOP = 0b00010000;
+        // Only used during compiling
+        const HAS_RETURN = 0b00100000;
+        const FIXUP_RETURN = 0b01000000;
     }
 }
 
