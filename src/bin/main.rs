@@ -15,9 +15,9 @@ fn main() {
         }
         TychoOpt::Dump(dump_opt) => {
             luajit::dump_main(dump_opt);
-        },
+        }
         TychoOpt::Read(read_opt) => {
             luajit::read_main(read_opt);
-        },
+        }
     }
 }

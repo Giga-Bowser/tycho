@@ -10,7 +10,7 @@ use crate::{
     transpiler::Transpiler,
     type_env::TypeEnv,
     typecheck::TypeChecker,
-    util::{duration_fmt, ByteFmt},
+    utils::{duration_fmt, ByteFmt},
     BuildOpt,
 };
 

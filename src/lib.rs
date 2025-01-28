@@ -6,7 +6,7 @@ mod errors;
 mod mem_size;
 mod pretty;
 mod types;
-mod util;
+mod utils;
 
 pub mod driver;
 pub mod lexer;

@@ -1,5 +1,3 @@
-
-
 pub mod uleb128 {
     use std::collections::VecDeque;
 

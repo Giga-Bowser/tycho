@@ -1,3 +1,3 @@
-use crate::{types::Type, util::ScopedMap};
+use crate::{types::Type, utils::ScopedMap};
 
 pub type TypeEnv<'a> = ScopedMap<'a, String, Type>;
