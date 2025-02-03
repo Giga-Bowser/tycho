@@ -219,14 +219,14 @@ fn benchmark_all(c: &mut Criterion) {
                 }
 
                 let typechecker = TypeChecker { pool: &pool };
-                let mut compiler = Transpiler::new(&pool);
+                let mut transpiler = Transpiler::new(&pool);
                 for stat in &statements {
                     typechecker.check_statement(stat, &mut type_env).unwrap();
-                    compiler.transpile_statement(black_box(stat));
+                    transpiler.transpile_statement(black_box(stat));
                 }
 
                 elapsed += start.elapsed();
-                black_box(compiler.result.as_str());
+                black_box(transpiler.result.as_str());
                 black_box(type_env);
             }
             elapsed
