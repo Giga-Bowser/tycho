@@ -119,7 +119,7 @@ deadband := func(value: number, band: number) -> number {
 	return 0
 }
 
-Vector := struct {
+struct Vector {
 	x: number,
 	y: number
 
@@ -150,7 +150,7 @@ Vector:dot := func(vec: Vector) -> number {
 
 
 
-Ramp := struct {
+struct Ramp {
 	currentSpeed: number,
 	maxAccel: number,
 	maxDecel: number
@@ -167,7 +167,7 @@ Ramp:ramp := func(targetSpeed: number) -> number {
 	return self.currentSpeed
 }
 
-PIDController := struct {
+struct PIDController {
 	kp: number,
 	ki: number,
 	kd: number,
@@ -251,7 +251,7 @@ PIDController:pid := func(
 
 print("hello, world")
 
-T := struct {}
+struct T {}
 
 tests : [string]func(t: T) = {}
 

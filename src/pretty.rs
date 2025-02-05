@@ -66,6 +66,9 @@ impl Printer<'_, '_> {
             Statement::ExprStat(suffixed_expr) => {
                 self.print_suffixed_expr(prefix, suffixed_expr, is_end)
             }
+            Statement::StructDecl(struct_decl) => {
+                self.print_struct_decl(prefix, struct_decl, is_end)
+            }
             other => format!(
                 "{}{}{:?}\n",
                 prefix,
@@ -246,9 +249,6 @@ impl Printer<'_, '_> {
             }
             SimpleExpr::FuncNode(func_node) => self.print_func_node(prefix, func_node, is_end),
             SimpleExpr::TableNode(table_node) => self.print_table_node(prefix, table_node, is_end),
-            SimpleExpr::StructNode(struct_node) => {
-                self.print_struct_node(prefix, struct_node, is_end)
-            }
             SimpleExpr::SuffixedExpr(suffixed_expr) => {
                 self.print_suffixed_expr(prefix, suffixed_expr, is_end)
             }
@@ -320,7 +320,7 @@ impl Printer<'_, '_> {
         result
     }
 
-    fn print_struct_node(&self, prefix: String, struct_node: &StructNode, is_end: bool) -> String {
+    fn print_struct_decl(&self, prefix: String, struct_decl: &StructDecl, is_end: bool) -> String {
         let mut result = format!(
             "{}{}{}\n",
             prefix,
@@ -328,17 +328,17 @@ impl Printer<'_, '_> {
             "struct",
         );
 
-        if struct_node.type_.fields.is_empty() {
+        if struct_decl.type_.fields.is_empty() {
             return result;
         }
 
         let new_prefix = prefix + if is_end { "    " } else { "│   " };
 
-        for (name, type_) in struct_node
+        for (name, type_) in struct_decl
             .type_
             .fields
             .iter()
-            .take(struct_node.type_.fields.len() - 1)
+            .take(struct_decl.type_.fields.len() - 1)
         {
             result += &format!("{}├── {}: {:?}", new_prefix, name, type_);
         }
@@ -346,8 +346,8 @@ impl Printer<'_, '_> {
         result += &format!(
             "{}└── {}: {:?}",
             new_prefix,
-            struct_node.type_.fields.last().unwrap().0,
-            struct_node.type_.fields.last().unwrap().1
+            struct_decl.type_.fields.last().unwrap().0,
+            struct_decl.type_.fields.last().unwrap().1
         );
 
         result

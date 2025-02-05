@@ -18,6 +18,7 @@ pub enum Statement<'a> {
     WhileStat(WhileStat<'a>),
     RangeFor(RangeFor<'a>),
     KeyValFor(KeyValFor<'a>),
+    StructDecl(StructDecl<'a>),
 }
 
 #[derive(Debug, Clone)]
@@ -99,6 +100,13 @@ pub struct KeyValFor<'a> {
 }
 
 #[derive(Debug, Clone)]
+pub struct StructDecl<'a> {
+    pub name: &'a str,
+    pub type_: Box<User>,
+    pub constructor: Option<FuncNode<'a>>,
+}
+
+#[derive(Debug, Clone)]
 pub enum Expr<'a> {
     BinOp(BinOp),
     UnOp(UnOp),
@@ -133,7 +141,6 @@ pub enum SimpleExpr<'a> {
     Nil(&'a str),
     FuncNode(FuncNode<'a>),
     TableNode(TableNode<'a>),
-    StructNode(StructNode<'a>),
     SuffixedExpr(SuffixedExpr<'a>),
 }
 
@@ -153,13 +160,6 @@ pub enum FieldNode<'a> {
     Field { key: &'a str, val: ExprRef },
     ExprField { key: ExprRef, val: ExprRef },
     ValField { val: ExprRef },
-}
-
-#[derive(Debug, Clone)]
-pub struct StructNode<'a> {
-    pub type_: Box<User>,
-    pub constructor: Option<FuncNode<'a>>,
-    pub name: Option<&'a str>,
 }
 
 #[derive(Debug, Clone)]

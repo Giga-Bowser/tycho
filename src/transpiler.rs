@@ -56,6 +56,7 @@ impl<'src, 'pool> Transpiler<'src, 'pool> {
             Statement::WhileStat(while_stat) => self.transpile_while_stat(while_stat),
             Statement::RangeFor(range_for) => self.transpile_range_for(range_for),
             Statement::KeyValFor(keyval_for) => self.transpile_keyval_for(keyval_for),
+            Statement::StructDecl(struct_decl) => self.transpile_struct_decl(struct_decl),
         }
     }
 
@@ -221,7 +222,6 @@ impl<'src, 'pool> Transpiler<'src, 'pool> {
             | SimpleExpr::Nil(str) => self.result += str,
             SimpleExpr::FuncNode(func_node) => self.transpile_func(func_node),
             SimpleExpr::TableNode(table_node) => self.transpile_table(table_node),
-            SimpleExpr::StructNode(struct_node) => self.transpile_struct(struct_node),
             SimpleExpr::SuffixedExpr(suffixed_expr) => self.transpile_suffixed_expr(suffixed_expr),
         }
     }
@@ -254,12 +254,12 @@ impl<'src, 'pool> Transpiler<'src, 'pool> {
         self.result += &self.newline();
     }
 
-    fn transpile_struct(&mut self, struct_node: &StructNode) {
+    fn transpile_struct_decl(&mut self, struct_decl: &StructDecl) {
         let newline = self.newline();
-        let name = struct_node.name.unwrap_or("_");
-        format_to!(self.result, "{{}}{newline}{name}.__index = {name}");
+        let name = struct_decl.name;
+        format_to!(self.result, "local {name} = {{}}{newline}{name}.__index = {name}");
 
-        if let Some(constructor) = &struct_node.constructor {
+        if let Some(constructor) = &struct_decl.constructor {
             self.result += &newline;
             format_to!(self.result, "{name}.new = function(_self");
             for (param_name, _) in &constructor.type_.params {

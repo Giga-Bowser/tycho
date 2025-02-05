@@ -85,7 +85,11 @@ mod parser {
                     range_for.body.deep_size_of_children() + range_for.range.deep_size_of()
                 }
                 Statement::KeyValFor(key_val_for) => key_val_for.body.deep_size_of_children(),
-                _ => 0,
+                Statement::StructDecl(struct_decl) => {
+                    struct_decl.constructor.deep_size_of_children()
+                        + struct_decl.type_.deep_size_of_children()
+                }
+                Statement::Break => 0,
             }
         }
     }
@@ -182,10 +186,6 @@ mod parser {
                 | SimpleExpr::Nil(_) => 0,
                 SimpleExpr::FuncNode(func_node) => func_node.deep_size_of_children(),
                 SimpleExpr::TableNode(table_node) => table_node.fields.deep_size_of_children(),
-                SimpleExpr::StructNode(struct_node) => {
-                    struct_node.constructor.deep_size_of_children()
-                        + struct_node.type_.deep_size_of_children()
-                }
                 SimpleExpr::SuffixedExpr(suffixed_expr) => suffixed_expr.deep_size_of_children(),
             }
         }

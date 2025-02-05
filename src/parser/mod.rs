@@ -48,6 +48,7 @@ impl<'src> Parser<'src, '_> {
                 self.tokens.pop_front();
                 Ok(Statement::Break)
             }
+            Struct => Ok(Statement::StructDecl(self.parse_struct_decl(typelist)?)),
             LCurly => {
                 self.tokens.pop_front();
                 let mut body = Vec::new();
@@ -91,16 +92,6 @@ impl<'src> Parser<'src, '_> {
 
             let val = self.parse_expr(typelist)?;
 
-            if let Expr::Simple(SimpleExpr::StructNode(StructNode { type_, name, .. })) =
-                &mut self.pool[val]
-            {
-                if !lhs.suffixes.is_empty() {
-                    return Err(ParseError::EmptyError);
-                }
-                typelist.insert(lhs.name.to_owned(), Type::User(*type_.clone()));
-                *name = Some(lhs.name);
-            }
-
             return Ok(Declare {
                 lhs: Box::new(lhs),
                 type_: Box::new(Type::Adaptable),
@@ -121,20 +112,6 @@ impl<'src> Parser<'src, '_> {
         self.tokens.pop_front(); // pop '='
 
         let val = self.parse_expr(typelist)?;
-
-        if let Expr::Simple(SimpleExpr::StructNode(StructNode {
-            type_: struct_type,
-            name,
-            ..
-        })) = &mut self.pool[val]
-        {
-            if !lhs.suffixes.is_empty() {
-                return Err(ParseError::EmptyError);
-            }
-
-            typelist.insert(lhs.name.to_owned(), Type::User(*struct_type.clone()));
-            *name = Some(lhs.name);
-        }
 
         Ok(Declare {
             lhs: Box::new(lhs),
@@ -560,7 +537,6 @@ impl<'src> Parser<'src, '_> {
                 Ok(SimpleExpr::Nil(str))
             }
             LCurly => Ok(SimpleExpr::TableNode(self.table_constructor(typelist)?)),
-            Struct => Ok(SimpleExpr::StructNode(self.parse_struct(typelist)?)),
             Func => Ok(SimpleExpr::FuncNode(self.func_constructor(typelist)?)),
             _ => Ok(SimpleExpr::SuffixedExpr(
                 self.parse_suffixed_expr(typelist)?,
@@ -684,8 +660,10 @@ impl<'src> Parser<'src, '_> {
         })
     }
 
-    fn parse_struct(&mut self, typelist: &TypeList) -> Result<StructNode<'src>, ParseError> {
+    fn parse_struct_decl(&mut self, typelist: &mut TypeList) -> Result<StructDecl<'src>, ParseError> {
         self.tokens.pop_front(); // pop 'struct'
+
+        let name = self.tokens.pop_name()?;
 
         self.tokens.expect(LCurly)?;
 
@@ -694,10 +672,12 @@ impl<'src> Parser<'src, '_> {
         if self.tokens[0].kind == RCurly {
             self.tokens.pop_front();
 
-            return Ok(StructNode {
-                type_: Box::new(User { fields }),
+            let type_ = Box::new(User { fields });
+            typelist.insert(name.to_owned(), Type::User(*type_.clone()));
+            return Ok(StructDecl {
+                type_,
                 constructor: None,
-                name: None,
+                name,
             });
         }
 
@@ -713,23 +693,24 @@ impl<'src> Parser<'src, '_> {
         }
 
         let type_ = Box::new(User { fields });
+        typelist.insert(name.to_owned(), Type::User(*type_.clone()));
 
         match self.tokens[0].kind {
             RCurly => {
                 self.tokens.pop_front();
-                Ok(StructNode {
+                Ok(StructDecl {
                     type_,
                     constructor: None,
-                    name: None,
+                    name,
                 })
             }
             Constructor => {
                 let constructor = Some(self.parse_struct_constructor(typelist)?);
                 self.tokens.expect(RCurly)?;
-                Ok(StructNode {
+                Ok(StructDecl {
                     type_,
                     constructor,
-                    name: None,
+                    name,
                 })
             }
             _ => Err(ParseError::UnexpectedToken(UnexpectedToken {

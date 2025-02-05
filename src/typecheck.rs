@@ -52,18 +52,20 @@ impl<'src> TypeChecker<'src, '_> {
                 }
                 Ok(())
             }
+            Statement::StructDecl(StructDecl {
+                name,
+                type_,
+                constructor: _,
+            }) => {
+                type_env.push((*name).to_owned(), Type::User(*type_.clone()));
+                Ok(())
+            }
             _ => Ok(()),
         }
     }
 
     fn check_decl(&self, decl: &Declare<'src>, type_env: &mut TypeEnv) -> Result<(), CheckErr> {
         if let Some(val) = decl.val {
-            if let Expr::Simple(SimpleExpr::StructNode(StructNode { type_, .. })) = &self.pool[val]
-            {
-                type_env.push(decl.lhs.name.to_owned(), Type::User(*type_.clone()));
-                return Ok(());
-            }
-
             let lhs_type = self.check_expr(val, type_env)?;
 
             if let Type::Adaptable = *decl.type_ {
@@ -326,7 +328,6 @@ impl<'src> TypeChecker<'src, '_> {
             SimpleExpr::TableNode(table_node) => {
                 Ok(Type::Table(self.check_table(table_node, type_env)?))
             }
-            SimpleExpr::StructNode(_) => todo!(),
             SimpleExpr::SuffixedExpr(suffixed_expr) => {
                 self.check_suffixed_expr(suffixed_expr, type_env)
             }
