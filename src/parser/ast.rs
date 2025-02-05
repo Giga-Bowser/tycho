@@ -3,6 +3,200 @@ use crate::{
     types::{Function, Type, User},
 };
 
+#[derive(Debug, Clone)]
+pub enum Statement<'a> {
+    Declare(Declare<'a>),
+    MultiDecl(MultiDecl<'a>),
+    MethodDecl(MethodDecl<'a>),
+    Assign(Assign<'a>),
+    MultiAssign(MultiAssign<'a>),
+    ExprStat(SuffixedExpr<'a>),
+    Block(Vec<Statement<'a>>),
+    Return(Vec<ExprRef>),
+    Break,
+    IfStat(IfStat<'a>),
+    WhileStat(WhileStat<'a>),
+    RangeFor(RangeFor<'a>),
+    KeyValFor(KeyValFor<'a>),
+}
+
+#[derive(Debug, Clone)]
+pub struct Declare<'a> {
+    pub lhs: Box<SuffixedName<'a>>,
+    pub type_: Box<Type>,
+    pub val: Option<ExprRef>,
+}
+
+#[derive(Debug, Clone)]
+pub struct MultiDecl<'a> {
+    pub lhs_arr: Vec<&'a str>,
+    pub rhs_arr: Vec<ExprRef>,
+}
+
+#[derive(Debug, Clone)]
+pub struct MethodDecl<'a> {
+    pub struct_name: &'a str,
+    pub method_name: &'a str,
+    pub func: Box<FuncNode<'a>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Assign<'a> {
+    pub lhs: Box<SuffixedName<'a>>,
+    pub rhs: ExprRef,
+}
+
+#[derive(Debug, Clone)]
+pub struct MultiAssign<'a> {
+    pub lhs_arr: Vec<SuffixedExpr<'a>>,
+    pub rhs_arr: Vec<ExprRef>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SuffixedName<'a> {
+    pub name: &'a str,
+    pub suffixes: Vec<Suffix<'a>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct IfStat<'a> {
+    pub condition: ExprRef,
+    pub body: Vec<Statement<'a>>,
+    pub else_: Option<Box<ElseBranch<'a>>>,
+}
+
+#[derive(Debug, Clone)]
+pub enum ElseBranch<'a> {
+    Else(Vec<Statement<'a>>),
+    ElseIf(IfStat<'a>),
+}
+
+#[derive(Debug, Clone)]
+pub struct WhileStat<'a> {
+    pub condition: ExprRef,
+    pub body: Vec<Statement<'a>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct RangeFor<'a> {
+    pub var: &'a str,
+    pub range: Box<RangeExpr>,
+    pub body: Vec<Statement<'a>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct RangeExpr {
+    pub lhs: ExprRef,
+    pub rhs: ExprRef,
+}
+
+#[derive(Debug, Clone)]
+pub struct KeyValFor<'a> {
+    /// this should be 'keyname, valname' in one str
+    pub names: &'a str,
+    pub iter: ExprRef,
+    pub body: Vec<Statement<'a>>,
+}
+
+#[derive(Debug, Clone)]
+pub enum Expr<'a> {
+    BinOp(BinOp),
+    UnOp(UnOp),
+    Paren(ParenExpr),
+    Simple(SimpleExpr<'a>),
+    Name(&'a str),
+}
+
+#[derive(Debug, Clone)]
+pub struct BinOp {
+    pub op: OpKind,
+    pub lhs: ExprRef,
+    pub rhs: ExprRef,
+}
+
+#[derive(Debug, Clone)]
+pub struct UnOp {
+    pub op: UnOpKind,
+    pub val: ExprRef,
+}
+
+#[derive(Debug, Clone)]
+pub struct ParenExpr {
+    pub val: ExprRef,
+}
+
+#[derive(Debug, Clone)]
+pub enum SimpleExpr<'a> {
+    Num(&'a str),
+    Str(&'a str),
+    Bool(&'a str),
+    Nil(&'a str),
+    FuncNode(FuncNode<'a>),
+    TableNode(TableNode<'a>),
+    StructNode(StructNode<'a>),
+    SuffixedExpr(SuffixedExpr<'a>),
+}
+
+#[derive(Debug, Clone)]
+pub struct FuncNode<'a> {
+    pub type_: Box<Function>,
+    pub body: Vec<Statement<'a>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TableNode<'a> {
+    pub fields: Vec<FieldNode<'a>>,
+}
+
+#[derive(Debug, Clone)]
+pub enum FieldNode<'a> {
+    Field { key: &'a str, val: ExprRef },
+    ExprField { key: ExprRef, val: ExprRef },
+    ValField { val: ExprRef },
+}
+
+#[derive(Debug, Clone)]
+pub struct StructNode<'a> {
+    pub type_: Box<User>,
+    pub constructor: Option<FuncNode<'a>>,
+    pub name: Option<&'a str>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SuffixedExpr<'a> {
+    pub val: ExprRef,
+    pub suffixes: Vec<Suffix<'a>>,
+}
+
+#[derive(Debug, Clone)]
+pub enum Suffix<'a> {
+    Index(Index),
+    Access(Access<'a>),
+    Call(Call),
+    Method(Method<'a>),
+}
+
+#[derive(Debug, Clone)]
+pub struct Index {
+    pub key: ExprRef,
+}
+
+#[derive(Debug, Clone)]
+pub struct Access<'a> {
+    pub field_name: &'a str,
+}
+
+#[derive(Debug, Clone)]
+pub struct Call {
+    pub args: Vec<ExprRef>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Method<'a> {
+    pub method_name: &'a str,
+    pub args: Vec<ExprRef>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum OpKind {
     Add,
@@ -55,218 +249,4 @@ impl From<&UnOpKind> for &'static str {
             UnOpKind::Len => "#",
         }
     }
-}
-
-#[derive(Debug, Clone)]
-pub struct BinOp {
-    pub op: OpKind,
-    pub lhs: ExprRef,
-    pub rhs: ExprRef,
-}
-
-#[derive(Debug, Clone)]
-pub struct UnOp {
-    pub op: UnOpKind,
-    pub val: ExprRef,
-}
-
-#[derive(Debug, Clone)]
-pub struct ParenExpr {
-    pub val: ExprRef,
-}
-
-#[derive(Debug, Clone)]
-pub struct Assign<'a> {
-    pub lhs: Box<SuffixedName<'a>>,
-    pub rhs: ExprRef,
-}
-
-#[derive(Debug, Clone)]
-pub struct Index {
-    pub key: ExprRef,
-}
-
-#[derive(Debug, Clone)]
-pub struct Access<'a> {
-    pub field_name: &'a str,
-}
-
-#[derive(Debug, Clone)]
-pub struct Call {
-    pub args: Vec<ExprRef>,
-}
-
-#[derive(Debug, Clone)]
-pub struct Method<'a> {
-    pub method_name: &'a str,
-    pub args: Vec<ExprRef>,
-}
-
-#[derive(Debug, Clone)]
-pub enum Suffix<'a> {
-    Index(Index),
-    Access(Access<'a>),
-    Call(Call),
-    Method(Method<'a>),
-}
-
-#[derive(Debug, Clone)]
-pub struct MethodDecl<'a> {
-    pub struct_name: &'a str,
-    pub method_name: &'a str,
-    pub func: Box<FuncNode<'a>>,
-}
-
-#[derive(Debug, Clone)]
-pub struct StructNode<'a> {
-    pub type_: Box<User>,
-    pub constructor: Option<FuncNode<'a>>,
-    pub name: Option<&'a str>,
-}
-
-// #[derive(Debug, Clone)]
-// pub struct StructAccess<'a> {
-//     pub name: &'a str,
-//     pub accesses: Vec<Access<'a>>,
-// }
-
-#[derive(Debug, Clone)]
-pub struct SuffixedName<'a> {
-    pub name: &'a str,
-    pub suffixes: Vec<Suffix<'a>>,
-}
-
-#[derive(Debug, Clone)]
-pub struct Declare<'a> {
-    pub lhs: Box<SuffixedName<'a>>,
-    pub type_: Box<Type>,
-    pub val: Option<ExprRef>,
-}
-
-// /// a more advanced decl, like math.min := ...
-// #[derive(Debug, Clone)]
-// pub struct SuffixedDecl<'a> {
-//     pub lhs: SuffixedExpr<'a>,
-//     pub type_: Box<Type>,
-//     pub rhs: Option<ExprRef>,
-// }
-
-#[derive(Debug, Clone)]
-pub struct FuncNode<'a> {
-    pub type_: Box<Function>,
-    pub body: Vec<Statement<'a>>,
-}
-
-// #[derive(Debug, Clone)]
-// pub struct StructConstructor<'a> {
-//     pub type_: Box<Function>,
-//     pub body: Vec<Node<'a>>,
-// }
-
-#[derive(Debug, Clone)]
-pub enum ElseBranch<'a> {
-    Else(Vec<Statement<'a>>),
-    ElseIf(IfStat<'a>),
-}
-
-#[derive(Debug, Clone)]
-pub struct IfStat<'a> {
-    pub condition: ExprRef,
-    pub body: Vec<Statement<'a>>,
-    pub else_: Option<Box<ElseBranch<'a>>>,
-}
-
-#[derive(Debug, Clone)]
-pub struct WhileStat<'a> {
-    pub condition: ExprRef,
-    pub body: Vec<Statement<'a>>,
-}
-
-#[derive(Debug, Clone)]
-pub enum FieldNode<'a> {
-    Field { key: &'a str, val: ExprRef },
-    ExprField { key: ExprRef, val: ExprRef },
-    ValField { val: ExprRef },
-}
-
-#[derive(Debug, Clone)]
-pub struct RangeExpr {
-    pub lhs: ExprRef,
-    pub rhs: ExprRef,
-}
-
-#[derive(Debug, Clone)]
-pub struct RangeFor<'a> {
-    pub var: &'a str,
-    pub range: Box<RangeExpr>,
-    pub body: Vec<Statement<'a>>,
-}
-
-#[derive(Debug, Clone)]
-pub struct KeyValFor<'a> {
-    /// this should be 'keyname, valname' in one str
-    pub names: &'a str,
-    pub iter: ExprRef,
-    pub body: Vec<Statement<'a>>,
-}
-
-#[derive(Debug, Clone)]
-pub struct MultiDecl<'a> {
-    pub lhs_arr: Vec<&'a str>,
-    pub rhs_arr: Vec<ExprRef>,
-}
-
-#[derive(Debug, Clone)]
-pub struct MultiAssign<'a> {
-    pub lhs_arr: Vec<SuffixedExpr<'a>>,
-    pub rhs_arr: Vec<ExprRef>,
-}
-
-#[derive(Debug, Clone)]
-pub struct SuffixedExpr<'a> {
-    pub val: ExprRef,
-    pub suffixes: Vec<Suffix<'a>>,
-}
-
-#[derive(Debug, Clone)]
-pub struct TableNode<'a> {
-    pub fields: Vec<FieldNode<'a>>,
-}
-
-#[derive(Debug, Clone)]
-pub enum SimpleExpr<'a> {
-    Num(&'a str),
-    Str(&'a str),
-    Bool(&'a str),
-    Nil(&'a str),
-    FuncNode(FuncNode<'a>),
-    TableNode(TableNode<'a>),
-    StructNode(StructNode<'a>),
-    SuffixedExpr(SuffixedExpr<'a>),
-}
-
-#[derive(Debug, Clone)]
-pub enum Expr<'a> {
-    BinOp(BinOp),
-    UnOp(UnOp),
-    Paren(ParenExpr),
-    Simple(SimpleExpr<'a>),
-    Name(&'a str),
-}
-
-#[derive(Debug, Clone)]
-pub enum Statement<'a> {
-    Declare(Declare<'a>),
-    MultiDecl(MultiDecl<'a>),
-    MethodDecl(MethodDecl<'a>),
-    Assign(Assign<'a>),
-    MultiAssign(MultiAssign<'a>),
-    ExprStat(SuffixedExpr<'a>),
-    Block(Vec<Statement<'a>>),
-    Return(Vec<ExprRef>),
-    Break,
-    IfStat(IfStat<'a>),
-    WhileStat(WhileStat<'a>),
-    RangeFor(RangeFor<'a>),
-    KeyValFor(KeyValFor<'a>),
 }
