@@ -588,11 +588,14 @@ impl<'src> Parser<'src, '_> {
             return Ok(TableNode { fields });
         }
 
-        fields.push(self.field(typelist)?);
-
-        while self.tokens[0].kind == Comma {
-            self.tokens.pop_front();
+        while self.tokens[0].kind != RCurly {
             fields.push(self.field(typelist)?);
+
+            if self.tokens[0].kind == Comma {
+                self.tokens.pop_front();
+            } else {
+                break;
+            }
         }
 
         self.tokens.expect(RCurly)?;
@@ -660,7 +663,10 @@ impl<'src> Parser<'src, '_> {
         })
     }
 
-    fn parse_struct_decl(&mut self, typelist: &mut TypeList) -> Result<StructDecl<'src>, ParseError> {
+    fn parse_struct_decl(
+        &mut self,
+        typelist: &mut TypeList,
+    ) -> Result<StructDecl<'src>, ParseError> {
         self.tokens.pop_front(); // pop 'struct'
 
         let name = self.tokens.pop_name()?;
