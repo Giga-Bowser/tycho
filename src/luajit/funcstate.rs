@@ -54,7 +54,7 @@ bitflags! {
 impl Default for FuncState {
     fn default() -> Self {
         Self {
-            kt: Default::default(),
+            kt: HashMap::default(),
             num_kn: 0,
             num_kgc: 0,
             last_target: 0,
@@ -62,13 +62,13 @@ impl Default for FuncState {
             free_reg: 0,
             frame_size: 1,
             nactvar: 0,
-            bc: Default::default(),
+            bc: Bytecode::default(),
             num_params: 0,
             flags: ProtoFlags::empty(),
             var_map: [0; 200],
-            uv_map: Default::default(),
+            uv_map: Vec::default(),
             scope: FuncScope::default(),
-            prev_scopes: Default::default(),
+            prev_scopes: Vec::default(),
         }
     }
 }
@@ -88,7 +88,7 @@ impl FuncState {
             .chain(std::iter::once(&mut self.scope));
 
         if let Some(bl) = scopes.rfind(|it| it.nactvar as u32 <= level) {
-            bl.flags |= ScopeFlags::UPVAL
+            bl.flags |= ScopeFlags::UPVAL;
         }
     }
 }
@@ -271,10 +271,8 @@ impl FuncState {
         let jmp = &mut self.bc[pc];
         let offset = dest + BCInstr::BIAS_J as u32 - (pc + 1);
         debug_assert!(dest != NO_JMP, "uninitialized jump target");
-        if offset > BCInstr::MAX_D {
-            panic!("luajit gives up here and so do i");
-        }
-        // NOTE: maybe set_j?
+        assert!(offset <= BCInstr::MAX_D, "luajit gives up here and so do i");
+
         jmp.set_d(offset as u16);
     }
 
@@ -622,9 +620,7 @@ impl FuncState {
         let start = scope.vstart as usize;
         for vg in &mut var_info[start..] {
             if vg.name == vl.name && vg.is_goto() {
-                if vg.slot < vl.slot {
-                    panic!("bad goto");
-                }
+                assert!(vg.slot >= vl.slot, "bad goto");
 
                 self.gola_patch(vg, &vl);
             }

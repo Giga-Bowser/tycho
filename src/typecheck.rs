@@ -31,13 +31,13 @@ impl<'src> TypeChecker<'src, '_> {
             Statement::Assign(Assign { lhs, rhs }) => {
                 let lhs_type = self.check_suffixed_name(lhs, type_env)?;
                 let rhs_type = self.check_expr(*rhs, type_env)?;
-                if !lhs_type.can_equal(&rhs_type) {
+                if lhs_type.can_equal(&rhs_type) {
+                    Ok(())
+                } else {
                     Err(CheckErr::MismatchedTypes {
                         expected: lhs_type,
                         recieved: rhs_type,
                     })
-                } else {
-                    Ok(())
                 }
             }
             Statement::MultiAssign(multi_assign) => self.check_multi_assign(multi_assign, type_env),
@@ -160,11 +160,11 @@ impl<'src> TypeChecker<'src, '_> {
         let mut types = Vec::new();
 
         for rhs in &multi_decl.rhs_arr {
-            let type_ = self.check_expr(*rhs, type_env)?;
-            if let Type::Multiple(mult) = type_ {
+            let expr_type = self.check_expr(*rhs, type_env)?;
+            if let Type::Multiple(mult) = expr_type {
                 types.extend(mult);
             } else {
-                types.push(type_);
+                types.push(expr_type);
             }
         }
 
@@ -191,11 +191,11 @@ impl<'src> TypeChecker<'src, '_> {
         let mut types = Vec::new();
 
         for rhs in &multi_assign.rhs_arr {
-            let type_ = self.check_expr(*rhs, type_env)?;
-            if let Type::Multiple(mult) = type_ {
+            let rhs_type = self.check_expr(*rhs, type_env)?;
+            if let Type::Multiple(mult) = rhs_type {
                 types.extend(mult);
             } else {
-                types.push(type_);
+                types.push(rhs_type);
             }
         }
 
@@ -224,11 +224,11 @@ impl<'src> TypeChecker<'src, '_> {
             Expr::UnOp(unop) => match unop.op {
                 UnOpKind::Neg => {
                     if std::mem::discriminant(&self.check_expr(unop.val, type_env)?)
-                        != std::mem::discriminant(&Type::Number)
+                        == std::mem::discriminant(&Type::Number)
                     {
-                        Err(CheckErr::EmptyError)
-                    } else {
                         Ok(Type::Number)
+                    } else {
+                        Err(CheckErr::EmptyError)
                     }
                 }
                 UnOpKind::Len => Ok(Type::Number),
@@ -390,35 +390,32 @@ impl<'src> TypeChecker<'src, '_> {
                         return Err(CheckErr::ReturnCount);
                     }
 
-                    match return_type {
-                        Type::Multiple(types) => {
-                            if types.len() != vals.len() {
-                                return Err(CheckErr::ReturnCount);
-                            }
+                    if let Type::Multiple(types) = return_type {
+                        if types.len() != vals.len() {
+                            return Err(CheckErr::ReturnCount);
+                        }
 
-                            for (type_, val) in types.iter().zip(vals.iter()) {
-                                if !type_.can_equal(&self.check_expr(*val, type_env)?) {
-                                    return Err(CheckErr::MismatchedTypes {
-                                        expected: type_.clone(),
-                                        recieved: self.check_expr(*val, type_env)?,
-                                    });
-                                }
+                        for (type_, val) in types.iter().zip(vals.iter()) {
+                            if !type_.can_equal(&self.check_expr(*val, type_env)?) {
+                                return Err(CheckErr::MismatchedTypes {
+                                    expected: type_.clone(),
+                                    recieved: self.check_expr(*val, type_env)?,
+                                });
                             }
                         }
-                        _ => {
-                            if vals.len() != 1 {
-                                return Err(CheckErr::ReturnCount);
-                            }
-
-                            return if return_type.can_equal(&self.check_expr(vals[0], type_env)?) {
-                                Ok(true)
-                            } else {
-                                Err(CheckErr::MismatchedTypes {
-                                    expected: return_type.clone(),
-                                    recieved: self.check_expr(vals[0], type_env)?,
-                                })
-                            };
+                    } else {
+                        if vals.len() != 1 {
+                            return Err(CheckErr::ReturnCount);
                         }
+
+                        return if return_type.can_equal(&self.check_expr(vals[0], type_env)?) {
+                            Ok(true)
+                        } else {
+                            Err(CheckErr::MismatchedTypes {
+                                expected: return_type.clone(),
+                                recieved: self.check_expr(vals[0], type_env)?,
+                            })
+                        };
                     }
 
                     type_env.truncate(start_len);
@@ -438,73 +435,12 @@ impl<'src> TypeChecker<'src, '_> {
         suffixed_name: &SuffixedName<'src>,
         type_env: &mut TypeEnv,
     ) -> Result<Type, CheckErr> {
-        let mut type_ = match type_env.get(suffixed_name.name) {
-            Some(type_) => type_,
-            None => return Err(CheckErr::NoSuchVal(suffixed_name.name.to_owned())),
+        let Some(mut type_) = type_env.get(suffixed_name.name) else {
+            return Err(CheckErr::NoSuchVal(suffixed_name.name.to_owned()));
         };
 
         for suffix in &suffixed_name.suffixes {
-            match suffix {
-                Suffix::Index(Index { .. }) => match type_ {
-                    Type::Table(TableType { val_type, .. }) => type_ = val_type,
-                    Type::String => (),
-                    _ => unreachable!(),
-                },
-                Suffix::Access(Access { field_name: str }) => match type_ {
-                    Type::User(_) => {
-                        if let Some(field) = type_.get_field(str) {
-                            type_ = field;
-                        } else {
-                            return Err(CheckErr::NoSuchField((*str).to_owned()));
-                        }
-                    }
-                    Type::Table(TableType { key_type, val_type }) => {
-                        if !Type::String.can_equal(key_type) {
-                            return Err(CheckErr::MismatchedTypes {
-                                expected: Type::String,
-                                recieved: key_type.as_ref().to_owned(),
-                            });
-                        } else {
-                            type_ = val_type;
-                        }
-                    }
-                    _ => {
-                        return Err(CheckErr::CustomError(
-                            "cannot perform access on this type".to_owned(),
-                        ))
-                    }
-                },
-                Suffix::Call(Call { args }) => {
-                    for arg in args {
-                        self.check_expr(*arg, type_env)?;
-                    }
-
-                    if let Type::Function(func_type) = type_ {
-                        type_ = func_type.returns.as_ref();
-                    } else if *type_ == Type::Adaptable {
-                        continue;
-                    } else {
-                        return Err(CheckErr::MismatchedTypes {
-                            expected: Type::Function(Function {
-                                params: Vec::new(),
-                                returns: Box::default(),
-                            }),
-                            recieved: type_.clone(),
-                        });
-                    }
-                }
-                Suffix::Method(Method {
-                    method_name: name, ..
-                }) => {
-                    if name == &"new" {
-                        continue;
-                    } else if let Some(method) = type_.get_field(name) {
-                        type_ = method;
-                    } else {
-                        return Err(CheckErr::NoSuchMethod((*name).to_owned()));
-                    }
-                }
-            }
+            type_ = self.check_suffix(type_, suffix, type_env)?;
         }
 
         Ok(type_.clone())
@@ -518,70 +454,81 @@ impl<'src> TypeChecker<'src, '_> {
         let mut type_ = &self.check_expr(suffixed_expr.val, type_env)?;
 
         for suffix in &suffixed_expr.suffixes {
-            match suffix {
-                Suffix::Index(Index { .. }) => match type_ {
-                    Type::Table(TableType { val_type, .. }) => type_ = val_type,
-                    Type::String => (),
-                    _ => unreachable!(),
-                },
-                Suffix::Access(Access { field_name: str }) => match type_ {
-                    Type::User(_) => {
-                        if let Some(field) = type_.get_field(str) {
-                            type_ = field;
-                        } else {
-                            return Err(CheckErr::NoSuchField((*str).to_owned()));
-                        }
-                    }
-                    Type::Table(TableType { key_type, val_type }) => {
-                        if !Type::String.can_equal(key_type) {
-                            return Err(CheckErr::MismatchedTypes {
-                                expected: Type::String,
-                                recieved: key_type.as_ref().to_owned(),
-                            });
-                        } else {
-                            type_ = val_type;
-                        }
-                    }
-                    _ => {
-                        return Err(CheckErr::CustomError(
-                            "cannot perform access on this type".to_owned(),
-                        ))
-                    }
-                },
-                Suffix::Call(Call { args }) => {
-                    for arg in args {
-                        self.check_expr(*arg, type_env)?;
-                    }
+            type_ = self.check_suffix(type_, suffix, type_env)?;
+        }
 
-                    if let Type::Function(func_type) = type_ {
-                        type_ = func_type.returns.as_ref();
-                    } else if *type_ == Type::Adaptable {
-                        continue;
+        Ok(type_.clone())
+    }
+
+    fn check_suffix<'a>(
+        &self,
+        mut base: &'a Type,
+        suffix: &Suffix<'src>,
+        type_env: &TypeEnv,
+    ) -> Result<&'a Type, CheckErr> {
+        match suffix {
+            Suffix::Index(Index { .. }) => match base {
+                Type::Table(TableType { val_type, .. }) => base = val_type,
+                Type::String => (),
+                _ => unreachable!(),
+            },
+            Suffix::Access(Access { field_name: str }) => match base {
+                Type::User(_) => {
+                    if let Some(field) = base.get_field(str) {
+                        base = field;
+                    } else {
+                        return Err(CheckErr::NoSuchField((*str).to_owned()));
+                    }
+                }
+                Type::Table(TableType { key_type, val_type }) => {
+                    if Type::String.can_equal(key_type) {
+                        base = val_type;
                     } else {
                         return Err(CheckErr::MismatchedTypes {
-                            expected: Type::Function(Function {
-                                params: Vec::new(),
-                                returns: Box::default(),
-                            }),
-                            recieved: type_.clone(),
+                            expected: Type::String,
+                            recieved: key_type.as_ref().to_owned(),
                         });
                     }
                 }
-                Suffix::Method(Method {
-                    method_name: name, ..
-                }) => {
-                    if name == &"new" {
-                        continue;
-                    } else if let Some(method) = type_.get_field(name) {
-                        type_ = method;
-                    } else {
-                        return Err(CheckErr::NoSuchMethod((*name).to_owned()));
-                    }
+                _ => {
+                    return Err(CheckErr::CustomError(
+                        "cannot perform access on this type".to_owned(),
+                    ))
+                }
+            },
+            Suffix::Call(Call { args }) => {
+                for arg in args {
+                    self.check_expr(*arg, type_env)?;
+                }
+
+                if let Type::Function(func_type) = base {
+                    base = func_type.returns.as_ref();
+                } else if *base == Type::Adaptable {
+                    return Ok(base);
+                } else {
+                    return Err(CheckErr::MismatchedTypes {
+                        expected: Type::Function(Function {
+                            params: Vec::new(),
+                            returns: Box::default(),
+                        }),
+                        recieved: base.clone(),
+                    });
+                }
+            }
+            Suffix::Method(Method {
+                method_name: name, ..
+            }) => {
+                if name == &"new" {
+                    return Ok(base);
+                } else if let Some(method) = base.get_field(name) {
+                    base = method;
+                } else {
+                    return Err(CheckErr::NoSuchMethod((*name).to_owned()));
                 }
             }
         }
 
-        Ok(type_.clone())
+        Ok(base)
     }
 
     fn check_binop(&self, binop: &BinOp, type_env: &TypeEnv) -> Result<Type, CheckErr> {
@@ -598,26 +545,26 @@ impl<'src> TypeChecker<'src, '_> {
                 let lhs_type = self.check_expr(binop.lhs, type_env)?;
                 let rhs_type = self.check_expr(binop.rhs, type_env)?;
 
-                if lhs_type != rhs_type {
+                if lhs_type == rhs_type {
+                    Ok(lhs_type)
+                } else {
                     Err(CheckErr::MismatchedTypes {
                         expected: lhs_type,
                         recieved: rhs_type,
                     })
-                } else {
-                    Ok(lhs_type)
                 }
             }
             OpKind::Equ | OpKind::Neq | OpKind::Gre | OpKind::Grq | OpKind::Les | OpKind::Leq => {
                 let lhs_type = self.check_expr(binop.lhs, type_env)?;
                 let rhs_type = self.check_expr(binop.rhs, type_env)?;
 
-                if lhs_type != rhs_type {
+                if lhs_type == rhs_type {
+                    Ok(Type::Boolean)
+                } else {
                     Err(CheckErr::MismatchedTypes {
                         expected: lhs_type,
                         recieved: rhs_type,
                     })
-                } else {
-                    Ok(Type::Boolean)
                 }
             }
             OpKind::Cat => Ok(Type::String),

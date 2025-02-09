@@ -216,7 +216,8 @@ pub enum OpKind {
 }
 
 impl OpKind {
-    pub fn to_lua(&self) -> &'static str {
+    #[inline]
+    pub const fn to_lua(&self) -> &'static str {
         match self {
             OpKind::Add => "+",
             OpKind::Sub => "-",

@@ -40,7 +40,7 @@ fn benchmark_lexer(c: &mut Criterion) {
                 );
             }
             start.elapsed()
-        })
+        });
     });
 }
 
@@ -77,7 +77,7 @@ fn benchmark_parser(c: &mut Criterion) {
             }
 
             elapsed
-        })
+        });
     });
 }
 
@@ -85,7 +85,7 @@ fn benchmark_typechecker(c: &mut Criterion) {
     let mut type_env_orig = TypeEnv::default();
     let includes = ["includes/base.ty", "includes/math.ty"];
     for filename in includes {
-        add_defines(Path::new(filename), &mut type_env_orig)
+        add_defines(Path::new(filename), &mut type_env_orig);
     }
 
     let contents = std::fs::read_to_string("test/test.ty").unwrap_or_else(|e| panic!("{e}"));
@@ -134,7 +134,7 @@ fn benchmark_typechecker(c: &mut Criterion) {
                 elapsed += start.elapsed();
             }
             elapsed
-        })
+        });
     });
 }
 
@@ -176,7 +176,7 @@ fn benchmark_compiler(c: &mut Criterion) {
                 elapsed += start.elapsed();
             }
             elapsed
-        })
+        });
     });
 }
 
@@ -219,7 +219,7 @@ fn benchmark_transpiler(c: &mut Criterion) {
                 black_box(compiler.result);
             }
             elapsed
-        })
+        });
     });
 }
 
@@ -228,7 +228,7 @@ fn benchmark_all_compile(c: &mut Criterion) {
     let includes = ["includes/base.ty", "includes/math.ty"];
     let contents = std::fs::read_to_string("test/test.ty").unwrap_or_else(|e| panic!("{e}"));
     for filename in includes {
-        add_defines(Path::new(filename), &mut type_env_orig)
+        add_defines(Path::new(filename), &mut type_env_orig);
     }
 
     c.bench_function("all [compile]", |b| {
@@ -277,7 +277,7 @@ fn benchmark_all_compile(c: &mut Criterion) {
                 black_box(type_env);
             }
             elapsed
-        })
+        });
     });
 }
 
@@ -286,7 +286,7 @@ fn benchmark_all_transpile(c: &mut Criterion) {
     let includes = ["includes/base.ty", "includes/math.ty"];
     let contents = std::fs::read_to_string("test/test.ty").unwrap_or_else(|e| panic!("{e}"));
     for filename in includes {
-        add_defines(Path::new(filename), &mut type_env_orig)
+        add_defines(Path::new(filename), &mut type_env_orig);
     }
 
     c.bench_function("all [transpile]", |b| {
@@ -334,7 +334,7 @@ fn benchmark_all_transpile(c: &mut Criterion) {
                 black_box(type_env);
             }
             elapsed
-        })
+        });
     });
 }
 

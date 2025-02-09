@@ -49,7 +49,7 @@ impl<'a, K: Eq, V> ScopedMap<'a, K, V> {
     }
 
     pub fn parent_len(&self) -> usize {
-        self.parent_scopes.map(Self::len).unwrap_or(0)
+        self.parent_scopes.map_or(0, Self::len)
     }
 
     pub fn push(&mut self, key: K, val: V) {

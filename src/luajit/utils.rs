@@ -118,9 +118,7 @@ pub mod unescape {
                         loop {
                             value = (value << 4) | (to_digit_hex(c) as u32);
 
-                            if value >= 0x110000 {
-                                panic!("bad unicode escape")
-                            }
+                            assert!(value < 0x110000, "bad unicode escape");
 
                             c = chars.next().unwrap();
                             if c == '}' {
@@ -134,19 +132,17 @@ pub mod unescape {
                     '0'..='9' => {
                         let mut value = c as u32 - '0' as u32;
 
-                        if let Some(c) = chars.next_if(|c| c.is_ascii_digit()) {
+                        if let Some(c) = chars.next_if(char::is_ascii_digit) {
                             value *= 10;
                             value += c as u32 - '0' as u32;
 
-                            if let Some(c) = chars.next_if(|c| c.is_ascii_digit()) {
+                            if let Some(c) = chars.next_if(char::is_ascii_digit) {
                                 value *= 10;
                                 value += c as u32 - '0' as u32;
                             }
                         }
 
-                        if value > 255 {
-                            panic!("bad escape");
-                        }
+                        assert!(value <= 255, "bad escape");
 
                         value as u8 as char
                     }

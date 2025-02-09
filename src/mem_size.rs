@@ -10,7 +10,7 @@ pub trait DeepSize {
 
 impl<T: DeepSize> DeepSize for Vec<T> {
     fn deep_size_of_children(&self) -> usize {
-        self.iter().map(|it| it.deep_size_of()).sum()
+        self.iter().map(DeepSize::deep_size_of).sum()
     }
 }
 
@@ -22,7 +22,7 @@ impl<T: DeepSize> DeepSize for Box<T> {
 
 impl<T: DeepSize> DeepSize for Box<[T]> {
     fn deep_size_of_children(&self) -> usize {
-        self.iter().map(|it| it.deep_size_of()).sum()
+        self.iter().map(DeepSize::deep_size_of).sum()
     }
 }
 
@@ -243,7 +243,7 @@ mod type_env {
             self.current_scope.deep_size_of_children()
                 + self
                     .parent_scopes
-                    .map(|it| it.deep_size_of_children())
+                    .map(DeepSize::deep_size_of_children)
                     .unwrap_or_default()
         }
     }

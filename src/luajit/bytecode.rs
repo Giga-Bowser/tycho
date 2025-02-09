@@ -40,7 +40,7 @@ pub fn dump_bc(header: &Header, protos: &[Proto]) -> Vec<u8> {
 }
 
 pub fn read_dump(vec: &[u8]) -> (Header, Vec<Proto>) {
-    let mut vec = VecDeque::from_iter(vec.iter().cloned());
+    let mut vec = VecDeque::from_iter(vec.iter().copied());
     let magic = vec.drain(..3);
     assert!(
         magic.into_iter().eq(BC_MAGIC.into_iter()),
@@ -54,7 +54,7 @@ pub fn read_dump(vec: &[u8]) -> (Header, Vec<Proto>) {
 
     while *vec.front().unwrap() != 0x00 {
         let _proto_len = uleb128::read_usize(&mut vec);
-        protos.push(Proto::read(&mut vec))
+        protos.push(Proto::read(&mut vec));
     }
 
     vec.pop_front();
@@ -127,7 +127,7 @@ impl Proto {
 
         let mut gc_constants = Vec::with_capacity(gc_constants_len);
         for _ in 0..gc_constants_len {
-            gc_constants.push(GCConstant::read(vec))
+            gc_constants.push(GCConstant::read(vec));
         }
 
         let mut number_constants = Vec::with_capacity(number_constants_len);
@@ -177,11 +177,12 @@ bitflags! {
         const FFI = 0b00000100;
         const NOJIT = 0b00001000;
         const ILOOP = 0b00010000;
+
+        const DUMP = 0b00011111;
+        
         // Only used during compiling
         const HAS_RETURN = 0b00100000;
         const FIXUP_RETURN = 0b01000000;
-
-        const DUMP = 0b00011111;
     }
 }
 
@@ -264,7 +265,7 @@ impl GCConstant {
             }
             GCConstant::Table(table) => {
                 uleb128::write_usize(vec, discrim);
-                table.write(vec)
+                table.write(vec);
             }
             GCConstant::Str(s) => {
                 let s = unescape(s);
@@ -376,7 +377,7 @@ impl TValue {
                     uleb128::write_u32(vec, int_n as u32);
                 } else {
                     vec.push(4);
-                    uleb128::write_usize(vec, n.to_bits() as usize)
+                    uleb128::write_usize(vec, n.to_bits() as usize);
                 }
             }
             TValue::String(s) => {
@@ -735,6 +736,7 @@ impl BCOp {
     }
 
     #[inline]
+    #[must_use]
     pub const fn transform(self, from: Self, to: Self) -> Self {
         let offset = u8::wrapping_sub(to as u8, from as u8);
         BCOp::from_u8(u8::wrapping_add(self as u8, offset))

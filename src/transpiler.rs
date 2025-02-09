@@ -355,7 +355,7 @@ impl<'src, 'pool> Transpiler<'src, 'pool> {
                 self.result.push(')');
             }
             Suffix::Access(Access { field_name }) => {
-                format_to!(self.result, ".{field_name}")
+                format_to!(self.result, ".{field_name}");
             }
             Suffix::Index(Index { key }) => {
                 self.result.push('[');
@@ -422,7 +422,7 @@ impl<'src, 'pool> Transpiler<'src, 'pool> {
                     None
                 }
             }
-            _ => None,
+            Expr::Simple(_) => None,
         }
     }
 

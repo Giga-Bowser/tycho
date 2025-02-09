@@ -334,11 +334,11 @@ impl<'src> Parser<'src, '_> {
 
                     let mut new_lhs_arr = Vec::new();
 
-                    for SuffixedExpr { val, suffixes } in lhs_arr.into_iter() {
+                    for SuffixedExpr { val, suffixes } in lhs_arr {
                         if let Expr::Name(name) = self.pool[val] {
                             assert!(suffixes.is_empty());
 
-                            new_lhs_arr.push(name)
+                            new_lhs_arr.push(name);
                         } else {
                             return Err(ParseError::EmptyError);
                         }
@@ -487,7 +487,7 @@ impl<'src> Parser<'src, '_> {
     }
 
     fn expr_impl(&mut self, typelist: &TypeList, limit: u8) -> Result<ExprRef, ParseError> {
-        let mut result = if let Some(op) = get_unop(&self.tokens[0].kind) {
+        let mut result = if let Some(op) = get_unop(self.tokens[0].kind) {
             self.tokens.pop_front();
             let val = self.expr_impl(typelist, 12)?;
 
@@ -630,7 +630,7 @@ impl<'src> Parser<'src, '_> {
 
                     params.push((argname.to_owned(), self.parse_type(typelist)?));
                 } else {
-                    params.push(("".to_owned(), self.parse_type(typelist)?));
+                    params.push((String::new(), self.parse_type(typelist)?));
                 }
 
                 if self.tokens[0].kind == RParen {
@@ -714,9 +714,9 @@ impl<'src> Parser<'src, '_> {
                 let constructor = Some(self.parse_struct_constructor(typelist)?);
                 self.tokens.expect(RCurly)?;
                 Ok(StructDecl {
+                    name,
                     type_,
                     constructor,
-                    name,
                 })
             }
             _ => Err(ParseError::UnexpectedToken(UnexpectedToken {
@@ -749,7 +749,7 @@ impl<'src> Parser<'src, '_> {
 
                     params.push((argname.to_owned(), self.parse_type(typelist)?));
                 } else {
-                    params.push(("".to_owned(), self.parse_type(typelist)?));
+                    params.push((String::new(), self.parse_type(typelist)?));
                 }
 
                 if self.tokens[0].kind == RParen {
@@ -868,7 +868,7 @@ impl<'src> Parser<'src, '_> {
                         args.push((name.to_owned(), self.parse_type(typelist)?));
                     } else {
                         // unnamed param
-                        args.push(("".to_owned(), self.parse_type(typelist)?));
+                        args.push((String::new(), self.parse_type(typelist)?));
                     }
 
                     if self.tokens[0].kind == RParen {
@@ -876,7 +876,7 @@ impl<'src> Parser<'src, '_> {
                         break;
                     }
 
-                    self.tokens.expect(Comma)?
+                    self.tokens.expect(Comma)?;
                 }
 
                 Ok(Type::Function(Function {
@@ -908,7 +908,7 @@ impl<'src> Parser<'src, '_> {
     }
 
     fn range_expr_impl(&mut self, typelist: &TypeList, limit: u8) -> Result<ExprRef, ParseError> {
-        let mut result = if let Some(op) = get_unop(&self.tokens[0].kind) {
+        let mut result = if let Some(op) = get_unop(self.tokens[0].kind) {
             self.tokens.pop_front();
             let val = self.range_expr_impl(typelist, 12)?;
 
@@ -960,10 +960,12 @@ impl TypeList {
         }
     }
 
+    #[inline]
     pub fn insert(&mut self, k: String, v: Type) -> Option<Type> {
         self.map.insert(k, v)
     }
 
+    #[inline]
     pub fn contains(&self, k: &str) -> bool {
         self.map.contains_key(k)
     }
@@ -1032,7 +1034,7 @@ fn get_op(tok: TokenKind) -> Option<(OpKind, Precedence)> {
     }
 }
 
-fn get_unop(tok: &TokenKind) -> Option<UnOpKind> {
+fn get_unop(tok: TokenKind) -> Option<UnOpKind> {
     match tok {
         Minus => Some(UnOpKind::Neg),
         Octothorpe => Some(UnOpKind::Len),

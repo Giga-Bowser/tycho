@@ -83,15 +83,15 @@ impl PartialEq for Type {
         }
 
         if let Self::Table(TableType { key_type, val_type }) = self {
-            if let Self::Table(TableType {
+            let Self::Table(TableType {
                 key_type: rhs_key,
                 val_type: rhs_val,
             }) = rhs
-            {
-                return key_type == rhs_key && val_type == rhs_val;
-            } else {
+            else {
                 unreachable!() // we know they have the same discriminant
-            }
+            };
+
+            return key_type == rhs_key && val_type == rhs_val;
         }
 
         true
@@ -123,15 +123,15 @@ impl Type {
         }
 
         if let Type::Table(TableType { key_type, val_type }) = self {
-            if let Type::Table(TableType {
+            let Type::Table(TableType {
                 key_type: rhs_key,
                 val_type: rhs_val,
             }) = rhs
-            {
-                return key_type.can_equal(rhs_key) && val_type.can_equal(rhs_val);
-            } else {
+            else {
                 unreachable!() // we know they have the same discriminant
-            }
+            };
+
+            return key_type.can_equal(rhs_key) && val_type.can_equal(rhs_val);
         }
 
         true
