@@ -393,9 +393,9 @@ for name, test in tests {
 	result := blue .. name .. ": " .. reset
 	ok, err := pcall(func() { test(T) })
 	if ok {
-		result = result .. green .. "ok, computer"
+		result = result .. green .. "passed"
 	} else {
-		result = result .. red .. "test failed"
+		result = result .. red .. "failed"
 		result = result .. "\n" .. err
 	}
 

@@ -1,13 +1,11 @@
 require("lualib.tycho")
-local factorial
-factorial = function(n)
+local function factorial(n)
 	if n == 0 then
 		return 1
 	end
 	return (n * factorial(n - 1))
 end
-local countSpaces
-countSpaces = function(str)
+local function countSpaces(str)
 	local count = 0
 	for i = 1, #str do
 		if (str[i] == " ") then
@@ -16,12 +14,10 @@ countSpaces = function(str)
 	end
 	return count
 end
-local lerp
-lerp = function(a, b, t)
+local function lerp(a, b, t)
 	return (1 - t) * a + t * b
 end
-local sign
-sign = function(n)
+local function sign(n)
 	local val = 0
 	if n > 0 then
 		val = 1
@@ -30,16 +26,13 @@ sign = function(n)
 	end
 	return val
 end
-local clamp
-clamp = function(value, min, max)
+local function clamp(value, min, max)
 	return math.min(math.max(value, min), max)
 end
-local clampMag
-clampMag = function(value, min, max)
+local function clampMag(value, min, max)
 	return (sign(value) * clamp(math.abs(value), math.abs(min), math.abs(max)))
 end
-local while_break_example
-while_break_example = function()
+local function while_break_example()
 	local i = 0
 	while i < 10 do
 		local n = math.random(20)
@@ -49,8 +42,7 @@ while_break_example = function()
 		i = i + 1
 	end
 end
-local getTrapezoidSpeed
-getTrapezoidSpeed = function(startSpeed, middleSpeed, endSpeed, totalDistance, rampUpDistance, rampDownDistance, currentDistance)
+local function getTrapezoidSpeed(startSpeed, middleSpeed, endSpeed, totalDistance, rampUpDistance, rampDownDistance, currentDistance)
 	if rampDownDistance + rampUpDistance > totalDistance then
 		if currentDistance < 0 then
 			return startSpeed
@@ -72,8 +64,7 @@ getTrapezoidSpeed = function(startSpeed, middleSpeed, endSpeed, totalDistance, r
 		return endSpeed
 	end
 end
-local bezier
-bezier = function(t, p1, p2, p3, p4)
+local function bezier(t, p1, p2, p3, p4)
 	local q1 = lerp(p1, p2, t)
 	local q2 = lerp(p2, p3, t)
 	local q3 = lerp(p3, p4, t)
@@ -81,8 +72,7 @@ bezier = function(t, p1, p2, p3, p4)
 	local r2 = lerp(q2, q3, t)
 	return lerp(r1, r2, t)
 end
-local doGrossRampStuff
-doGrossRampStuff = function(curr, targ, accel, decel)
+local function doGrossRampStuff(curr, targ, accel, decel)
 	if ((curr == 0 or ((curr > 0 and targ > curr))) or ((curr < 0 and targ < curr))) then
 		local change = (math.min(math.abs(curr - targ), accel) * sign(targ - curr))
 		curr = curr + change
@@ -92,8 +82,7 @@ doGrossRampStuff = function(curr, targ, accel, decel)
 	end
 	return curr
 end
-local deadband
-deadband = function(value, band)
+local function deadband(value, band)
 	if value > band then
 		return (value - band) / (1 - band)
 	elseif value < -band then
@@ -199,8 +188,7 @@ local T = {}
 T.__index = T
 local tests = {
 }
-local test
-test = function(name, f)
+local function test(name, f)
 	tests[name] = f
 end
 local reset = "\27[0m"
@@ -305,9 +293,9 @@ for name, test in pairs(tests) do
 		test(T)
 	end)
 	if ok then
-		result = result .. green .. "ok, computer"
+		result = result .. green .. "passed"
 	else
-		result = result .. red .. "test failed"
+		result = result .. red .. "failed"
 		result = result .. "\n" .. err
 	end
 	result = result .. reset
