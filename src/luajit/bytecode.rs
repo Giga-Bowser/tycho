@@ -3,11 +3,18 @@
 use std::{
     collections::{HashMap, VecDeque},
     hash::Hash,
+    ops::{Index, IndexMut},
 };
 
 use bitflags::bitflags;
 
-use crate::luajit::utils::uleb128;
+use crate::{
+    luajit::{
+        utils::{uleb128, unescape::unescape},
+        TValue,
+    },
+    parser::ast,
+};
 
 const BC_MAGIC: [u8; 3] = [0x1B, b'L', b'J'];
 const BC_VERSION: u8 = 2;
@@ -55,22 +62,19 @@ pub fn read_dump(vec: &[u8]) -> (Header, Vec<Proto>) {
     (header, protos)
 }
 
-#[derive(Debug)]
-pub struct Header {
-    big_endian: bool,
-    strip: bool,
-    ffi: bool,
-    fr2: bool,
+bitflags! {
+    #[derive(Debug)]
+    pub struct Header: u8 {
+        const BIG_ENDIAN = 0b0001;
+        const STRIP = 0b0010;
+        const FFI = 0b0100;
+        const FR2 = 0b1000;
+    }
 }
 
 impl Default for Header {
     fn default() -> Self {
-        Self {
-            big_endian: false,
-            strip: true,
-            ffi: false,
-            fr2: true,
-        }
+        Header::STRIP | Header::FR2
     }
 }
 
@@ -78,28 +82,11 @@ impl Header {
     pub fn read(vec: &mut VecDeque<u8>) -> Self {
         let byte = vec.pop_front().unwrap();
 
-        let big_endian = byte & 0b0001 != 0;
-        let strip = byte & 0b0010 != 0;
-        let ffi = byte & 0b0100 != 0;
-        let fr2 = byte & 0b1000 != 0;
-
-        Header {
-            big_endian,
-            strip,
-            ffi,
-            fr2,
-        }
+        Header::from_bits_truncate(byte)
     }
 
     pub fn write(&self, vec: &mut Vec<u8>) {
-        let mut flags = 0;
-
-        flags |= if self.big_endian { 0b0001 } else { 0 };
-        flags |= if self.strip { 0b0010 } else { 0 };
-        flags |= if self.ffi { 0b0100 } else { 0 };
-        flags |= if self.fr2 { 0b1000 } else { 0 };
-
-        vec.push(flags);
+        vec.push(self.bits());
     }
 }
 
@@ -108,9 +95,8 @@ pub struct Proto {
     pub flags: ProtoFlags,
     pub num_params: u8,
     pub frame_size: u8,
-    /// Instructions
-    pub bcins: Vec<BCInstr>,
-    pub upvalue_data: Vec<u16>,
+    pub instructions: Vec<BCInstr>,
+    pub upvalue_data: Vec<UVData>,
     pub gc_constants: Vec<GCConstant>,
     pub number_constants: Vec<f64>,
 }
@@ -128,15 +114,15 @@ impl Proto {
 
         // read body
         let bytes: Vec<u8> = vec.drain(..bcins_len * size_of::<BCInstr>()).collect();
-        let bcins = bytes
+        let instructions = bytes
             .chunks_exact(size_of::<BCInstr>())
             .map(|it| BCInstr::from_bytes(it.try_into().unwrap()))
             .collect();
 
         let bytes: Vec<u8> = vec.drain(..upvalue_data_len * size_of::<u16>()).collect();
         let upvalue_data = bytes
-            .chunks_exact(size_of::<u16>())
-            .map(|it| u16::from_le_bytes(it.try_into().unwrap()))
+            .chunks_exact(2)
+            .map(|it| UVData::from_bytes(it.try_into().unwrap()))
             .collect();
 
         let mut gc_constants = Vec::with_capacity(gc_constants_len);
@@ -153,7 +139,7 @@ impl Proto {
             flags,
             num_params,
             frame_size,
-            bcins,
+            instructions,
             upvalue_data,
             gc_constants,
             number_constants,
@@ -162,17 +148,17 @@ impl Proto {
 
     pub fn write(&self, vec: &mut Vec<u8>) {
         // write header
-        vec.push(self.flags.bits());
+        vec.push(self.flags.intersection(ProtoFlags::DUMP).bits());
         vec.push(self.num_params);
         vec.push(self.frame_size);
         vec.push(self.upvalue_data.len() as u8);
         uleb128::write_usize(vec, self.gc_constants.len());
         uleb128::write_usize(vec, self.number_constants.len());
-        uleb128::write_usize(vec, self.bcins.len());
+        uleb128::write_usize(vec, self.instructions.len());
 
         // write body
-        vec.extend(self.bcins.iter().flat_map(|it| it.to_bytes()));
-        vec.extend(self.upvalue_data.iter().flat_map(|it| it.to_le_bytes()));
+        vec.extend(self.instructions.iter().flat_map(|it| it.to_bytes()));
+        vec.extend(self.upvalue_data.iter().flat_map(|it| it.to_bytes()));
         for gc_constant in &self.gc_constants {
             gc_constant.write(vec);
         }
@@ -184,7 +170,7 @@ impl Proto {
 }
 
 bitflags! {
-    #[derive(Debug, Default)]
+    #[derive(Debug, Default, Clone, Copy)]
     pub struct ProtoFlags: u8 {
         const CHILD = 0b00000001;
         const VARARG = 0b00000010;
@@ -194,12 +180,42 @@ bitflags! {
         // Only used during compiling
         const HAS_RETURN = 0b00100000;
         const FIXUP_RETURN = 0b01000000;
+
+        const DUMP = 0b00011111;
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct UVData {
+    pub flags: UVFlags,
+    pub reg: u8,
+}
+
+impl UVData {
+    pub fn from_bytes(bytes: [u8; 2]) -> Self {
+        Self {
+            flags: UVFlags::from_bits_retain(bytes[1]),
+            reg: bytes[0],
+        }
+    }
+
+    pub fn to_bytes(self) -> [u8; 2] {
+        [self.reg, self.flags.bits()]
+    }
+}
+
+bitflags! {
+    #[derive(Debug, Default, Clone, Copy)]
+    pub struct UVFlags: u8 {
+        const IMMUTABLE = 0b01000000;
+        const LOCAL = 0b10000000;
+    }
+}
+
+#[derive(Clone)]
 pub enum GCConstant {
     Child,
-    Table(KTable),
+    Table(TemplateTable),
     // FFI stuff:
     // I64,
     // U64,
@@ -230,7 +246,7 @@ impl GCConstant {
         let discrim = uleb128::read_usize(vec);
         match discrim {
             0 => GCConstant::Child,
-            1 => GCConstant::Table(KTable::read(vec)),
+            1 => GCConstant::Table(TemplateTable::read(vec)),
             2..=4 => todo!("haven't implemented FFI stuff yet"),
             n => {
                 let len = n - 5;
@@ -251,6 +267,7 @@ impl GCConstant {
                 table.write(vec)
             }
             GCConstant::Str(s) => {
+                let s = unescape(s);
                 uleb128::write_usize(vec, discrim + s.len());
                 vec.extend(s.as_bytes());
             }
@@ -258,25 +275,32 @@ impl GCConstant {
     }
 }
 
-#[derive(Debug, Default)]
-pub struct KTable {
-    array: Vec<KTableVal>,
-    hash: HashMap<KTableVal, KTableVal>,
+#[derive(Debug, Default, Clone)]
+pub struct TemplateTable {
+    pub array: Vec<TValue>,
+    pub hash: HashMap<TValue, TValue>,
 }
 
-impl KTable {
+impl TemplateTable {
+    pub fn new() -> Self {
+        Self {
+            array: vec![TValue::Nil],
+            ..Default::default()
+        }
+    }
+
     pub fn read(vec: &mut VecDeque<u8>) -> Self {
-        let mut result = KTable::default();
+        let mut result = TemplateTable::default();
         let array_len = uleb128::read_usize(vec);
         let hash_len = uleb128::read_usize(vec);
 
         for _ in 0..array_len {
-            result.array.push(KTableVal::read(vec));
+            result.array.push(TValue::read(vec));
         }
 
         for _ in 0..hash_len {
-            let key = KTableVal::read(vec);
-            let val = KTableVal::read(vec);
+            let key = TValue::read(vec);
+            let val = TValue::read(vec);
             result.hash.insert(key, val);
         }
 
@@ -294,132 +318,58 @@ impl KTable {
             val.write(vec, true);
         }
     }
-}
 
-// pub struct TValue(pub i64);
-
-// pub enum TValueKind {
-//     Nil,
-//     False,
-//     True,
-//     LightUD,
-//     Str,
-//     Thread,
-//     Proto,
-//     Func,
-//     CData,
-//     Tab,
-//     UData,
-//     Num,
-// }
-
-// const TOP17: u32 = 0x1FFFF;
-// const TNIL: u32 = TOP17;
-// const TFALSE: u32 = TOP17 & !1;
-// const TTRUE: u32 = TOP17 & !2;
-// const TLIGHTUD: u32 = TOP17 & !3;
-// const TSTR: u32 = TOP17 & !4;
-// const TUPVAL: u32 = TOP17 & !5;
-// const TTHREAD: u32 = TOP17 & !6;
-// const TPROTO: u32 = TOP17 & !7;
-// const TFUNC: u32 = TOP17 & !8;
-// const TTRACE: u32 = TOP17 & !9;
-// const TCDATA: u32 = TOP17 & !10;
-// const TTAB: u32 = TOP17 & !11;
-// const TUDATA: u32 = TOP17 & !12;
-
-// impl TValue {
-//     fn itype(&self) -> u32 {
-//         (self.0 >> 47) as u32
-//     }
-
-//     pub fn is_nil(&self) -> bool {
-//         self.0 == -1
-//     }
-
-//     pub fn kind(&self) -> TValueKind {
-//         match self.itype() {
-//             TNIL => TValueKind::Nil,
-//             TFALSE => TValueKind::False,
-//             TTRUE => TValueKind::True,
-//             TLIGHTUD => TValueKind::LightUD,
-//             TSTR => TValueKind::Str,
-//             TUPVAL => TValueKind::Thread,
-//             TTHREAD => TValueKind::Proto,
-//             TPROTO => TValueKind::Func,
-//             TFUNC => TValueKind::Thread,
-//             TTRACE => TValueKind::Proto,
-//             TCDATA => TValueKind::CData,
-//             TTAB => TValueKind::Tab,
-//             TUDATA => TValueKind::UData,
-//             _ => TValueKind::Num,
-//         }
-//     }
-
-//     // pub fn write(&self, vec: &mut Vec<u8>) {
-//     //     match self.kind() {
-//     //         TValueKind::Str => {
-
-//     //         }
-//     //     }
-//     // }
-// }
-
-#[derive(Debug, PartialEq)]
-pub enum KTableVal {
-    Nil,
-    False,
-    True,
-    Num(f64),
-    Str(String),
-}
-
-impl Eq for KTableVal {}
-
-impl Hash for KTableVal {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        core::mem::discriminant(self).hash(state);
-        match self {
-            KTableVal::Num(n) => {
-                n.to_bits().hash(state);
+    pub fn insert(&mut self, k: TValue, v: TValue) -> Option<TValue> {
+        match k {
+            TValue::Number(n) => {
+                let int_n = n as i32 as usize;
+                if int_n as f64 == n && int_n < self.array.len() {
+                    let old = std::mem::replace(&mut self.array[int_n], v);
+                    if let TValue::Nil = old {
+                        None
+                    } else {
+                        Some(old)
+                    }
+                } else {
+                    self.hash.insert(k, v)
+                }
             }
-            KTableVal::Str(s) => {
-                s.hash(state);
-            }
-            _ => (),
+            TValue::Nil => panic!("template table cannot be indexed by nil"),
+            _ => self.hash.insert(k, v),
         }
     }
 }
 
-impl KTableVal {
+impl TValue {
     pub fn read(vec: &mut VecDeque<u8>) -> Self {
-        let tag = uleb128::read_u32(vec);
+        let tag = uleb128::read_usize(vec);
         match tag {
-            0 => KTableVal::Nil,
-            1 => KTableVal::False,
-            2 => KTableVal::True,
+            0 => TValue::Nil,
+            1 => TValue::False,
+            2 => TValue::True,
             3 => {
                 let n = uleb128::read_u32(vec);
-                KTableVal::Num(n as f64)
+                TValue::Number(n as f64)
             }
             4 => {
-                let bits = uleb128::read_usize(vec);
-                KTableVal::Num(f64::from_bits(bits as u64))
+                let lo = uleb128::read_u32(vec);
+                let hi = uleb128::read_u32(vec);
+                TValue::Number(f64::from_bits(((hi as u64) << 32) | lo as u64))
             }
             n => {
-                let len = n as usize - 5;
+                let len = n - 5;
                 let bytes: Vec<u8> = vec.drain(..len).collect();
-                KTableVal::Str(unsafe { String::from_utf8_unchecked(bytes) })
+                TValue::String(unsafe { String::from_utf8_unchecked(bytes) })
             }
         }
     }
 
     pub fn write(&self, vec: &mut Vec<u8>, narrow: bool) {
         match self {
-            KTableVal::Nil => vec.push(0),
-            KTableVal::False => vec.push(1),
-            KTableVal::True => vec.push(2),
-            KTableVal::Num(n) => {
+            TValue::Nil => vec.push(0),
+            TValue::False => vec.push(1),
+            TValue::True => vec.push(2),
+            TValue::Number(n) => {
                 let int_n = *n as i32;
                 if int_n as f64 == *n && narrow {
                     vec.push(3);
@@ -429,8 +379,10 @@ impl KTableVal {
                     uleb128::write_usize(vec, n.to_bits() as usize)
                 }
             }
-            KTableVal::Str(s) => {
+            TValue::String(s) => {
+                let s = unescape(s);
                 uleb128::write_usize(vec, 5 + s.len());
+                // i'm not happy about this either
                 vec.extend(s.as_bytes());
             }
         }
@@ -440,6 +392,110 @@ impl KTableVal {
 #[repr(transparent)]
 #[derive(Clone, Copy)]
 pub struct BCInstr(pub u32);
+
+impl BCInstr {
+    // i make these u32's because you're pretty much always
+    // comparing a larger integer type with these
+    pub const MAX_A: u32 = 0xFF;
+    pub const MAX_B: u32 = 0xFF;
+    pub const MAX_C: u32 = 0xFF;
+    pub const MAX_D: u32 = 0xFFFF;
+    pub const BIAS_J: u16 = 0x8000;
+
+    #[must_use]
+    #[inline]
+    pub const fn new_abc(op: BCOp, a: u8, b: u8, c: u8) -> Self {
+        Self(u32::from_le_bytes([op as u8, a, c, b]))
+    }
+
+    #[must_use]
+    #[inline]
+    pub const fn new_ad(op: BCOp, a: u8, d: u16) -> Self {
+        Self(u32::from_le_bytes([
+            op as u8,
+            a,
+            d.to_ne_bytes()[0],
+            d.to_ne_bytes()[1],
+        ]))
+    }
+
+    #[must_use]
+    #[inline]
+    pub const fn new_jmp(op: BCOp, a: u8, j: i16) -> Self {
+        BCInstr::new_ad(op, a, u16::wrapping_add(j as u16, BCInstr::BIAS_J))
+    }
+
+    #[inline]
+    pub const fn op(&self) -> BCOp {
+        unsafe { std::mem::transmute::<u8, BCOp>(self.0 as u8) }
+    }
+
+    #[inline]
+    pub const fn set_op(&mut self, val: BCOp) {
+        self.0 = (self.0 & 0xFFFFFF00) | (val as u32);
+    }
+
+    #[inline]
+    pub const fn a(&self) -> u8 {
+        (self.0 >> 8) as u8
+    }
+
+    #[inline]
+    pub const fn set_a(&mut self, val: u8) {
+        self.0 = (self.0 & 0xFFFF00FF) | ((val as u32) << 8);
+    }
+
+    #[inline]
+    pub const fn b(&self) -> u8 {
+        (self.0 >> 24) as u8
+    }
+
+    #[inline]
+    pub const fn set_b(&mut self, val: u8) {
+        self.0 = (self.0 & 0x00FFFFFF) | ((val as u32) << 24);
+    }
+
+    #[inline]
+    pub const fn c(&self) -> u8 {
+        (self.0 >> 16) as u8
+    }
+
+    #[inline]
+    pub const fn set_c(&mut self, val: u8) {
+        self.0 = (self.0 & 0xFF00FFFF) | ((val as u32) << 16);
+    }
+
+    #[inline]
+    pub const fn d(&self) -> u16 {
+        (self.0 >> 16) as u16
+    }
+
+    #[inline]
+    pub const fn set_d(&mut self, val: u16) {
+        self.0 = (self.0 & 0x0000FFFF) | ((val as u32) << 16);
+    }
+
+    #[inline]
+    pub const fn j(&self) -> i16 {
+        (self.d() as i32 - BCInstr::BIAS_J as i32) as i16
+    }
+
+    #[inline]
+    pub const fn set_j(&mut self, val: i16) {
+        self.set_d((val as i32 + BCInstr::BIAS_J as i32) as u16);
+    }
+
+    #[must_use]
+    #[inline]
+    pub const fn to_bytes(self) -> [u8; 4] {
+        self.0.to_le_bytes()
+    }
+
+    #[inline]
+    pub const fn from_bytes(bytes: [u8; 4]) -> Self {
+        BCInstr(u32::from_le_bytes(bytes))
+    }
+}
 
 impl std::fmt::Debug for BCInstr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -453,8 +509,8 @@ impl std::fmt::Debug for BCInstr {
                 c_mode,
             } => {
                 let a_str = format_operand8(self.a(), a_mode);
-                let b_str = format_operand8(self.a(), c_mode);
-                let c_str = format_operand8(self.a(), b_mode);
+                let b_str = format_operand8(self.a(), b_mode);
+                let c_str = format_operand8(self.a(), c_mode);
                 write!(f, "\x1b[36m{op_str:<6}\x1b[0m \x1b[31m{a_str:>3}\x1b[0m \x1b[32m{b_str:>3}\x1b[0m \x1b[34m{c_str:>3}\x1b[0m")
             }
             BCInsModes::AD { a_mode, d_mode } => {
@@ -470,97 +526,63 @@ impl std::fmt::Debug for BCInstr {
     }
 }
 
-fn format_operand8(val: u8, mode: BCOpMode) -> String {
-    match mode {
-        BCOpMode::Dst | BCOpMode::Base | BCOpMode::Var | BCOpMode::RBase => {
-            format!("r{val}")
-        }
-        BCOpMode::Upval => format!("^{val}"),
-        BCOpMode::None => String::new(),
-        _ => format!("{val}"),
+pub type BCPos = u32;
+// NOTE: i should be using an option, probably
+pub(crate) const NO_JMP: BCPos = !0;
+
+pub type BCReg = u32;
+pub(crate) const NO_REG: BCReg = 0xFF;
+
+#[derive(Debug, Clone, Default)]
+pub struct Bytecode {
+    pub vec: Vec<BCInstr>,
+}
+
+impl Bytecode {
+    #[inline]
+    pub fn len(&self) -> BCPos {
+        self.vec.len() as BCPos
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.vec.is_empty()
+    }
+
+    #[inline]
+    pub fn last(&self) -> &BCInstr {
+        &self[self.len() - 1]
+    }
+
+    #[inline]
+    pub fn last_mut(&mut self) -> &mut BCInstr {
+        let idx = self.len() - 1;
+        &mut self[idx]
+    }
+
+    #[inline]
+    pub fn pop(&mut self) -> BCInstr {
+        self.vec.pop().unwrap()
     }
 }
 
-fn format_operand16(val: u16, mode: BCOpMode) -> String {
-    match mode {
-        BCOpMode::Lits => format!("{}", val as i16),
-        BCOpMode::Pri => match val {
-            0 => "nil".to_owned(),
-            1 => "false".to_owned(),
-            2 => "true".to_owned(),
-            n => format!("{n}!"),
-        },
-        BCOpMode::Str | BCOpMode::Table | BCOpMode::CData | BCOpMode::Func => {
-            format!("#{}", val as i16)
-        }
-        BCOpMode::Dst | BCOpMode::Base | BCOpMode::Var | BCOpMode::RBase => {
-            format!("r{val}")
-        }
-        BCOpMode::Jump => format!("{}", (val - 0x8000) as i16),
-        _ => format!("{val}"),
+impl Index<BCPos> for Bytecode {
+    type Output = BCInstr;
+
+    fn index(&self, index: BCPos) -> &Self::Output {
+        &self.vec[index as usize]
     }
 }
 
-impl BCInstr {
-    pub const fn new_abc(op: BCOp, a: u8, b: u8, c: u8) -> BCInstr {
-        Self(u32::from_le_bytes([op as u8, a, c, b]))
-    }
-
-    pub const fn new_ad(op: BCOp, a: u8, d: u16) -> BCInstr {
-        Self(u32::from_le_bytes([
-            op as u8,
-            a,
-            d.to_ne_bytes()[0],
-            d.to_ne_bytes()[1],
-        ]))
-    }
-
-    pub const fn new_jmp(op: BCOp, a: u8, j: u16) -> BCInstr {
-        let d = j | 0x8000;
-        Self(u32::from_le_bytes([
-            op as u8,
-            a,
-            d.to_ne_bytes()[0],
-            d.to_ne_bytes()[1],
-        ]))
-    }
-
-    pub const fn op(&self) -> BCOp {
-        unsafe { std::mem::transmute::<u8, BCOp>((self.0 & 0xFF) as u8) }
-    }
-
-    pub const fn a(&self) -> u8 {
-        ((self.0 >> 8) & 0xFF) as u8
-    }
-
-    pub const fn b(&self) -> u8 {
-        (self.0 >> 24) as u8
-    }
-
-    pub const fn c(&self) -> u8 {
-        ((self.0 >> 16) & 0xFF) as u8
-    }
-
-    pub const fn d(&self) -> u16 {
-        (self.0 >> 16) as u16
-    }
-
-    pub const fn j(&self) -> u16 {
-        self.d() - 0x8000
-    }
-
-    pub const fn to_bytes(self) -> [u8; 4] {
-        self.0.to_le_bytes()
-    }
-
-    pub const fn from_bytes(bytes: [u8; 4]) -> Self {
-        BCInstr(u32::from_le_bytes(bytes))
+impl IndexMut<BCPos> for Bytecode {
+    fn index_mut(&mut self, index: BCPos) -> &mut Self::Output {
+        &mut self.vec[index as usize]
     }
 }
 
 #[allow(clippy::upper_case_acronyms, unused)]
 #[repr(u8)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BCOp {
     // Comparison ops. ORDER OPR.
     ISLT, //  var,    ___,    var,    lt
@@ -690,6 +712,43 @@ pub enum BCOp {
     FUNCCW, //rbase,  ___,    ___,    ___
 }
 
+impl BCOp {
+    pub const OFFSET_S: u8 = BCOp::ISEQS as u8 - BCOp::ISEQV as u8;
+    pub const OFFSET_N: u8 = BCOp::ISEQN as u8 - BCOp::ISEQV as u8;
+    pub const OFFSET_P: u8 = BCOp::ISEQP as u8 - BCOp::ISEQV as u8;
+
+    #[inline]
+    pub const fn from_u8(val: u8) -> Self {
+        debug_assert!(val <= 96);
+        unsafe { std::mem::transmute(val) }
+    }
+
+    #[inline]
+    pub fn from_ast(op: ast::OpKind) -> Self {
+        BCOp::from_u8(op as u8 + BCOp::ADDVV as u8)
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn invert(self) -> Self {
+        BCOp::from_u8((self as u8) ^ 1)
+    }
+
+    #[inline]
+    pub const fn transform(self, from: Self, to: Self) -> Self {
+        let offset = u8::wrapping_sub(to as u8, from as u8);
+        BCOp::from_u8(u8::wrapping_add(self as u8, offset))
+    }
+
+    #[inline]
+    pub fn is_ret(&self) -> bool {
+        matches!(
+            self,
+            BCOp::RETM | BCOp::RET | BCOp::RET0 | BCOp::RET1 | BCOp::CALLT | BCOp::CALLMT
+        )
+    }
+}
+
 #[allow(clippy::upper_case_acronyms)]
 pub enum BCInsModes {
     ABC {
@@ -726,7 +785,7 @@ impl BCInsModes {
     }
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone, Copy)]
 pub enum BCOpMode {
     // Mode A must be <= 7
     None,
@@ -768,6 +827,14 @@ impl BCOpMode {
             _ => panic!(),
         }
     }
+
+    /// Does the value of this operand mode represent a slot.
+    pub const fn is_slot(&self) -> bool {
+        matches!(
+            self,
+            BCOpMode::Dst | BCOpMode::Base | BCOpMode::Var | BCOpMode::RBase
+        )
+    }
 }
 
 const BC_MODES: [u16; 97] = [
@@ -780,6 +847,38 @@ const BC_MODES: [u16; 97] = [
     46722, 46722, 45826, 46724, 46724, 45828, 46724, 45060, 45060, 45828, 45060, 45060, 45828,
     45060, 45060,
 ];
+
+fn format_operand8(val: u8, mode: BCOpMode) -> String {
+    match mode {
+        BCOpMode::Dst | BCOpMode::Base | BCOpMode::Var | BCOpMode::RBase => {
+            format!("r{val}")
+        }
+        BCOpMode::Upval => format!("^{val}"),
+        BCOpMode::None => String::new(),
+        _ => format!("{val}"),
+    }
+}
+
+fn format_operand16(val: u16, mode: BCOpMode) -> String {
+    match mode {
+        BCOpMode::Dst | BCOpMode::Base | BCOpMode::Var | BCOpMode::RBase => {
+            format!("r{val}")
+        }
+        BCOpMode::Upval => format!("^{val}"),
+        BCOpMode::Lits => format!("{}", val as i16),
+        BCOpMode::Pri => match val {
+            0 => "nil".to_owned(),
+            1 => "false".to_owned(),
+            2 => "true".to_owned(),
+            n => format!("{n}!"),
+        },
+        BCOpMode::Str | BCOpMode::Table | BCOpMode::CData | BCOpMode::Func | BCOpMode::Num => {
+            format!("#{}", !val as i16)
+        }
+        BCOpMode::Jump => format!("{}", u16::wrapping_sub(val, BCInstr::BIAS_J) as i16),
+        _ => format!("{val}"),
+    }
+}
 
 fn read_number_constant(vec: &mut VecDeque<u8>) -> f64 {
     let is_num = vec.front().unwrap() & 1 == 1;
@@ -824,7 +923,7 @@ fn write_number_constant(vec: &mut Vec<u8>, n: f64) {
         let hi = (n.to_bits() >> 32) as u32;
         let lo = n.to_bits() as u32;
 
-        uleb128::write_u32(vec, 1 + ((2 * lo) | (lo & 0x80000000)));
+        uleb128::write_u32(vec, 1 + ((lo << 1) | (lo & 0x80000000)));
         if lo >= 0x80000000 {
             let last = vec.last_mut().unwrap();
             *last = (*last & 7) | ((lo >> 27) & 0x18) as u8;

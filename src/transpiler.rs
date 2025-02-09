@@ -67,10 +67,8 @@ impl<'src, 'pool> Transpiler<'src, 'pool> {
         };
 
         if decl.lhs.suffixes.is_empty() {
-            if let Expr::Simple(SimpleExpr::FuncNode(func)) = &self.pool[val] {
-                let name = decl.lhs.name;
-                format_to!(self.result, "local {name}{}{name} = ", self.newline());
-                self.transpile_func(func);
+            if let Expr::Simple(SimpleExpr::FuncNode(func_node)) = &self.pool[val] {
+                self.transpile_local_func(func_node, decl.lhs.name);
             } else {
                 format_to!(self.result, "local {} = ", decl.lhs.name);
                 self.transpile_expr(val);
@@ -244,6 +242,24 @@ impl<'src, 'pool> Transpiler<'src, 'pool> {
         self.result += "end";
     }
 
+    fn transpile_local_func(&mut self, func_node: &FuncNode, name: &str) {
+        format_to!(self.result, "local function {name}(");
+        let params = &func_node.type_.params;
+
+        if !params.is_empty() {
+            self.result += &params[0].0;
+
+            for param in &params[1..] {
+                self.result += ", ";
+                self.result += &param.0;
+            }
+        }
+
+        self.result.push(')');
+        self.transpile_block(&func_node.body);
+        self.result += "end";
+    }
+
     fn transpile_block(&mut self, block: &[Statement]) {
         self.indent();
         for statement in block {
@@ -257,7 +273,10 @@ impl<'src, 'pool> Transpiler<'src, 'pool> {
     fn transpile_struct_decl(&mut self, struct_decl: &StructDecl) {
         let newline = self.newline();
         let name = struct_decl.name;
-        format_to!(self.result, "local {name} = {{}}{newline}{name}.__index = {name}");
+        format_to!(
+            self.result,
+            "local {name} = {{}}{newline}{name}.__index = {name}"
+        );
 
         if let Some(constructor) = &struct_decl.constructor {
             self.result += &newline;
@@ -296,6 +315,8 @@ impl<'src, 'pool> Transpiler<'src, 'pool> {
                 }
                 FieldNode::ValField { val } => self.transpile_expr(*val),
             };
+
+            self.result.push(',');
 
             self.result += &self.newline();
         }

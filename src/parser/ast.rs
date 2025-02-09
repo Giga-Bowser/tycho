@@ -197,7 +197,7 @@ pub struct Method<'a> {
     pub args: Vec<ExprRef>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OpKind {
     Add,
     Sub,
@@ -205,12 +205,12 @@ pub enum OpKind {
     Div,
     Pow,
     Cat,
-    Equ,
     Neq,
-    Gre,
-    Grq,
+    Equ,
     Les,
+    Grq,
     Leq,
+    Gre,
     And,
     Or,
 }
@@ -236,7 +236,7 @@ impl OpKind {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum UnOpKind {
     Neg,
     Len,

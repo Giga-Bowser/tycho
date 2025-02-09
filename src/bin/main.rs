@@ -13,11 +13,9 @@ fn main() {
         TychoOpt::Build(build_opt) => {
             driver::main(build_opt);
         }
-        TychoOpt::Dump(dump_opt) => {
-            luajit::dump_main(dump_opt);
-        }
         TychoOpt::Read(read_opt) => {
             luajit::read_main(read_opt);
         }
+        TychoOpt::Print(print_opt) => driver::print_main(&print_opt),
     }
 }

@@ -729,7 +729,7 @@ impl<'src> TypeChecker<'src, '_> {
         // now we skip the comma
         i += 1;
 
-        while !(names[i] as char).is_ascii_whitespace() {
+        while names[i].is_ascii_whitespace() {
             i += 1;
         }
 

@@ -9,6 +9,10 @@ use mimalloc::MiMalloc;
 use tycho::{
     driver::add_defines,
     lexer::{Token, TokenKind, Tokens},
+    luajit::{
+        bytecode::{dump_bc, Header},
+        compiler::LJCompiler,
+    },
     parser::{pool::ExprPool, Parser, TypeList},
     transpiler::Transpiler,
     type_env::TypeEnv,
@@ -134,7 +138,7 @@ fn benchmark_typechecker(c: &mut Criterion) {
     });
 }
 
-fn benchmark_transpiler(c: &mut Criterion) {
+fn benchmark_compiler(c: &mut Criterion) {
     let contents = std::fs::read_to_string("test/test.ty").unwrap_or_else(|e| panic!("{e}"));
     let lex = TokenKind::lexer(&contents);
 
@@ -164,6 +168,48 @@ fn benchmark_transpiler(c: &mut Criterion) {
         b.iter_custom(|iters| {
             let mut elapsed = Duration::ZERO;
             for _i in 0..iters {
+                let mut compiler = LJCompiler::new(&pool);
+                let start = Instant::now();
+                compiler.compile_chunk(&statements);
+                compiler.fs_finish();
+                black_box(dump_bc(&Header::default(), &compiler.protos));
+                elapsed += start.elapsed();
+            }
+            elapsed
+        })
+    });
+}
+
+fn benchmark_transpiler(c: &mut Criterion) {
+    let contents = std::fs::read_to_string("test/test.ty").unwrap_or_else(|e| panic!("{e}"));
+    let lex = TokenKind::lexer(&contents);
+
+    let tokens: Tokens = lex
+        .spanned()
+        .map(|(t, r)| Token {
+            kind: t.unwrap(),
+            str: unsafe { contents.get_unchecked(r) },
+        })
+        .collect();
+
+    let mut typelist = TypeList::with_core();
+
+    let mut pool = ExprPool::new();
+    let mut parser = Parser {
+        tokens: tokens.clone(),
+        pool: &mut pool,
+    };
+
+    let mut statements = Vec::new();
+
+    while parser.tokens[0].kind != TokenKind::EndOfFile {
+        statements.push(parser.parse_statement(&mut typelist).unwrap());
+    }
+
+    c.bench_function("transpile", |b| {
+        b.iter_custom(|iters| {
+            let mut elapsed = Duration::ZERO;
+            for _i in 0..iters {
                 let mut compiler = Transpiler::new(&pool);
                 let start = Instant::now();
                 for stat in &statements {
@@ -177,7 +223,7 @@ fn benchmark_transpiler(c: &mut Criterion) {
     });
 }
 
-fn benchmark_all(c: &mut Criterion) {
+fn benchmark_all_compile(c: &mut Criterion) {
     let mut type_env_orig = TypeEnv::default();
     let includes = ["includes/base.ty", "includes/math.ty"];
     let contents = std::fs::read_to_string("test/test.ty").unwrap_or_else(|e| panic!("{e}"));
@@ -185,7 +231,65 @@ fn benchmark_all(c: &mut Criterion) {
         add_defines(Path::new(filename), &mut type_env_orig)
     }
 
-    c.bench_function("all", |b| {
+    c.bench_function("all [compile]", |b| {
+        b.iter_custom(|iters| {
+            let mut elapsed = Duration::ZERO;
+            for _i in 0..iters {
+                let mut type_env = type_env_orig.clone();
+                let contents = black_box(&contents);
+
+                let start = Instant::now();
+
+                let lex = TokenKind::lexer(contents);
+
+                let tokens: Tokens = lex
+                    .spanned()
+                    .map(|(t, r)| Token {
+                        kind: t.unwrap(),
+                        str: unsafe { contents.get_unchecked(r) },
+                    })
+                    .collect();
+
+                let mut typelist = TypeList::with_core();
+
+                let mut pool = ExprPool::new();
+                let mut parser = Parser {
+                    tokens: tokens.clone(),
+                    pool: &mut pool,
+                };
+
+                let mut statements = Vec::new();
+
+                while parser.tokens[0].kind != TokenKind::EndOfFile {
+                    statements.push(parser.parse_statement(&mut typelist).unwrap());
+                }
+
+                let typechecker = TypeChecker { pool: &pool };
+                let mut compiler = LJCompiler::new(&pool);
+                for stat in &statements {
+                    typechecker.check_statement(stat, &mut type_env).unwrap();
+                    compiler.compile_statement(black_box(stat));
+                    compiler.func_state.free_reg = compiler.func_state.nactvar;
+                }
+
+                elapsed += start.elapsed();
+                black_box(compiler.protos);
+                black_box(type_env);
+            }
+            elapsed
+        })
+    });
+}
+
+fn benchmark_all_transpile(c: &mut Criterion) {
+    let mut type_env_orig = TypeEnv::default();
+    let includes = ["includes/base.ty", "includes/math.ty"];
+    let contents = std::fs::read_to_string("test/test.ty").unwrap_or_else(|e| panic!("{e}"));
+    for filename in includes {
+        add_defines(Path::new(filename), &mut type_env_orig)
+    }
+
+    c.bench_function("all [transpile]", |b| {
         b.iter_custom(|iters| {
             let mut elapsed = Duration::ZERO;
             for _i in 0..iters {
@@ -239,7 +343,9 @@ criterion_group!(
     benchmark_lexer,
     benchmark_parser,
     benchmark_typechecker,
+    benchmark_compiler,
     benchmark_transpiler,
-    benchmark_all
+    benchmark_all_compile,
+    benchmark_all_transpile
 );
 criterion_main!(benches);

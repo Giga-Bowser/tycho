@@ -20,8 +20,8 @@ pub mod typecheck;
 pub enum TychoOpt {
     /// Build a file
     Build(BuildOpt),
-    Dump(DumpOpt),
     Read(ReadOpt),
+    Print(PrintOpt),
 }
 
 #[derive(StructOpt)]
@@ -36,20 +36,30 @@ pub struct BuildOpt {
     #[structopt(short, parse(from_os_str))]
     output: Option<PathBuf>,
 
+    /// Compile to bytecode
+    #[structopt(short)]
+    bc: bool,
+
     /// Enable verbose output
     #[structopt(short, long)]
     verbose: bool,
 }
 
 #[derive(StructOpt)]
-pub struct DumpOpt {
-    /// Output file, stdout if not present
-    #[structopt(short, parse(from_os_str))]
-    output: Option<PathBuf>,
-}
-
-#[derive(StructOpt)]
 pub struct ReadOpt {
     #[structopt(parse(from_os_str))]
     file: PathBuf,
+}
+
+#[derive(StructOpt)]
+pub struct PrintOpt {
+    #[structopt(parse(from_os_str))]
+    file: PathBuf,
+
+    #[structopt(parse(from_os_str))]
+    includes: Vec<PathBuf>,
+
+    /// Enable verbose output
+    #[structopt(short, long)]
+    verbose: bool,
 }
