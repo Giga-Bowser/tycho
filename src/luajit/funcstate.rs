@@ -1,6 +1,7 @@
-use std::collections::{hash_map::Entry, HashMap};
+use std::collections::hash_map::Entry;
 
 use bitflags::bitflags;
+use rustc_hash::FxHashMap;
 
 use crate::luajit::{
     bytecode::{BCInstr, BCOp, BCPos, BCReg, Bytecode, ProtoFlags, NO_JMP, NO_REG},
@@ -12,7 +13,7 @@ pub type VarIdx = u16;
 #[derive(Debug)]
 pub struct FuncState {
     /// Hash table for constants
-    pub kt: HashMap<TValue, BCReg>,
+    pub kt: FxHashMap<TValue, BCReg>,
     pub num_kn: usize,
     pub num_kgc: usize,
     pub last_target: BCPos,
@@ -54,7 +55,7 @@ bitflags! {
 impl Default for FuncState {
     fn default() -> Self {
         Self {
-            kt: HashMap::default(),
+            kt: FxHashMap::default(),
             num_kn: 0,
             num_kgc: 0,
             last_target: 0,

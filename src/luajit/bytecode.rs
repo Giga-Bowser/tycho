@@ -1,12 +1,13 @@
 //! LuaJIT bytecode dump format
 
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::VecDeque,
     hash::Hash,
     ops::{Index, IndexMut},
 };
 
 use bitflags::bitflags;
+use rustc_hash::FxHashMap;
 
 use crate::{
     luajit::{
@@ -179,7 +180,7 @@ bitflags! {
         const ILOOP = 0b00010000;
 
         const DUMP = 0b00011111;
-        
+
         // Only used during compiling
         const HAS_RETURN = 0b00100000;
         const FIXUP_RETURN = 0b01000000;
@@ -279,7 +280,7 @@ impl GCConstant {
 #[derive(Debug, Default, Clone)]
 pub struct TemplateTable {
     pub array: Vec<TValue>,
-    pub hash: HashMap<TValue, TValue>,
+    pub hash: FxHashMap<TValue, TValue>,
 }
 
 impl TemplateTable {
