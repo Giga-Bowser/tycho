@@ -550,6 +550,7 @@ impl<'src> Parser<'src, '_> {
                 self.tokens.pop_front();
                 let key = self.parse_expr(typelist)?;
                 self.tokens.expect(RSquare)?;
+                self.tokens.expect(Equal)?;
                 Ok(FieldNode::ExprField {
                     key,
                     val: self.parse_expr(typelist)?,
