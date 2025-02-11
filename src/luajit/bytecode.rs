@@ -284,9 +284,9 @@ pub struct TemplateTable {
 }
 
 impl TemplateTable {
-    pub fn new() -> Self {
+    pub fn with_size(array_len: usize) -> Self {
         Self {
-            array: vec![TValue::Nil],
+            array: vec![TValue::Nil; array_len],
             ..Default::default()
         }
     }
@@ -325,12 +325,18 @@ impl TemplateTable {
         match k {
             TValue::Number(n) => {
                 let int_n = n as i32 as usize;
-                if int_n as f64 == n && int_n < self.array.len() {
-                    let old = std::mem::replace(&mut self.array[int_n], v);
-                    if let TValue::Nil = old {
-                        None
+                if int_n as f64 == n {
+                    if int_n < self.array.len() {
+                        let old = std::mem::replace(&mut self.array[int_n], v);
+                        if let TValue::Nil = old {
+                            None
+                        } else {
+                            Some(old)
+                        }
                     } else {
-                        Some(old)
+                        self.array.resize(int_n + 1, TValue::Nil);
+                        self.array[int_n] = v;
+                        None
                     }
                 } else {
                     self.hash.insert(k, v)

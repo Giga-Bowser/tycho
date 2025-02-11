@@ -4,7 +4,7 @@ use bitflags::bitflags;
 use rustc_hash::FxHashMap;
 
 use crate::luajit::{
-    bytecode::{BCInstr, BCOp, BCPos, BCReg, Bytecode, ProtoFlags, NO_JMP, NO_REG},
+    bytecode::{BCInstr, BCOp, BCPos, BCReg, Bytecode, ProtoFlags, TemplateTable, NO_JMP, NO_REG},
     ExprDesc, ExprKind, TValue, VarFlags, VarInfo,
 };
 
@@ -14,6 +14,7 @@ pub type VarIdx = u16;
 pub struct FuncState {
     /// Hash table for constants
     pub kt: FxHashMap<TValue, BCReg>,
+    pub template_tables: Vec<(TemplateTable, usize)>,
     pub num_kn: usize,
     pub num_kgc: usize,
     pub last_target: BCPos,
@@ -56,6 +57,7 @@ impl Default for FuncState {
     fn default() -> Self {
         Self {
             kt: FxHashMap::default(),
+            template_tables: Vec::new(),
             num_kn: 0,
             num_kgc: 0,
             last_target: 0,

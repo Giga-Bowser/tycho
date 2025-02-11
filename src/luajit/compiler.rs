@@ -73,6 +73,7 @@ impl LJCompiler<'_, '_> {
             flags,
             uv_map,
             frame_size,
+            template_tables,
             ..
         } = fs;
 
@@ -107,6 +108,10 @@ impl LJCompiler<'_, '_> {
                 }
                 _ => unreachable!(),
             }
+        }
+
+        for (template, kidx) in template_tables {
+            gc_constants[num_kgc - kidx - 1] = GCConstant::Table(template);
         }
 
         self.protos.push(Proto {
@@ -326,6 +331,7 @@ impl<'src> LJCompiler<'src, '_> {
         let mut extra = nvars as i32 - nexprs as i32;
         match expr.kind {
             ExprKind::Call { instr_idx, base: _ } => {
+                // compensate for the VCALL
                 extra += 1;
                 extra = extra.max(0);
                 self.func_state.bc[instr_idx].set_b(extra as u8 + 1);
@@ -1068,7 +1074,7 @@ impl<'src> LJCompiler<'src, '_> {
     }
 
     fn compile_table(&mut self, table_node: &TableNode<'src>) -> ExprDesc<'src> {
-        let mut t: Option<TemplateTable> = None;
+        let mut t_idx: Option<usize> = None;
         let mut free_reg = self.func_state.free_reg;
         let pc = self.bcemit(BCInstr::new_ad(BCOp::TNEW, free_reg as u8, 0));
         let mut table_expr = ExprDesc::new(ExprKind::NonReloc {
@@ -1080,8 +1086,8 @@ impl<'src> LJCompiler<'src, '_> {
         let mut vcall = false;
         let mut need_arr = false;
         let mut fix_t = false;
+        let mut array_len = 1;
         let mut hash_len = 0;
-        let mut array_len = 0;
         for field in &table_node.fields {
             vcall = false;
 
@@ -1091,10 +1097,10 @@ impl<'src> LJCompiler<'src, '_> {
                     self.func_state.expr_toval(&mut key);
                     if !key.is_const() {
                         self.compile_index(&mut table_expr, &mut key);
-                    } else if matches!(key.kind, ExprKind::KNumber(n) if n == 0.0) {
-                        array_len += 1;
+                    }
+
+                    if let ExprKind::KNumber(0.0) = key.kind {
                         need_arr = true;
-                        vcall = true;
                     } else {
                         hash_len += 1;
                     }
@@ -1108,6 +1114,8 @@ impl<'src> LJCompiler<'src, '_> {
                 FieldNode::ValField { val } => {
                     let key = ExprDesc::new(ExprKind::KNumber(array_len as f64));
                     array_len += 1;
+                    need_arr = true;
+                    vcall = true;
                     (key, *val)
                 }
             };
@@ -1118,12 +1126,19 @@ impl<'src> LJCompiler<'src, '_> {
                 && !matches!(&key.kind, ExprKind::KNil)
                 && (matches!(&key.kind, ExprKind::KString(_)) || is_const_no_jump)
             {
-                let t = t.get_or_insert_with(|| {
+                let t_idx = t_idx.get_or_insert_with(|| {
                     let kidx = self.func_state.num_kgc;
                     self.func_state.num_kgc += 1;
+                    let len = self.func_state.template_tables.len();
+                    let table = if need_arr {
+                        TemplateTable::with_size(array_len)
+                    } else {
+                        TemplateTable::default()
+                    };
+                    self.func_state.template_tables.push((table, kidx));
                     self.func_state.bc[pc] =
                         BCInstr::new_ad(BCOp::TDUP, free_reg as u8 - 1, kidx as u16);
-                    TemplateTable::new()
+                    len
                 });
 
                 vcall = false;
@@ -1145,9 +1160,8 @@ impl<'src> LJCompiler<'src, '_> {
                         _ => unreachable!(),
                     };
 
-                    t.insert(k, v);
+                    self.func_state.template_tables[*t_idx].0.insert(k, v);
                 } else {
-                    // t.hash.insert(k, v);
                     fix_t = true;
                     if !matches!(
                         val.kind,
@@ -1164,7 +1178,7 @@ impl<'src> LJCompiler<'src, '_> {
                         self.compile_index(&mut table_expr, &mut key);
                     }
 
-                    table_expr = self.bcemit_store(&table_expr, val);
+                    self.bcemit_store(&table_expr, val);
                 }
             } else {
                 if !matches!(
@@ -1182,7 +1196,7 @@ impl<'src> LJCompiler<'src, '_> {
                     self.compile_index(&mut table_expr, &mut key);
                 }
 
-                table_expr = self.bcemit_store(&table_expr, val);
+                self.bcemit_store(&table_expr, val);
             }
 
             self.func_state.free_reg = free_reg;
@@ -1221,8 +1235,6 @@ impl<'src> LJCompiler<'src, '_> {
             ExprKind::Relocable { instr_idx: pc }
         } else {
             let result_reg = match table_expr.kind {
-                // NOTE: is this even possible?
-                ExprKind::Local { local_reg, .. } => local_reg,
                 ExprKind::Indexed { table_reg, .. } => table_reg,
                 ExprKind::NonReloc { result_reg } => result_reg,
                 _ => unreachable!(),
@@ -1231,12 +1243,14 @@ impl<'src> LJCompiler<'src, '_> {
             ExprKind::NonReloc { result_reg }
         };
 
-        if let Some(mut t) = t {
+        if let Some(t) = t_idx.map(|idx| &mut self.func_state.template_tables[idx].0) {
             if need_arr && t.array.len() < array_len {
                 t.array.resize(array_len, TValue::Nil);
             }
 
-            if fix_t {}
+            if fix_t {
+                println!("fix_t")
+            }
         } else {
             let instr = &mut self.func_state.bc[pc];
             if need_arr {
@@ -1245,11 +1259,14 @@ impl<'src> LJCompiler<'src, '_> {
                 array_len = 0;
             };
 
-            instr.set_d((array_len | (hash_len << 11)) as u16);
+            let hsize = if hash_len > 1 {
+                1 + (u32::trailing_zeros(hash_len - 1) ^ 31) as u16
+            } else {
+                hash_len as u16
+            };
+
+            instr.set_d((hsize << 11) | array_len as u16);
         }
-
-        // TODO: contruct tnew?
-
         table_expr
     }
 
