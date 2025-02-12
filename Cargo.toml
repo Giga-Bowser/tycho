@@ -31,3 +31,45 @@ harness = false
 name = "tycho"
 path = "src/bin/main.rs"
 bench = false
+
+[lints.rust]
+elided_lifetimes_in_paths = "warn"
+explicit_outlives_requirements = "warn"
+unsafe_op_in_unsafe_fn = "warn"
+unused_extern_crates = "warn"
+unused_lifetimes = "warn"
+# unreachable_pub = "warn"
+
+[lints.clippy]
+## lint groups
+complexity = { level = "warn", priority = -1 }
+correctness = { level = "deny", priority = -1 }
+perf = { level = "deny", priority = -1 }
+restriction = { level = "allow", priority = -1 }
+style = { level = "warn", priority = -1 }
+suspicious = { level = "warn", priority = -1 }
+
+## allow following lints
+# subjective
+single_match = "allow"
+# () makes a fine error in most cases
+result_unit_err = "allow"
+# We don't expose public APIs that matter like this
+len_without_is_empty = "allow"
+# We have macros that rely on this currently
+enum_variant_names = "allow"
+# Has a bunch of false positives
+useless_asref = "allow"
+
+## Following lints should be tackled at some point
+too_many_arguments = "allow"
+type_complexity = "allow"
+wrong_self_convention = "allow"
+
+## warn at following lints
+# CI raises these to deny
+dbg_macro = "warn"
+print_stdout = "warn"
+
+rc_buffer = "warn"
+str_to_string = "warn"

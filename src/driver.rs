@@ -54,7 +54,7 @@ fn build(args: &BuildOpt) {
     let lex_timer = Instant::now();
 
     let lex = TokenKind::lexer(&contents);
-    let tokens: Tokens = lex
+    let tokens: Tokens<'_> = lex
         .spanned()
         .map(|(t, r)| Token {
             kind: t.unwrap(),
@@ -66,7 +66,7 @@ fn build(args: &BuildOpt) {
         eprintln!("lexing done: {}", duration_fmt(lex_timer.elapsed()));
         eprintln!(
             "tokens memory: {}",
-            ByteFmt(tokens.0.len() * size_of::<Token>())
+            ByteFmt(tokens.0.len() * size_of::<Token<'_>>())
         );
     }
 
@@ -157,7 +157,7 @@ pub fn print_main(args: &PrintOpt) {
     let lex_timer = Instant::now();
 
     let lex = TokenKind::lexer(&contents);
-    let tokens: Tokens = lex
+    let tokens: Tokens<'_> = lex
         .spanned()
         .map(|(t, r)| Token {
             kind: t.unwrap(),
@@ -169,7 +169,7 @@ pub fn print_main(args: &PrintOpt) {
         eprintln!("lexing done: {}", duration_fmt(lex_timer.elapsed()));
         eprintln!(
             "tokens memory: {}",
-            ByteFmt(tokens.0.len() * size_of::<Token>())
+            ByteFmt(tokens.0.len() * size_of::<Token<'_>>())
         );
     }
 
@@ -222,7 +222,7 @@ pub fn print_main(args: &PrintOpt) {
         eprintln!("compiling done: {}", duration_fmt(compile_timer.elapsed()));
     }
 
-    println!("{:#?}", compiler.protos);
+    eprintln!("{:#?}", compiler.protos);
 }
 
 fn transpile<'pool>(pool: &'pool ExprPool<'pool>, stats: &[ast::Statement<'_>]) -> Vec<u8> {
@@ -242,13 +242,13 @@ fn compile<'pool>(pool: &'pool ExprPool<'pool>, stats: &[ast::Statement<'_>]) ->
     dump_bc(&Header::default(), &compiler.protos)
 }
 
-pub fn add_defines(file_path: &Path, type_env: &mut TypeEnv) {
+pub fn add_defines(file_path: &Path, type_env: &mut TypeEnv<'_>) {
     let contents = std::fs::read_to_string(file_path)
         .unwrap_or_else(|_| panic!("Sould have been able to read file {}", file_path.display()));
 
     let lex = TokenKind::lexer(&contents);
 
-    let tokens: Tokens = lex
+    let tokens: Tokens<'_> = lex
         .spanned()
         .map(|(t, r)| Token {
             kind: t.unwrap(),

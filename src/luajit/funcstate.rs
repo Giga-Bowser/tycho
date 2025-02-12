@@ -346,7 +346,7 @@ impl FuncState {
     }
 
     /// Free register for expression
-    pub fn expr_free(&mut self, expr: &ExprDesc) {
+    pub fn expr_free(&mut self, expr: &ExprDesc<'_>) {
         if let ExprKind::NonReloc { result_reg } = expr.kind {
             self.bcreg_free(result_reg);
         }

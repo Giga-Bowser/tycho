@@ -203,7 +203,7 @@ impl<'source> FromIterator<Token<'source>> for Tokens<'source> {
 }
 
 impl<'source> Tokens<'source> {
-    pub fn pop_front(&mut self) -> Token {
+    pub fn pop_front(&mut self) -> Token<'_> {
         self.0.pop_front().unwrap()
     }
 

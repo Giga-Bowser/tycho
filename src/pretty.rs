@@ -44,14 +44,14 @@ pub struct Printer<'src, 'pool> {
 }
 
 impl Printer<'_, '_> {
-    pub fn print(&self, stat: &Statement) -> String {
+    pub fn print(&self, stat: &Statement<'_>) -> String {
         self.print_statement("", stat, true)
     }
 
-    pub fn print_statement(&self, prefix: &str, stat: &Statement, is_end: bool) -> String {
+    fn print_statement(&self, prefix: &str, stat: &Statement<'_>, is_end: bool) -> String {
         match stat {
             Statement::Assign(assign) => self.print_assign(prefix, assign, is_end),
-            Statement::Break => todo!(),
+            Statement::Break => format!("{prefix}{}break\n", if is_end { "└── " } else { "├── " }),
             Statement::MethodDecl(method_decl) => {
                 self.print_method_decl(prefix, method_decl, is_end)
             }
@@ -71,19 +71,16 @@ impl Printer<'_, '_> {
                 self.print_struct_decl(prefix, struct_decl, is_end)
             }
             other => format!(
-                "{}{}{:?}\n",
-                prefix,
-                if is_end { "└── " } else { "├── " },
-                other
+                "{prefix}{}{other:?}\n",
+                if is_end { "└── " } else { "├── " }
             ),
         }
     }
 
-    fn print_assign(&self, prefix: &str, assign: &Assign, is_end: bool) -> String {
+    fn print_assign(&self, prefix: &str, assign: &Assign<'_>, is_end: bool) -> String {
         let new_prefix = prefix.to_owned() + if is_end { "    " } else { "│   " };
         format!(
-            "{}{}{}\n{}{}",
-            prefix,
+            "{prefix}{}{}\n{}{}",
             if is_end { "└── " } else { "├── " },
             "=",
             self.print_suffixed_name(&new_prefix, &assign.lhs, false),
@@ -94,12 +91,11 @@ impl Printer<'_, '_> {
     fn print_suffixed_name(
         &self,
         prefix: &str,
-        suffixed_name: &SuffixedName,
+        suffixed_name: &SuffixedName<'_>,
         is_end: bool,
     ) -> String {
         let mut result = format!(
-            "{}{}{}\n",
-            prefix,
+            "{prefix}{}{}\n",
             if is_end { "└── " } else { "├── " },
             suffixed_name.name,
         );
@@ -122,7 +118,7 @@ impl Printer<'_, '_> {
         result
     }
 
-    fn print_suffix(&self, prefix: &str, suffix: &Suffix, is_end: bool) -> String {
+    fn print_suffix(&self, prefix: &str, suffix: &Suffix<'_>, is_end: bool) -> String {
         match suffix {
             Suffix::Index(index) => self.print_index(prefix, index, is_end),
             Suffix::Access(access) => self.print_access(prefix, access, is_end),
@@ -134,30 +130,23 @@ impl Printer<'_, '_> {
     fn print_index(&self, prefix: &str, index: &Index, is_end: bool) -> String {
         let new_prefix = prefix.to_owned() + if is_end { "    " } else { "│   " };
         format!(
-            "{}{}{}\n{}",
-            prefix,
+            "{prefix}{}{}\n{}",
             if is_end { "└── " } else { "├── " },
             "[]",
             self.print_expr(&new_prefix, index.key, true)
         )
     }
 
-    fn print_access(&self, prefix: &str, access: &Access, is_end: bool) -> String {
+    fn print_access(&self, prefix: &str, access: &Access<'_>, is_end: bool) -> String {
         format!(
-            "{}{}.{}\n",
-            prefix,
+            "{prefix}{}.{}\n",
             if is_end { "└── " } else { "├── " },
             access.field_name,
         )
     }
 
     fn print_call(&self, prefix: &str, call: &Call, is_end: bool) -> String {
-        let mut result = format!(
-            "{}{}{}\n",
-            prefix,
-            if is_end { "└── " } else { "├── " },
-            "()",
-        );
+        let mut result = format!("{prefix}{}{}\n", if is_end { "└── " } else { "├── " }, "()",);
 
         if call.args.is_empty() {
             return result;
@@ -174,10 +163,9 @@ impl Printer<'_, '_> {
         result
     }
 
-    fn print_method(&self, prefix: &str, method: &Method, is_end: bool) -> String {
+    fn print_method(&self, prefix: &str, method: &Method<'_>, is_end: bool) -> String {
         let mut result = format!(
-            "{}{}:{}()\n",
-            prefix,
+            "{prefix}{}:{}()\n",
             if is_end { "└── " } else { "├── " },
             method.method_name,
         );
@@ -203,20 +191,16 @@ impl Printer<'_, '_> {
             Expr::UnOp(unop) => self.print_unop(prefix, unop, is_end),
             Expr::Paren(paren_expr) => self.print_expr(prefix, paren_expr.val, is_end),
             Expr::Simple(simple_expr) => self.print_simple_expr(prefix, simple_expr, is_end),
-            Expr::Name(name) => format!(
-                "{}{}{}\n",
-                prefix,
-                if is_end { "└── " } else { "├── " },
-                name,
-            ),
+            Expr::Name(name) => {
+                format!("{prefix}{}{}\n", if is_end { "└── " } else { "├── " }, name,)
+            }
         }
     }
 
     fn print_binop(&self, prefix: &str, binop: &BinOp, is_end: bool) -> String {
         let new_prefix = prefix.to_owned() + if is_end { "    " } else { "│   " };
         format!(
-            "{}{}{}\n{}{}",
-            prefix,
+            "{prefix}{}{}\n{}{}",
             if is_end { "└── " } else { "├── " },
             binop.op,
             self.print_expr(&new_prefix, binop.lhs, false),
@@ -227,26 +211,25 @@ impl Printer<'_, '_> {
     fn print_unop(&self, prefix: &str, unop: &UnOp, is_end: bool) -> String {
         let new_prefix = prefix.to_owned() + if is_end { "    " } else { "│   " };
         format!(
-            "{}{}{}\n{}",
-            prefix,
+            "{prefix}{}{}\n{}",
             if is_end { "└── " } else { "├── " },
             unop.op,
             self.print_expr(&new_prefix, unop.val, true)
         )
     }
 
-    fn print_simple_expr(&self, prefix: &str, simple_expr: &SimpleExpr, is_end: bool) -> String {
+    fn print_simple_expr(
+        &self,
+        prefix: &str,
+        simple_expr: &SimpleExpr<'_>,
+        is_end: bool,
+    ) -> String {
         match simple_expr {
             SimpleExpr::Num(str)
             | SimpleExpr::Str(str)
             | SimpleExpr::Bool(str)
             | SimpleExpr::Nil(str) => {
-                format!(
-                    "{}{}{}\n",
-                    prefix,
-                    if is_end { "└── " } else { "├── " },
-                    str,
-                )
+                format!("{prefix}{}{}\n", if is_end { "└── " } else { "├── " }, str,)
             }
             SimpleExpr::FuncNode(func_node) => self.print_func_node(prefix, func_node, is_end),
             SimpleExpr::TableNode(table_node) => self.print_table_node(prefix, table_node, is_end),
@@ -256,11 +239,10 @@ impl Printer<'_, '_> {
         }
     }
 
-    fn print_func_node(&self, prefix: &str, func_node: &FuncNode, is_end: bool) -> String {
+    fn print_func_node(&self, prefix: &str, func_node: &FuncNode<'_>, is_end: bool) -> String {
         // TODO: pretty print function's type
         let mut result = format!(
-            "{}{}{:?}\n",
-            prefix,
+            "{prefix}{}{:?}\n",
             if is_end { "└── " } else { "├── " },
             *func_node.type_,
         );
@@ -280,11 +262,11 @@ impl Printer<'_, '_> {
         result
     }
 
-    fn print_field_node(&self, prefix: &str, field_node: &FieldNode, is_end: bool) -> String {
-        let mut result = format!("{}{}", prefix, if is_end { "└── " } else { "├── " });
+    fn print_field_node(&self, prefix: &str, field_node: &FieldNode<'_>, is_end: bool) -> String {
+        let mut result = format!("{prefix}{}", if is_end { "└── " } else { "├── " });
         result += &match field_node {
             FieldNode::Field { key, val } => {
-                format!("\"{}\" = {}", key, self.print_expr(prefix, *val, is_end))
+                format!("\"{key}\" = {}", self.print_expr(prefix, *val, is_end))
             }
             FieldNode::ExprField { key, val } => format!(
                 "[{}] = {}",
@@ -298,10 +280,9 @@ impl Printer<'_, '_> {
         result
     }
 
-    fn print_table_node(&self, prefix: &str, table_node: &TableNode, is_end: bool) -> String {
+    fn print_table_node(&self, prefix: &str, table_node: &TableNode<'_>, is_end: bool) -> String {
         let mut result = format!(
-            "{}{}{}\n",
-            prefix,
+            "{prefix}{}{}\n",
             if is_end { "└── " } else { "├── " },
             "table",
         );
@@ -321,10 +302,14 @@ impl Printer<'_, '_> {
         result
     }
 
-    fn print_struct_decl(&self, prefix: &str, struct_decl: &StructDecl, is_end: bool) -> String {
+    fn print_struct_decl(
+        &self,
+        prefix: &str,
+        struct_decl: &StructDecl<'_>,
+        is_end: bool,
+    ) -> String {
         let mut result = format!(
-            "{}{}{}\n",
-            prefix,
+            "{prefix}{}{}\n",
             if is_end { "└── " } else { "├── " },
             "struct",
         );
@@ -345,8 +330,7 @@ impl Printer<'_, '_> {
         }
 
         result += &format!(
-            "{}└── {}: {:?}",
-            new_prefix,
+            "{new_prefix}└── {}: {:?}",
             struct_decl.type_.fields.last().unwrap().0,
             struct_decl.type_.fields.last().unwrap().1
         );
@@ -357,18 +341,14 @@ impl Printer<'_, '_> {
     fn print_suffixed_expr(
         &self,
         prefix: &str,
-        suffixed_expr: &SuffixedExpr,
+        suffixed_expr: &SuffixedExpr<'_>,
         is_end: bool,
     ) -> String {
         if suffixed_expr.suffixes.is_empty() {
             return self.print_expr(prefix, suffixed_expr.val, is_end);
         }
         let new_prefix = prefix.to_owned() + if is_end { "    " } else { "│   " };
-        let mut result = format!(
-            "{}{}",
-            prefix,
-            self.print_expr("", suffixed_expr.val, is_end),
-        );
+        let mut result = format!("{prefix}{}", self.print_expr("", suffixed_expr.val, is_end),);
 
         for suffix in suffixed_expr
             .suffixes
@@ -383,7 +363,12 @@ impl Printer<'_, '_> {
         result
     }
 
-    fn print_method_decl(&self, prefix: &str, method_decl: &MethodDecl, is_end: bool) -> String {
+    fn print_method_decl(
+        &self,
+        prefix: &str,
+        method_decl: &MethodDecl<'_>,
+        is_end: bool,
+    ) -> String {
         let new_prefix = prefix.to_owned() + if is_end { "    " } else { "│   " };
         format!(
             "{prefix}{}{}:{}\n{}",
@@ -394,12 +379,11 @@ impl Printer<'_, '_> {
         )
     }
 
-    fn print_decl(&self, prefix: &str, decl: &Declare, is_end: bool) -> String {
+    fn print_decl(&self, prefix: &str, decl: &Declare<'_>, is_end: bool) -> String {
         let new_prefix = prefix.to_owned() + if is_end { "    " } else { "│   " };
 
         let mut result = format!(
-            "{}{}{}\n{}{}",
-            prefix,
+            "{prefix}{}{}\n{}{}",
             if is_end { "└── " } else { "├── " },
             ":=",
             self.print_suffixed_name(&new_prefix, &decl.lhs, false),
@@ -415,19 +399,17 @@ impl Printer<'_, '_> {
 
     fn print_type(&self, prefix: &str, type_: &Type, is_end: bool) -> String {
         format!(
-            "{}{}{:?}\n",
-            prefix,
+            "{prefix}{}{:?}\n",
             if is_end { "└── " } else { "├── " },
             type_,
         )
     }
 
-    fn print_if_stat(&self, prefix: &str, if_stat: &IfStat, is_end: bool) -> String {
+    fn print_if_stat(&self, prefix: &str, if_stat: &IfStat<'_>, is_end: bool) -> String {
         let new_prefix = prefix.to_owned() + if is_end { "    " } else { "│   " };
 
         let mut result = format!(
-            "{}{}{}\n{}",
-            prefix,
+            "{prefix}{}{}\n{}",
             if is_end { "└── " } else { "├── " },
             "if",
             self.print_expr(&new_prefix, if_stat.condition, false),
@@ -467,7 +449,7 @@ impl Printer<'_, '_> {
     }
 
     fn print_return(&self, prefix: &str, returns: &[ExprRef], is_end: bool) -> String {
-        let mut result = format!("{}{}return\n", prefix, if is_end { "└── " } else { "├── " },);
+        let mut result = format!("{prefix}{}return\n", if is_end { "└── " } else { "├── " },);
 
         if returns.is_empty() {
             return result;

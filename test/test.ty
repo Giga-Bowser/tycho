@@ -247,7 +247,15 @@ PIDController:pid := func(
 	return output
 }
 
+foo := func() -> number {
+	return 42
+}
 
+a := {
+	foo = foo(),
+	[3] = 43,
+	69,
+}
 
 print("hello, world")
 

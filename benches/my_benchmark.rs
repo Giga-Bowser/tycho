@@ -36,7 +36,7 @@ fn benchmark_lexer(c: &mut Criterion) {
                             kind: t.unwrap(),
                             str: unsafe { contents.get_unchecked(r) },
                         })
-                        .collect::<Tokens>(),
+                        .collect::<Tokens<'_>>(),
                 );
             }
             start.elapsed()
@@ -53,7 +53,7 @@ fn benchmark_parser(c: &mut Criterion) {
             kind: t.unwrap(),
             str: unsafe { contents.get_unchecked(r) },
         })
-        .collect::<Tokens>();
+        .collect::<Tokens<'_>>();
     let mut pool = ExprPool::new();
     c.bench_function("parse", |b| {
         b.iter_custom(|iters| {
@@ -91,7 +91,7 @@ fn benchmark_typechecker(c: &mut Criterion) {
     let contents = std::fs::read_to_string("test/test.ty").unwrap_or_else(|e| panic!("{e}"));
     let lex = TokenKind::lexer(&contents);
 
-    let tokens: Tokens = lex
+    let tokens: Tokens<'_> = lex
         .spanned()
         .map(|(t, r)| Token {
             kind: t.unwrap(),
@@ -142,7 +142,7 @@ fn benchmark_compiler(c: &mut Criterion) {
     let contents = std::fs::read_to_string("test/test.ty").unwrap_or_else(|e| panic!("{e}"));
     let lex = TokenKind::lexer(&contents);
 
-    let tokens: Tokens = lex
+    let tokens: Tokens<'_> = lex
         .spanned()
         .map(|(t, r)| Token {
             kind: t.unwrap(),
@@ -184,7 +184,7 @@ fn benchmark_transpiler(c: &mut Criterion) {
     let contents = std::fs::read_to_string("test/test.ty").unwrap_or_else(|e| panic!("{e}"));
     let lex = TokenKind::lexer(&contents);
 
-    let tokens: Tokens = lex
+    let tokens: Tokens<'_> = lex
         .spanned()
         .map(|(t, r)| Token {
             kind: t.unwrap(),
@@ -242,7 +242,7 @@ fn benchmark_all_compile(c: &mut Criterion) {
 
                 let lex = TokenKind::lexer(contents);
 
-                let tokens: Tokens = lex
+                let tokens: Tokens<'_> = lex
                     .spanned()
                     .map(|(t, r)| Token {
                         kind: t.unwrap(),
@@ -300,7 +300,7 @@ fn benchmark_all_transpile(c: &mut Criterion) {
 
                 let lex = TokenKind::lexer(contents);
 
-                let tokens: Tokens = lex
+                let tokens: Tokens<'_> = lex
                     .spanned()
                     .map(|(t, r)| Token {
                         kind: t.unwrap(),

@@ -15,8 +15,8 @@ pub fn read_main(args: ReadOpt) {
 
     let (header, protos) = read_dump(&dump);
 
-    println!("{header:#?}");
-    println!("{protos:#?}");
+    eprintln!("{header:#?}");
+    eprintln!("{protos:#?}");
 }
 
 #[derive(Debug)]

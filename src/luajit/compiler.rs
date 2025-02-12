@@ -17,7 +17,7 @@ use crate::{
 const LJ_FR2: bool = true;
 
 #[derive(Debug)]
-pub struct LJCompiler<'src: 'pool, 'pool> {
+pub struct LJCompiler<'src, 'pool> {
     pub pool: &'pool ExprPool<'src>,
     pub func_state: FuncState,
     prev_states: Vec<FuncState>,
@@ -189,7 +189,7 @@ impl<'src> LJCompiler<'src, '_> {
                     } => {
                         self.func_state.bc[instr_pc].set_b(1);
                     }
-                    e => todo!("{e:?}"),
+                    _ => panic!("non-call suffix in ExprStat: {suffixed_expr:?}"),
                 }
             } // self.compile_suffixed_expr(suffixed_expr),
             Statement::Block(statements) => self.compile_block(statements),
@@ -1249,7 +1249,7 @@ impl<'src> LJCompiler<'src, '_> {
             }
 
             if fix_t {
-                println!("fix_t")
+                eprintln!("fix_t")
             }
         } else {
             let instr = &mut self.func_state.bc[pc];
