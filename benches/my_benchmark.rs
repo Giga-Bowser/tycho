@@ -8,12 +8,12 @@ use logos::Logos;
 use mimalloc::MiMalloc;
 use tycho::{
     driver::add_defines,
-    lexer::{Token, TokenKind, Tokens},
+    lexer::{Token, TokenKind, Tokens, Tokens2},
     luajit::{
         bytecode::{dump_bc, Header},
         compiler::LJCompiler,
     },
-    parser::{pool::ExprPool, Parser, TypeList},
+    parser::{pool::ExprPool, second::Parser2, Parser, TypeList},
     transpiler::Transpiler,
     type_env::TypeEnv,
     typecheck::TypeChecker,
@@ -27,9 +27,10 @@ fn benchmark_lexer(c: &mut Criterion) {
 
     c.bench_function("lex", |b| {
         b.iter_custom(|iters| {
-            let start = Instant::now();
+            let mut elapsed = Duration::ZERO;
             for _i in 0..iters {
                 let lex = TokenKind::lexer(black_box(&contents));
+                let start = Instant::now();
                 black_box(
                     lex.spanned()
                         .map(|(t, r)| Token {
@@ -38,8 +39,10 @@ fn benchmark_lexer(c: &mut Criterion) {
                         })
                         .collect::<Tokens<'_>>(),
                 );
+
+                elapsed += start.elapsed();
             }
-            start.elapsed()
+            elapsed
         });
     });
 }
@@ -281,6 +284,95 @@ fn benchmark_all_compile(c: &mut Criterion) {
     });
 }
 
+fn benchmark_front(c: &mut Criterion) {
+    let mut type_env_orig = TypeEnv::default();
+    let includes = ["includes/base.ty", "includes/math.ty"];
+    let contents = std::fs::read_to_string("test/test.ty").unwrap_or_else(|e| panic!("{e}"));
+    for filename in includes {
+        add_defines(Path::new(filename), &mut type_env_orig);
+    }
+
+    c.bench_function("frontend", |b| {
+        b.iter_custom(|iters| {
+            let mut elapsed = Duration::ZERO;
+            for _i in 0..iters {
+                let contents = black_box(&contents);
+
+                let start = Instant::now();
+
+                let lex = TokenKind::lexer(contents);
+
+                let tokens: Tokens<'_> = lex
+                    .spanned()
+                    .map(|(t, r)| Token {
+                        kind: t.unwrap(),
+                        str: unsafe { contents.get_unchecked(r) },
+                    })
+                    .collect();
+
+                let mut typelist = TypeList::with_core();
+
+                let mut pool = ExprPool::new();
+                let mut parser = Parser {
+                    tokens: tokens.clone(),
+                    pool: &mut pool,
+                };
+
+                let mut statements = Vec::new();
+
+                while parser.tokens[0].kind != TokenKind::EndOfFile {
+                    statements.push(parser.parse_statement(&mut typelist).unwrap());
+                }
+
+                elapsed += start.elapsed();
+                black_box(statements);
+            }
+            elapsed
+        });
+    });
+}
+
+fn benchmark_front2(c: &mut Criterion) {
+    let mut type_env_orig = TypeEnv::default();
+    let includes = ["includes/base.ty", "includes/math.ty"];
+    let contents = std::fs::read_to_string("test/test.ty").unwrap_or_else(|e| panic!("{e}"));
+    for filename in includes {
+        add_defines(Path::new(filename), &mut type_env_orig);
+    }
+
+    c.bench_function("frontend 2", |b| {
+        b.iter_custom(|iters| {
+            let mut elapsed = Duration::ZERO;
+            for _i in 0..iters {
+                let contents = black_box(&contents);
+
+                let start = Instant::now();
+
+                let lex = TokenKind::lexer(contents);
+                let tokens = Tokens2::new(lex, contents);
+
+                let mut typelist = TypeList::with_core();
+
+                let mut pool = ExprPool::new();
+                let mut parser = Parser2 {
+                    tokens,
+                    pool: &mut pool,
+                };
+
+                let mut statements = Vec::new();
+
+                while parser.tokens[0].kind != TokenKind::EndOfFile {
+                    statements.push(parser.parse_statement(&mut typelist).unwrap());
+                }
+
+                elapsed += start.elapsed();
+                black_box(statements);
+            }
+            elapsed
+        });
+    });
+}
+
 fn benchmark_all_transpile(c: &mut Criterion) {
     let mut type_env_orig = TypeEnv::default();
     let includes = ["includes/base.ty", "includes/math.ty"];
@@ -346,6 +438,8 @@ criterion_group!(
     benchmark_compiler,
     benchmark_transpiler,
     benchmark_all_compile,
-    benchmark_all_transpile
+    benchmark_all_transpile,
+    benchmark_front,
+    benchmark_front2,
 );
 criterion_main!(benches);

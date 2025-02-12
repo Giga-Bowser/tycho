@@ -1,28 +1,21 @@
-pub mod ast;
-pub mod pool;
-pub mod second;
-
 use std::{rc::Rc, slice, str};
-
-use rustc_hash::FxHashMap;
-
-use self::{ast::*, pool::*};
 
 use crate::{
     errors::{ParseError, UnexpectedToken},
     lexer::{
         TokenKind::{self, *},
-        Tokens,
+        Tokens2,
     },
+    parser::{ast::*, pool::*, Precedence, TypeList},
     types::{Function, TableType, Type, User},
 };
 
-pub struct Parser<'src, 'pool> {
-    pub tokens: Tokens<'src>,
+pub struct Parser2<'src, 'pool> {
+    pub tokens: Tokens2<'src>,
     pub pool: &'pool mut ExprPool<'src>,
 }
 
-impl<'src> Parser<'src, '_> {
+impl<'src> Parser2<'src, '_> {
     pub fn parse_statement(
         &mut self,
         typelist: &mut TypeList,
@@ -943,47 +936,6 @@ impl<'src> Parser<'src, '_> {
 
         Ok(result)
     }
-}
-
-#[derive(Debug, Clone)]
-pub struct TypeList {
-    map: FxHashMap<String, Type>,
-}
-
-impl TypeList {
-    pub fn with_core() -> Self {
-        Self {
-            map: FxHashMap::from_iter([
-                ("number".to_owned(), Type::Number),
-                ("string".to_owned(), Type::String),
-                ("boolean".to_owned(), Type::Boolean),
-                ("any".to_owned(), Type::Any),
-            ]),
-        }
-    }
-
-    #[inline]
-    pub fn insert(&mut self, k: String, v: Type) -> Option<Type> {
-        self.map.insert(k, v)
-    }
-
-    #[inline]
-    pub fn contains(&self, k: &str) -> bool {
-        self.map.contains_key(k)
-    }
-}
-
-impl std::ops::Index<&str> for TypeList {
-    type Output = Type;
-
-    fn index(&self, index: &str) -> &Self::Output {
-        self.map.index(index)
-    }
-}
-
-pub struct Precedence {
-    pub left: u8,
-    pub right: u8,
 }
 
 fn get_op(tok: TokenKind) -> Option<(OpKind, Precedence)> {

@@ -1,6 +1,9 @@
-use std::{collections::VecDeque, ops::Index};
+use std::{
+    collections::VecDeque,
+    ops::{Index, IndexMut},
+};
 
-use logos::Logos;
+use logos::{Lexer, Logos, SpannedIter};
 
 use crate::errors::UnexpectedToken;
 
@@ -225,6 +228,122 @@ impl<'source> Tokens<'source> {
         } else {
             Err(UnexpectedToken {
                 token: (&self.0[0]).into(),
+                expected_kinds: vec![expected_kind],
+            })
+        }
+    }
+}
+
+const RING_LEN: usize = 4;
+#[derive(Debug, Clone)]
+pub struct Ring<T: Clone> {
+    buf: [T; RING_LEN],
+    read_idx: usize,
+}
+
+impl<T: Clone> Ring<T> {
+    pub fn new(buf: [T; RING_LEN]) -> Self {
+        Self { buf, read_idx: 0 }
+    }
+
+    fn mask(idx: usize) -> usize {
+        idx & (RING_LEN - 1)
+    }
+
+    fn rotate(&mut self, value: T) -> T {
+        let res = std::mem::replace(&mut self[0], value);
+        self.read_idx += 1;
+        res
+    }
+}
+
+impl<T: Clone> Index<usize> for Ring<T> {
+    type Output = T;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.buf[Self::mask(self.read_idx + index)]
+    }
+}
+
+impl<T: Clone> IndexMut<usize> for Ring<T> {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.buf[Self::mask(self.read_idx + index)]
+    }
+}
+
+#[derive(Clone)]
+pub struct Tokens2<'src> {
+    iter: SpannedIter<'src, TokenKind>,
+    ring: Ring<Token<'src>>,
+    contents: &'src str,
+}
+
+impl<'src> Index<usize> for Tokens2<'src> {
+    type Output = Token<'src>;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.ring[index]
+    }
+}
+
+impl<'src> Tokens2<'src> {
+    pub fn new(lex: Lexer<'src, TokenKind>, contents: &'src str) -> Self {
+        let mut iter = lex.spanned();
+
+        let arr = std::array::from_fn(|_| {
+            iter.next()
+                .map(|(t, r)| Token {
+                    kind: t.unwrap(),
+                    str: unsafe { contents.get_unchecked(r) },
+                })
+                .unwrap_or_else(|| Token {
+                    kind: TokenKind::EndOfFile,
+                    str: unsafe { contents.get_unchecked(contents.len()..) },
+                })
+        });
+        let ring = Ring::new(arr);
+
+        Self {
+            iter,
+            ring,
+            contents,
+        }
+    }
+
+    pub fn pop_front(&mut self) -> Token<'src> {
+        let next = self
+            .iter
+            .next()
+            .map(|(t, r)| Token {
+                kind: t.unwrap(),
+                str: unsafe { self.contents.get_unchecked(r) },
+            })
+            .unwrap_or_else(|| Token {
+                kind: TokenKind::EndOfFile,
+                str: unsafe { self.contents.get_unchecked(self.contents.len()..) },
+            });
+
+        self.ring.rotate(next)
+    }
+
+    pub fn pop_name(&mut self) -> Result<&'src str, UnexpectedToken> {
+        if self.ring[0].kind != TokenKind::Name {
+            return Err(UnexpectedToken {
+                token: (&self.ring[0]).into(),
+                expected_kinds: vec![TokenKind::Name],
+            });
+        }
+
+        Ok(self.pop_front().str)
+    }
+
+    pub fn expect(&mut self, expected_kind: TokenKind) -> Result<(), UnexpectedToken> {
+        if self.ring[0].kind == expected_kind {
+            self.pop_front();
+            Ok(())
+        } else {
+            Err(UnexpectedToken {
+                token: (&self.ring[0]).into(),
                 expected_kinds: vec![expected_kind],
             })
         }
