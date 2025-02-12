@@ -209,15 +209,16 @@ impl<'src> LJCompiler<'src, '_> {
     }
 
     fn compile_decl(&mut self, decl: &Declare<'src>) {
+        self.var_new(0, decl.lhs.name);
+
         let Some(val) = decl.val else {
-            // no val is assigned, this means this statement is only useful for type checking
+            self.assign_adjust(1, 0, ExprDesc::new(ExprKind::Void));
+            self.var_add(1);
             return;
         };
 
         if decl.lhs.suffixes.is_empty() {
             if let Expr::Simple(SimpleExpr::FuncNode(func)) = &self.pool[val] {
-                let name = decl.lhs.name;
-                self.var_new(0, name);
                 let local_reg = self.func_state.free_reg;
                 self.func_state.bcreg_reserve(1);
                 self.var_add(1);
@@ -227,7 +228,6 @@ impl<'src> LJCompiler<'src, '_> {
                 self.func_state.expr_toreg(&mut b, local_reg);
                 self.var_get(self.func_state.nactvar - 1).startpc = self.func_state.bc.len();
             } else {
-                self.var_new(0, decl.lhs.name);
                 let expr = self.compile_expr(val);
                 self.assign_adjust(1, 1, expr);
                 self.var_add(1);

@@ -166,7 +166,7 @@ PIDController.pid = function(self, input, setpoint, thresh, maxChange, maxOutput
 	else
 		self.shouldRunIntegral = true
 	end
-	
+	local d
 	if ((self.previousError == nil) or (self.dt == 0)) then
 		d = 0
 	else
@@ -183,6 +183,14 @@ PIDController.pid = function(self, input, setpoint, thresh, maxChange, maxOutput
 	self.previousOutput = output
 	return output
 end
+local function foo()
+	return 42
+end
+local a = {
+	foo = foo(),
+	[3] = 43,
+	69,
+}
 print("hello, world")
 local T = {}
 T.__index = T

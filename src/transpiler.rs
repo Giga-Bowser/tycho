@@ -63,6 +63,7 @@ impl<'src, 'pool> Transpiler<'src, 'pool> {
     fn transpile_decl(&mut self, decl: &Declare<'src>) {
         let Some(val) = decl.val else {
             // no val is assigned, this means this statement is only useful for type checking
+            format_to!(self.result, "local {}", decl.lhs.name);
             return;
         };
 
