@@ -16,6 +16,7 @@ impl Display for OpKind {
             OpKind::Sub => write!(f, "-"),
             OpKind::Mul => write!(f, "*"),
             OpKind::Div => write!(f, "/"),
+            OpKind::Mod => write!(f, "%"),
             OpKind::Pow => write!(f, "^"),
             OpKind::Cat => write!(f, ".."),
             OpKind::Equ => write!(f, "=="),
@@ -338,7 +339,7 @@ impl Printer<'_, '_> {
         result
     }
 
-    fn print_suffixed_expr(
+    pub fn print_suffixed_expr(
         &self,
         prefix: &str,
         suffixed_expr: &SuffixedExpr<'_>,

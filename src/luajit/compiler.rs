@@ -579,7 +579,7 @@ impl<'src> LJCompiler<'src, '_> {
         let mut rhs = self.compile_expr(binop.rhs);
 
         let expr = match binop.op {
-            OpKind::Add | OpKind::Sub | OpKind::Mul | OpKind::Div | OpKind::Pow => {
+            OpKind::Add | OpKind::Sub | OpKind::Mul | OpKind::Div | OpKind::Mod | OpKind::Pow => {
                 self.compile_binop_arith(binop, lhs, rhs)
             }
             OpKind::Neq | OpKind::Equ | OpKind::Les | OpKind::Grq | OpKind::Leq | OpKind::Gre => {

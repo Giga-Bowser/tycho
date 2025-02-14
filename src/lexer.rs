@@ -86,6 +86,9 @@ pub enum TokenKind {
     #[token("#")]
     Octothorpe,
 
+    #[token("%")]
+    Percent,
+
     #[token("&")]
     BitAnd,
 

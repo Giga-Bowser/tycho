@@ -537,7 +537,7 @@ impl<'src> TypeChecker<'src, '_> {
 
     fn check_binop(&self, binop: &BinOp, type_env: &TypeEnv<'_>) -> Result<Type, CheckErr> {
         match binop.op {
-            OpKind::Add | OpKind::Sub | OpKind::Mul | OpKind::Div | OpKind::Pow => {
+            OpKind::Add | OpKind::Sub | OpKind::Mul | OpKind::Div | OpKind::Mod | OpKind::Pow => {
                 let lhs_type = self.check_expr(binop.lhs, type_env)?;
                 if lhs_type == self.check_expr(binop.rhs, type_env)? {
                     Ok(lhs_type)

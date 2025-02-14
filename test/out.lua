@@ -5,6 +5,9 @@ local function factorial(n)
 	end
 	return (n * factorial(n - 1))
 end
+local function is_even(n)
+	return n % 1 == 0
+end
 local function countSpaces(str)
 	local count = 0
 	for i = 1, #str do

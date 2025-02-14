@@ -6,6 +6,10 @@ factorial := func(n: number) -> number {
 	return n * factorial(n - 1)
 }
 
+is_even := func(n: number) -> boolean {
+	return n % 1 == 0
+}
+
 countSpaces := func(str: string) -> number {
 	count := 0
 	for i in 1..#str {

@@ -1015,6 +1015,13 @@ fn get_op(tok: TokenKind) -> Option<(OpKind, Precedence)> {
                 right: 11,
             },
         )),
+        Percent => Some((
+            OpKind::Mod,
+            Precedence {
+                left: 11,
+                right: 11,
+            },
+        )),
         DotDot => Some((OpKind::Cat, Precedence { left: 9, right: 8 })),
         Caret => Some((
             OpKind::Pow,
