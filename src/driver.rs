@@ -1,9 +1,7 @@
 use std::{path::Path, time::Instant};
 
-use logos::Logos;
-
 use crate::{
-    lexer::{Token, TokenKind, Tokens},
+    lexer::{Lexer, Token, TokenKind, Tokens},
     luajit::{
         bytecode::{dump_bc, Header},
         compiler::LJCompiler,
@@ -53,14 +51,8 @@ fn build(args: &BuildOpt) {
 
     let lex_timer = Instant::now();
 
-    let lex = TokenKind::lexer(&contents);
-    let tokens: Tokens<'_> = lex
-        .spanned()
-        .map(|(t, r)| Token {
-            kind: t.unwrap(),
-            str: unsafe { contents.get_unchecked(r) },
-        })
-        .collect();
+    let lex = Lexer::new(&contents);
+    let tokens: Tokens<'_> = lex.collect();
 
     if args.verbose {
         eprintln!("lexing done: {}", duration_fmt(lex_timer.elapsed()));
@@ -156,14 +148,8 @@ pub fn print_main(args: &PrintOpt) {
 
     let lex_timer = Instant::now();
 
-    let lex = TokenKind::lexer(&contents);
-    let tokens: Tokens<'_> = lex
-        .spanned()
-        .map(|(t, r)| Token {
-            kind: t.unwrap(),
-            str: unsafe { contents.get_unchecked(r) },
-        })
-        .collect();
+    let lex = Lexer::new(&contents);
+    let tokens: Tokens<'_> = lex.collect();
 
     if args.verbose {
         eprintln!("lexing done: {}", duration_fmt(lex_timer.elapsed()));
@@ -246,15 +232,8 @@ pub fn add_defines(file_path: &Path, type_env: &mut TypeEnv<'_>) {
     let contents = std::fs::read_to_string(file_path)
         .unwrap_or_else(|_| panic!("Sould have been able to read file {}", file_path.display()));
 
-    let lex = TokenKind::lexer(&contents);
-
-    let tokens: Tokens<'_> = lex
-        .spanned()
-        .map(|(t, r)| Token {
-            kind: t.unwrap(),
-            str: unsafe { contents.get_unchecked(r) },
-        })
-        .collect();
+    let lex = Lexer::new(&contents);
+    let tokens: Tokens<'_> = lex.collect();
 
     let mut typelist = TypeList::with_core();
 

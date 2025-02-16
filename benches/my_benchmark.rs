@@ -4,11 +4,10 @@ use std::{
 };
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use logos::Logos;
 use mimalloc::MiMalloc;
 use tycho::{
     driver::add_defines,
-    lexer::{Token, TokenKind, Tokens},
+    lexer::{Lexer, TokenKind, Tokens},
     luajit::{
         bytecode::{dump_bc, Header},
         compiler::LJCompiler,
@@ -29,15 +28,8 @@ fn benchmark_lexer(c: &mut Criterion) {
         b.iter_custom(|iters| {
             let start = Instant::now();
             for _i in 0..iters {
-                let lex = TokenKind::lexer(black_box(&contents));
-                black_box(
-                    lex.spanned()
-                        .map(|(t, r)| Token {
-                            kind: t.unwrap(),
-                            str: unsafe { contents.get_unchecked(r) },
-                        })
-                        .collect::<Tokens<'_>>(),
-                );
+                let lex = Lexer::new(black_box(&contents));
+                black_box(lex.collect::<Tokens<'_>>());
             }
             start.elapsed()
         });
@@ -46,14 +38,8 @@ fn benchmark_lexer(c: &mut Criterion) {
 
 fn benchmark_parser(c: &mut Criterion) {
     let contents = std::fs::read_to_string("test/test.ty").unwrap_or_else(|e| panic!("{e}"));
-    let lex = TokenKind::lexer(&contents);
-    let tokens = lex
-        .spanned()
-        .map(|(t, r)| Token {
-            kind: t.unwrap(),
-            str: unsafe { contents.get_unchecked(r) },
-        })
-        .collect::<Tokens<'_>>();
+    let lex = Lexer::new(&contents);
+    let tokens: Tokens<'_> = lex.collect();
     let mut pool = ExprPool::new();
     c.bench_function("parse", |b| {
         b.iter_custom(|iters| {
@@ -89,15 +75,8 @@ fn benchmark_typechecker(c: &mut Criterion) {
     }
 
     let contents = std::fs::read_to_string("test/test.ty").unwrap_or_else(|e| panic!("{e}"));
-    let lex = TokenKind::lexer(&contents);
-
-    let tokens: Tokens<'_> = lex
-        .spanned()
-        .map(|(t, r)| Token {
-            kind: t.unwrap(),
-            str: unsafe { contents.get_unchecked(r) },
-        })
-        .collect();
+    let lex = Lexer::new(&contents);
+    let tokens: Tokens<'_> = lex.collect();
 
     let mut typelist = TypeList::with_core();
 
@@ -140,15 +119,8 @@ fn benchmark_typechecker(c: &mut Criterion) {
 
 fn benchmark_compiler(c: &mut Criterion) {
     let contents = std::fs::read_to_string("test/test.ty").unwrap_or_else(|e| panic!("{e}"));
-    let lex = TokenKind::lexer(&contents);
-
-    let tokens: Tokens<'_> = lex
-        .spanned()
-        .map(|(t, r)| Token {
-            kind: t.unwrap(),
-            str: unsafe { contents.get_unchecked(r) },
-        })
-        .collect();
+    let lex = Lexer::new(&contents);
+    let tokens: Tokens<'_> = lex.collect();
 
     let mut typelist = TypeList::with_core();
 
@@ -182,15 +154,8 @@ fn benchmark_compiler(c: &mut Criterion) {
 
 fn benchmark_transpiler(c: &mut Criterion) {
     let contents = std::fs::read_to_string("test/test.ty").unwrap_or_else(|e| panic!("{e}"));
-    let lex = TokenKind::lexer(&contents);
-
-    let tokens: Tokens<'_> = lex
-        .spanned()
-        .map(|(t, r)| Token {
-            kind: t.unwrap(),
-            str: unsafe { contents.get_unchecked(r) },
-        })
-        .collect();
+    let lex = Lexer::new(&contents);
+    let tokens: Tokens<'_> = lex.collect();
 
     let mut typelist = TypeList::with_core();
 
@@ -240,15 +205,8 @@ fn benchmark_all_compile(c: &mut Criterion) {
 
                 let start = Instant::now();
 
-                let lex = TokenKind::lexer(contents);
-
-                let tokens: Tokens<'_> = lex
-                    .spanned()
-                    .map(|(t, r)| Token {
-                        kind: t.unwrap(),
-                        str: unsafe { contents.get_unchecked(r) },
-                    })
-                    .collect();
+                let lex = Lexer::new(contents);
+                let tokens: Tokens<'_> = lex.collect();
 
                 let mut typelist = TypeList::with_core();
 
@@ -298,15 +256,8 @@ fn benchmark_all_transpile(c: &mut Criterion) {
 
                 let start = Instant::now();
 
-                let lex = TokenKind::lexer(contents);
-
-                let tokens: Tokens<'_> = lex
-                    .spanned()
-                    .map(|(t, r)| Token {
-                        kind: t.unwrap(),
-                        str: unsafe { contents.get_unchecked(r) },
-                    })
-                    .collect();
+                let lex = Lexer::new(contents);
+                let tokens: Tokens<'_> = lex.collect();
 
                 let mut typelist = TypeList::with_core();
 
