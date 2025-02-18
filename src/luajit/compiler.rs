@@ -5,6 +5,7 @@ use crate::{
             UVFlags, NO_JMP,
         },
         funcstate::{FuncScope, FuncState, ScopeFlags, VarIdx},
+        utils::numlit,
         ExprDesc, ExprKind, TValue, VarFlags, VarInfo,
     },
     parser::{
@@ -810,7 +811,7 @@ impl<'src> LJCompiler<'src, '_> {
 
     fn compile_simple_expr(&mut self, simple_expr: &SimpleExpr<'src>) -> ExprDesc<'src> {
         match simple_expr {
-            SimpleExpr::Num(str) => ExprDesc::new(ExprKind::KNumber(str.parse().unwrap())),
+            SimpleExpr::Num(str) => ExprDesc::new(ExprKind::KNumber(numlit::parse(str))),
             SimpleExpr::Str(str) => ExprDesc::new(ExprKind::KString(unsafe {
                 str.get_unchecked(1..str.len() - 1)
             })),

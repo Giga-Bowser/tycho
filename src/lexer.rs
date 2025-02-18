@@ -372,6 +372,7 @@ impl Lexer<'_> {
         enum Jump {
             __,
             Name,
+            Zero,
             NumLit,
             Quote,
             Trivia,
@@ -418,7 +419,7 @@ impl Lexer<'_> {
                 __, __, __, __, __, __, __, __, __, Trivia, Trivia, __, Trivia, __, __, __, __, __,
                 __, __, __, __, __, __, __, __, __, __, __, __, __, __, Trivia, Not, Quote,
                 Octothorpe, __, Percent, Amp, __, LParen, RParen, Asterisk, Plus, Comma, Minus,
-                Dot, Slash, NumLit, NumLit, NumLit, NumLit, NumLit, NumLit, NumLit, NumLit, NumLit,
+                Dot, Slash, Zero, NumLit, NumLit, NumLit, NumLit, NumLit, NumLit, NumLit, NumLit,
                 NumLit, Colon, __, Less, Equal, Greater, Question, __, Name, Name, Name, Name,
                 Name, Name, Name, Name, Name, Name, Name, Name, Name, Name, Name, Name, Name, Name,
                 Name, Name, Name, Name, Name, Name, Name, Name, LSquare, __, RSquare, Caret, Name,
@@ -439,7 +440,8 @@ impl Lexer<'_> {
         self.bump_unchecked(1);
         match LUT[byte as usize] {
             Jump::Name => self.crunch_name(),
-            Jump::NumLit => self.crunch_numlit_start(),
+            Jump::Zero => self.numlit_zero(),
+            Jump::NumLit => self.numlit_decimal(),
             Jump::Quote => self.crunch_strlit(),
             Jump::Trivia => self.crunch_trivia(),
 
@@ -593,26 +595,39 @@ impl Lexer<'_> {
         crunch16!(self, is_name_body, self.set(TokenKind::Name));
     }
 
+    fn numlit_zero(&mut self) {
+        let Some(byte) = self.read::<u8>() else {
+            return self.set(TokenKind::NumLit);
+        };
+
+        if byte | 0x20 == b'x' {
+            self.bump_unchecked(1);
+            self.numlit_hex();
+        } else {
+            self.numlit_decimal();
+        }
+    }
+
     // [0-9]*
     #[inline]
-    fn crunch_numlit_start(&mut self) {
+    fn numlit_decimal(&mut self) {
         crunch16!(self, is_digit, self.numlit_second());
     }
 
-    // ([.][0-9]+([eE][+-]?[0-9]+)?)?
+    // ([.][0-9]+)?([eE][+-]?[0-9]+)?
     #[inline]
     fn numlit_second(&mut self) {
         if let Some([b'.', b'0'..=b'9']) = self.read::<&[u8; 2]>() {
             self.bump_unchecked(2);
-            self.crunch_digit_frac();
+            self.numlit_crunch_frac();
         } else {
-            self.set(TokenKind::NumLit);
+            self.numlit_postfrac();
         }
     }
 
     // [0-9]*([eE][+-]?[0-9]+)?
     #[inline]
-    fn crunch_digit_frac(&mut self) {
+    fn numlit_crunch_frac(&mut self) {
         crunch16!(self, is_digit, self.numlit_postfrac());
     }
 
@@ -641,7 +656,7 @@ impl Lexer<'_> {
     fn numlit_exponent_signed(&mut self) {
         if let Some(b'0'..=b'9') = self.read_at::<u8>(2) {
             self.bump_unchecked(3);
-            self.crunch_digit_finish();
+            self.numlit_crunch_finish();
         } else {
             self.set(TokenKind::NumLit);
         }
@@ -650,18 +665,49 @@ impl Lexer<'_> {
     // [0-9]+
     #[inline]
     fn numlit_exponent_unsigned(&mut self) {
-        match self.read_at::<u8>(1) {
-            Some(b'0'..=b'9') => {
-                self.bump_unchecked(2);
-                self.crunch_digit_finish();
-            }
-            _ => self.set(TokenKind::NumLit),
+        if let Some(b'0'..=b'9') = self.read_at::<u8>(1) {
+            self.bump_unchecked(2);
+            self.numlit_crunch_finish();
+        } else {
+            self.set(TokenKind::NumLit);
         }
     }
 
     #[inline]
-    fn crunch_digit_finish(&mut self) {
+    fn numlit_crunch_finish(&mut self) {
         crunch16!(self, is_digit, self.set(TokenKind::NumLit));
+    }
+
+    #[inline]
+    fn numlit_hex(&mut self) {
+        crunch16!(self, is_hexdigit, self.numlit_second_hex());
+    }
+
+    // ([.][0-9a-fA-F]+)?([pP][+-]?[0-9]+)?
+    #[inline]
+    fn numlit_second_hex(&mut self) {
+        if let Some([b'.', b'0'..=b'9' | b'A'..=b'Z' | b'a'..=b'z']) = self.read::<&[u8; 2]>() {
+            self.bump_unchecked(2);
+            self.numlit_crunch_frac_hex();
+        } else {
+            self.numlit_postfrac_hex();
+        }
+    }
+
+    // [0-9a-fA-F]*([pP][+-]?[0-9]+)?
+    #[inline]
+    fn numlit_crunch_frac_hex(&mut self) {
+        crunch16!(self, is_hexdigit, self.numlit_postfrac_hex());
+    }
+
+    // ([pP][+-]?[0-9]+)?
+    #[inline]
+    fn numlit_postfrac_hex(&mut self) {
+        if let Some(b'P' | b'p') = self.read::<u8>() {
+            self.numlit_exponent();
+        } else {
+            self.set(TokenKind::NumLit);
+        };
     }
 
     #[inline]
@@ -945,6 +991,11 @@ fn not_quote_or_escape(byte: u8) -> bool {
 #[inline]
 fn is_digit(byte: u8) -> bool {
     byte.is_ascii_digit()
+}
+
+#[inline]
+fn is_hexdigit(byte: u8) -> bool {
+    byte.is_ascii_hexdigit()
 }
 
 #[inline]
