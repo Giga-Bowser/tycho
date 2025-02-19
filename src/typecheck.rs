@@ -232,6 +232,14 @@ impl<'src> TypeChecker<'src, '_> {
                     }
                 }
                 UnOpKind::Len => Ok(Type::Number),
+                UnOpKind::Not => {
+                    let res = self.check_expr(unop.val, type_env)?;
+                    if let Type::Boolean = res {
+                        Ok(res)
+                    } else {
+                        Err(CheckErr::EmptyError)
+                    }
+                }
             },
             Expr::Paren(paren_expr) => self.check_expr(paren_expr.val, type_env),
             Expr::Simple(simple_expr) => self.check_simple_expr(simple_expr, type_env),

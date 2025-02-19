@@ -243,6 +243,7 @@ impl OpKind {
 pub enum UnOpKind {
     Neg,
     Len,
+    Not,
 }
 
 impl From<&UnOpKind> for &'static str {
@@ -250,6 +251,7 @@ impl From<&UnOpKind> for &'static str {
         match val {
             UnOpKind::Neg => "-",
             UnOpKind::Len => "#",
+            UnOpKind::Not => "not",
         }
     }
 }

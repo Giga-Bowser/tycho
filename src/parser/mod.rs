@@ -1046,6 +1046,7 @@ fn get_unop(tok: TokenKind) -> Option<UnOpKind> {
     match tok {
         Minus => Some(UnOpKind::Neg),
         Octothorpe => Some(UnOpKind::Len),
+        Not => Some(UnOpKind::Not),
         _ => None,
     }
 }

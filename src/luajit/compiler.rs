@@ -804,6 +804,7 @@ impl<'src> LJCompiler<'src, '_> {
         let instr_idx = match unop.op {
             UnOpKind::Neg => self.bcemit(BCInstr::new_ad(BCOp::UNM, 0, reg as u16)),
             UnOpKind::Len => self.bcemit(BCInstr::new_ad(BCOp::LEN, 0, reg as u16)),
+            UnOpKind::Not => self.bcemit(BCInstr::new_ad(BCOp::NOT, 0, reg as u16)),
         };
         val.kind = ExprKind::Relocable { instr_idx };
         val

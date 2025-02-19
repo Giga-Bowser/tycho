@@ -36,6 +36,7 @@ impl Display for UnOpKind {
         match self {
             UnOpKind::Neg => write!(f, "-"),
             UnOpKind::Len => write!(f, "#"),
+            UnOpKind::Not => write!(f, "!"),
         }
     }
 }
