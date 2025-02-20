@@ -16,16 +16,15 @@ use crate::{
     types::{Function, TableType, Type, User},
 };
 
+type PResult<T> = Result<T, ParseError>;
+
 pub struct Parser<'src, 'pool> {
     pub tokens: Tokens<'src>,
     pub pool: &'pool mut ExprPool<'src>,
 }
 
 impl<'src> Parser<'src, '_> {
-    pub fn parse_statement(
-        &mut self,
-        typelist: &mut TypeList,
-    ) -> Result<Statement<'src>, ParseError> {
+    pub fn parse_statement(&mut self, typelist: &mut TypeList) -> PResult<Statement<'src>> {
         match self.tokens[0].kind {
             Name => {
                 if self.tokens[1].kind == Colon
@@ -63,7 +62,7 @@ impl<'src> Parser<'src, '_> {
         }
     }
 
-    fn parse_method_decl(&mut self, typelist: &TypeList) -> Result<MethodDecl<'src>, ParseError> {
+    fn parse_method_decl(&mut self, typelist: &TypeList) -> PResult<MethodDecl<'src>> {
         let struct_name = self.tokens[0].str;
 
         self.tokens.pop_front(); // name
@@ -84,7 +83,7 @@ impl<'src> Parser<'src, '_> {
         &mut self,
         typelist: &mut TypeList,
         lhs: SuffixedName<'src>,
-    ) -> Result<Declare<'src>, ParseError> {
+    ) -> PResult<Declare<'src>> {
         self.tokens.pop_front(); // pop ':'
 
         if self.tokens[0].kind == Equal {
@@ -124,7 +123,7 @@ impl<'src> Parser<'src, '_> {
         &mut self,
         typelist: &TypeList,
         lhs: SuffixedName<'src>,
-    ) -> Result<Assign<'src>, ParseError> {
+    ) -> PResult<Assign<'src>> {
         self.tokens.pop_front(); // pop '='
 
         let rhs = self.parse_expr(typelist)?;
@@ -135,7 +134,7 @@ impl<'src> Parser<'src, '_> {
         })
     }
 
-    fn if_stat(&mut self, typelist: &TypeList) -> Result<IfStat<'src>, ParseError> {
+    fn if_stat(&mut self, typelist: &TypeList) -> PResult<IfStat<'src>> {
         self.tokens.pop_front(); // pop 'if'
 
         let condition = self.parse_expr(typelist)?;
@@ -193,7 +192,7 @@ impl<'src> Parser<'src, '_> {
         })
     }
 
-    fn while_stat(&mut self, typelist: &TypeList) -> Result<WhileStat<'src>, ParseError> {
+    fn while_stat(&mut self, typelist: &TypeList) -> PResult<WhileStat<'src>> {
         self.tokens.pop_front(); // pop 'while'
 
         let condition = self.parse_expr(typelist)?;
@@ -213,7 +212,7 @@ impl<'src> Parser<'src, '_> {
         Ok(WhileStat { condition, body })
     }
 
-    fn for_stat(&mut self, typelist: &TypeList) -> Result<Statement<'src>, ParseError> {
+    fn for_stat(&mut self, typelist: &TypeList) -> PResult<Statement<'src>> {
         self.tokens.pop_front(); // pop 'for'
 
         let first_name = self.tokens.pop_name()?;
@@ -284,7 +283,7 @@ impl<'src> Parser<'src, '_> {
         }
     }
 
-    fn parse_expr_stat(&mut self, typelist: &mut TypeList) -> Result<Statement<'src>, ParseError> {
+    fn parse_expr_stat(&mut self, typelist: &mut TypeList) -> PResult<Statement<'src>> {
         let sufexpr = self.parse_suffixed_expr(typelist)?;
 
         if let Expr::Name(name) = self.pool[sufexpr.val] {
@@ -365,10 +364,7 @@ impl<'src> Parser<'src, '_> {
         Ok(Statement::ExprStat(sufexpr))
     }
 
-    fn parse_suffixed_expr(
-        &mut self,
-        typelist: &TypeList,
-    ) -> Result<SuffixedExpr<'src>, ParseError> {
+    fn parse_suffixed_expr(&mut self, typelist: &TypeList) -> PResult<SuffixedExpr<'src>> {
         let val = self.parse_primary_expr(typelist)?;
         let mut suffixes = Vec::new();
         loop {
@@ -417,7 +413,7 @@ impl<'src> Parser<'src, '_> {
         }
     }
 
-    fn parse_index(&mut self, typelist: &TypeList) -> Result<Index, ParseError> {
+    fn parse_index(&mut self, typelist: &TypeList) -> PResult<Index> {
         self.tokens.pop_front();
 
         let result = Index {
@@ -429,7 +425,7 @@ impl<'src> Parser<'src, '_> {
         Ok(result)
     }
 
-    fn parse_expr_list(&mut self, typelist: &TypeList) -> Result<Vec<ExprRef>, ParseError> {
+    fn parse_expr_list(&mut self, typelist: &TypeList) -> PResult<Vec<ExprRef>> {
         let mut result = Vec::new();
         result.push(self.parse_expr(typelist)?);
 
@@ -441,7 +437,7 @@ impl<'src> Parser<'src, '_> {
         Ok(result)
     }
 
-    fn parse_func_args(&mut self, typelist: &TypeList) -> Result<Vec<ExprRef>, ParseError> {
+    fn parse_func_args(&mut self, typelist: &TypeList) -> PResult<Vec<ExprRef>> {
         self.tokens.pop_front(); // pop '('
         if self.tokens[0].kind == RParen {
             self.tokens.pop_front();
@@ -461,7 +457,7 @@ impl<'src> Parser<'src, '_> {
         Ok(result)
     }
 
-    fn parse_primary_expr(&mut self, typelist: &TypeList) -> Result<ExprRef, ParseError> {
+    fn parse_primary_expr(&mut self, typelist: &TypeList) -> PResult<ExprRef> {
         match self.tokens[0].kind {
             Name => {
                 let name = self.tokens[0].str;
@@ -482,11 +478,11 @@ impl<'src> Parser<'src, '_> {
         }
     }
 
-    fn parse_expr(&mut self, typelist: &TypeList) -> Result<ExprRef, ParseError> {
+    fn parse_expr(&mut self, typelist: &TypeList) -> PResult<ExprRef> {
         self.expr_impl(typelist, 0)
     }
 
-    fn expr_impl(&mut self, typelist: &TypeList, limit: u8) -> Result<ExprRef, ParseError> {
+    fn expr_impl(&mut self, typelist: &TypeList, limit: u8) -> PResult<ExprRef> {
         let mut result = if let Some(op) = get_unop(self.tokens[0].kind) {
             self.tokens.pop_front();
             let val = self.expr_impl(typelist, 12)?;
@@ -517,7 +513,7 @@ impl<'src> Parser<'src, '_> {
         Ok(result)
     }
 
-    fn simple_expr(&mut self, typelist: &TypeList) -> Result<SimpleExpr<'src>, ParseError> {
+    fn simple_expr(&mut self, typelist: &TypeList) -> PResult<SimpleExpr<'src>> {
         let str = self.tokens[0].str;
         match self.tokens[0].kind {
             NumLit => {
@@ -544,7 +540,7 @@ impl<'src> Parser<'src, '_> {
         }
     }
 
-    fn field(&mut self, typelist: &TypeList) -> Result<FieldNode<'src>, ParseError> {
+    fn field(&mut self, typelist: &TypeList) -> PResult<FieldNode<'src>> {
         match self.tokens[0].kind {
             LSquare => {
                 self.tokens.pop_front();
@@ -579,7 +575,7 @@ impl<'src> Parser<'src, '_> {
         }
     }
 
-    fn table_constructor(&mut self, typelist: &TypeList) -> Result<TableNode<'src>, ParseError> {
+    fn table_constructor(&mut self, typelist: &TypeList) -> PResult<TableNode<'src>> {
         self.tokens.pop_front();
 
         let mut fields = Vec::new();
@@ -604,17 +600,14 @@ impl<'src> Parser<'src, '_> {
         Ok(TableNode { fields })
     }
 
-    fn member(&mut self, typelist: &TypeList) -> Result<(String, Type), ParseError> {
+    fn member(&mut self, typelist: &TypeList) -> PResult<(String, Type)> {
         let name = self.tokens.pop_name()?.to_owned();
         self.tokens.expect(Colon)?;
 
         Ok((name, self.parse_type(typelist)?))
     }
 
-    fn parse_struct_constructor(
-        &mut self,
-        typelist: &TypeList,
-    ) -> Result<FuncNode<'src>, ParseError> {
+    fn parse_struct_constructor(&mut self, typelist: &TypeList) -> PResult<FuncNode<'src>> {
         self.tokens.pop_front();
         self.tokens.expect(LParen)?;
 
@@ -664,10 +657,7 @@ impl<'src> Parser<'src, '_> {
         })
     }
 
-    fn parse_struct_decl(
-        &mut self,
-        typelist: &mut TypeList,
-    ) -> Result<StructDecl<'src>, ParseError> {
+    fn parse_struct_decl(&mut self, typelist: &mut TypeList) -> PResult<StructDecl<'src>> {
         self.tokens.pop_front(); // pop 'struct'
 
         let name = self.tokens.pop_name()?;
@@ -727,7 +717,7 @@ impl<'src> Parser<'src, '_> {
         }
     }
 
-    fn parse_func_header(&mut self, typelist: &TypeList) -> Result<Function, ParseError> {
+    fn parse_func_header(&mut self, typelist: &TypeList) -> PResult<Function> {
         self.tokens.pop_front(); // pop 'func'
         self.tokens.expect(LParen)?;
 
@@ -767,7 +757,7 @@ impl<'src> Parser<'src, '_> {
         Ok(Function { params, returns })
     }
 
-    fn func_constructor(&mut self, typelist: &TypeList) -> Result<FuncNode<'src>, ParseError> {
+    fn func_constructor(&mut self, typelist: &TypeList) -> PResult<FuncNode<'src>> {
         let ty = self.parse_func_header(typelist)?;
 
         self.tokens.expect(LCurly)?;
@@ -788,7 +778,7 @@ impl<'src> Parser<'src, '_> {
         })
     }
 
-    fn parse_return_type(&mut self, typelist: &TypeList) -> Result<Type, ParseError> {
+    fn parse_return_type(&mut self, typelist: &TypeList) -> PResult<Type> {
         if self.tokens[0].kind != Arrow {
             return Ok(Type::Nil);
         }
@@ -813,7 +803,7 @@ impl<'src> Parser<'src, '_> {
         }
     }
 
-    fn parse_basic_type(&mut self, typelist: &TypeList) -> Result<Type, ParseError> {
+    fn parse_basic_type(&mut self, typelist: &TypeList) -> PResult<Type> {
         match self.tokens[0].kind {
             Name => {
                 let name = self.tokens[0].str;
@@ -861,7 +851,7 @@ impl<'src> Parser<'src, '_> {
         }
     }
 
-    fn parse_type(&mut self, typelist: &TypeList) -> Result<Type, ParseError> {
+    fn parse_type(&mut self, typelist: &TypeList) -> PResult<Type> {
         let mut result = self.parse_basic_type(typelist)?;
 
         if self.tokens[0].kind == Question {
@@ -873,11 +863,11 @@ impl<'src> Parser<'src, '_> {
     }
 
     /// expr without concat operator
-    fn parse_range_expr(&mut self, typelist: &TypeList) -> Result<ExprRef, ParseError> {
+    fn parse_range_expr(&mut self, typelist: &TypeList) -> PResult<ExprRef> {
         self.range_expr_impl(typelist, 0)
     }
 
-    fn range_expr_impl(&mut self, typelist: &TypeList, limit: u8) -> Result<ExprRef, ParseError> {
+    fn range_expr_impl(&mut self, typelist: &TypeList, limit: u8) -> PResult<ExprRef> {
         let mut result = if let Some(op) = get_unop(self.tokens[0].kind) {
             self.tokens.pop_front();
             let val = self.range_expr_impl(typelist, 12)?;
