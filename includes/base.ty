@@ -1,4 +1,0 @@
-print : func(str: string) -> nil
-pcall : func(func()) -> (boolean, string)
-tostring : func(number) -> string
-tonumber : func(string, base: number?) -> number

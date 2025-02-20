@@ -69,7 +69,7 @@ fn benchmark_parser(c: &mut Criterion) {
 
 fn benchmark_typechecker(c: &mut Criterion) {
     let mut type_env_orig = TypeEnv::default();
-    let includes = ["includes/base.ty", "includes/math.ty"];
+    let includes = ["includes/basic.ty", "includes/math.ty"];
     for filename in includes {
         add_defines(Path::new(filename), &mut type_env_orig);
     }
@@ -190,7 +190,7 @@ fn benchmark_transpiler(c: &mut Criterion) {
 
 fn benchmark_all_compile(c: &mut Criterion) {
     let mut type_env_orig = TypeEnv::default();
-    let includes = ["includes/base.ty", "includes/math.ty"];
+    let includes = ["includes/basic.ty", "includes/math.ty"];
     let contents = std::fs::read_to_string("test/test.ty").unwrap_or_else(|e| panic!("{e}"));
     for filename in includes {
         add_defines(Path::new(filename), &mut type_env_orig);
@@ -241,7 +241,7 @@ fn benchmark_all_compile(c: &mut Criterion) {
 
 fn benchmark_all_transpile(c: &mut Criterion) {
     let mut type_env_orig = TypeEnv::default();
-    let includes = ["includes/base.ty", "includes/math.ty"];
+    let includes = ["includes/basic.ty", "includes/math.ty"];
     let contents = std::fs::read_to_string("test/test.ty").unwrap_or_else(|e| panic!("{e}"));
     for filename in includes {
         add_defines(Path::new(filename), &mut type_env_orig);
