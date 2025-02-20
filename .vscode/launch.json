@@ -7,19 +7,19 @@
 		{
 			"type": "lldb",
 			"request": "launch",
-			"name": "Debug executable 'tycho-rs'",
+			"name": "Debug executable 'tycho'",
 			"cargo": {
 				"args": [
 					"build",
-					"--bin=tycho-rs",
-					"--package=tycho-rs"
+					"--bin=tycho",
+					"--package=tycho"
 				],
 				"filter": {
-					"name": "tycho-rs",
+					"name": "tycho",
 					"kind": "bin"
 				}
 			},
-			"args": ["test/test.ty", "includes/math.ty", "includes/base.ty"],
+			"args": ["build", "test/test.ty", "includes/"],
 			"cwd": "${workspaceFolder}"
 		},
 	]
