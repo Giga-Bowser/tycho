@@ -727,7 +727,7 @@ impl<'src> Parser<'src, '_> {
         }
     }
 
-    fn func_constructor(&mut self, typelist: &TypeList) -> Result<FuncNode<'src>, ParseError> {
+    fn parse_func_header(&mut self, typelist: &TypeList) -> Result<Function, ParseError> {
         self.tokens.pop_front(); // pop 'func'
         self.tokens.expect(LParen)?;
 
@@ -764,6 +764,12 @@ impl<'src> Parser<'src, '_> {
 
         let returns = Box::new(self.parse_return_type(typelist)?);
 
+        Ok(Function { params, returns })
+    }
+
+    fn func_constructor(&mut self, typelist: &TypeList) -> Result<FuncNode<'src>, ParseError> {
+        let ty = self.parse_func_header(typelist)?;
+
         self.tokens.expect(LCurly)?;
 
         let mut scoped_typelist = typelist.clone();
@@ -777,7 +783,7 @@ impl<'src> Parser<'src, '_> {
         self.tokens.pop_front();
 
         Ok(FuncNode {
-            type_: Box::new(Function { params, returns }),
+            type_: Box::new(ty),
             body,
         })
     }
@@ -847,44 +853,7 @@ impl<'src> Parser<'src, '_> {
                     val_type: Rc::new(val_type),
                 }))
             }
-            Func => {
-                self.tokens.pop_front();
-                self.tokens.expect(LParen)?;
-
-                let mut args = Vec::new();
-
-                if self.tokens[0].kind == RParen {
-                    self.tokens.pop_front();
-
-                    return Ok(Type::Function(Function {
-                        params: args,
-                        returns: Box::new(self.parse_return_type(typelist)?),
-                    }));
-                }
-
-                loop {
-                    if self.tokens[1].kind == Colon {
-                        let name = self.tokens.pop_name()?;
-                        self.tokens.pop_front();
-                        args.push((name.to_owned(), self.parse_type(typelist)?));
-                    } else {
-                        // unnamed param
-                        args.push((String::new(), self.parse_type(typelist)?));
-                    }
-
-                    if self.tokens[0].kind == RParen {
-                        self.tokens.pop_front();
-                        break;
-                    }
-
-                    self.tokens.expect(Comma)?;
-                }
-
-                Ok(Type::Function(Function {
-                    params: args,
-                    returns: Box::new(self.parse_return_type(typelist)?),
-                }))
-            }
+            Func => Ok(Type::Function(self.parse_func_header(typelist)?)),
             _ => Err(ParseError::UnexpectedToken(UnexpectedToken {
                 token: (&self.tokens[0]).into(),
                 expected_kinds: vec![Name, Nil, LSquare, Func],
