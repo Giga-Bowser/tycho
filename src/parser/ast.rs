@@ -239,6 +239,30 @@ impl OpKind {
     }
 }
 
+impl std::fmt::Display for OpKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            OpKind::Add => "+",
+            OpKind::Sub => "-",
+            OpKind::Mul => "*",
+            OpKind::Div => "/",
+            OpKind::Mod => "%",
+            OpKind::Pow => "^",
+            OpKind::Cat => "..",
+            OpKind::Neq => "!=",
+            OpKind::Equ => "==",
+            OpKind::Les => "<",
+            OpKind::Grq => ">=",
+            OpKind::Leq => "<=",
+            OpKind::Gre => ">",
+            OpKind::And => "&&",
+            OpKind::Or => "||",
+        };
+
+        f.write_str(s)
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum UnOpKind {
     Neg,

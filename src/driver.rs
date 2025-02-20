@@ -8,7 +8,6 @@ use crate::{
     },
     mem_size::DeepSize,
     parser::{ast, pool::ExprPool, Parser, TypeList},
-    pretty::Printer,
     transpiler::Transpiler,
     type_env::TypeEnv,
     typecheck::TypeChecker,
@@ -90,8 +89,7 @@ fn build(args: &BuildOpt) {
         match typechecker.check_statement(stmt, &mut type_env) {
             Ok(()) => (),
             Err(e) => {
-                let printer = Printer { pool: &pool };
-                panic!("typechecking error: {e}\n{}", printer.print(stmt))
+                panic!("typechecking error: {e}\n{stmt:#?}")
             }
         }
     }
@@ -187,8 +185,7 @@ pub fn print_main(args: &PrintOpt) {
         match typechecker.check_statement(stmt, &mut type_env) {
             Ok(()) => (),
             Err(e) => {
-                let printer = Printer { pool: &pool };
-                panic!("typechecking error: {e}\n{}", printer.print(stmt))
+                panic!("typechecking error: {e}\n{stmt:#?}")
             }
         }
     }

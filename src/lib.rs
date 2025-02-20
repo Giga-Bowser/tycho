@@ -4,7 +4,6 @@ use structopt::StructOpt;
 
 mod errors;
 mod mem_size;
-mod pretty;
 mod types;
 mod utils;
 
