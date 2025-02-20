@@ -866,7 +866,10 @@ impl<'src> LJCompiler<'src, '_> {
         e
     }
 
-    fn compile_params<const METHOD: bool>(&mut self, params: &[(String, types::Type)]) -> u8 {
+    fn compile_params<const METHOD: bool>(
+        &mut self,
+        params: &[(&'src str, types::Type<'src>)],
+    ) -> u8 {
         let mut num_params = if METHOD {
             self.var_new(0, "self");
             1

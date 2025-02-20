@@ -230,11 +230,11 @@ impl<'src, 'pool> Transpiler<'src, 'pool> {
         let params = &func_node.type_.params;
 
         if !params.is_empty() {
-            self.result += &params[0].0;
+            self.result += params[0].0;
 
             for param in &params[1..] {
                 self.result += ", ";
-                self.result += &param.0;
+                self.result += param.0;
             }
         }
 
@@ -248,11 +248,11 @@ impl<'src, 'pool> Transpiler<'src, 'pool> {
         let params = &func_node.type_.params;
 
         if !params.is_empty() {
-            self.result += &params[0].0;
+            self.result += params[0].0;
 
             for param in &params[1..] {
                 self.result += ", ";
-                self.result += &param.0;
+                self.result += param.0;
             }
         }
 

@@ -10,7 +10,7 @@ use crate::{
     types::*,
 };
 
-type TResult<T> = Result<T, CheckErr>;
+type TResult<'s, T> = Result<T, CheckErr<'s>>;
 
 pub struct TypeChecker<'src, 'pool> {
     pub pool: &'pool ExprPool<'src>,
@@ -20,8 +20,8 @@ impl<'src> TypeChecker<'src, '_> {
     pub fn check_statement(
         &self,
         stmt: &Statement<'src>,
-        type_env: &mut TypeEnv<'_>,
-    ) -> TResult<()> {
+        type_env: &mut TypeEnv<'_, 'src>,
+    ) -> TResult<'src, ()> {
         match stmt {
             Statement::Declare(decl) => self.check_decl(decl, type_env),
             Statement::MethodDecl(method_decl) => self.check_method_decl(method_decl, type_env),
@@ -59,18 +59,28 @@ impl<'src> TypeChecker<'src, '_> {
                 type_,
                 constructor: _,
             }) => {
-                type_env.push((*name).to_owned(), Type::User(*type_.clone()));
+                type_env.push(
+                    (*name).to_owned(),
+                    Type {
+                        kind: TypeKind::User(*type_.clone()),
+                        src: None,
+                    },
+                );
                 Ok(())
             }
             _ => Ok(()),
         }
     }
 
-    fn check_decl(&self, decl: &Declare<'src>, type_env: &mut TypeEnv<'_>) -> TResult<()> {
+    fn check_decl(
+        &self,
+        decl: &Declare<'src>,
+        type_env: &mut TypeEnv<'_, 'src>,
+    ) -> TResult<'src, ()> {
         if let Some(val) = decl.val {
             let lhs_type = self.check_expr(val, type_env)?;
 
-            if let Type::Adaptable = *decl.type_ {
+            if let TypeKind::Adaptable = decl.type_.kind {
                 type_env.push(decl.lhs.name.to_owned(), lhs_type);
                 return Ok(());
             }
@@ -95,10 +105,10 @@ impl<'src> TypeChecker<'src, '_> {
             for suffix in &mut decl.lhs.suffixes.iter().take(decl.lhs.suffixes.len() - 1) {
                 match suffix {
                     Suffix::Access(Access { field_name: str }) => {
-                        if let Some(field) = type_.get_field_mut(str) {
+                        if let Some(field) = type_.kind.get_field_mut(str) {
                             type_ = field;
                         } else {
-                            return Err(CheckErr::NoSuchField((*str).to_owned()));
+                            return Err(CheckErr::NoSuchField(str));
                         }
                     }
                     _ => unreachable!(),
@@ -107,11 +117,11 @@ impl<'src> TypeChecker<'src, '_> {
 
             let last = decl.lhs.suffixes.last().unwrap();
 
-            if let Suffix::Access(Access { field_name: str }) = last {
-                match type_ {
-                    Type::Table(_) => Ok(()),
-                    Type::User(ref mut user) => {
-                        user.fields.push(((*str).to_owned(), *decl.type_.clone()));
+            if let Suffix::Access(Access { field_name }) = last {
+                match &mut type_.kind {
+                    TypeKind::Table(_) => Ok(()),
+                    TypeKind::User(user) => {
+                        user.fields.push((field_name, *decl.type_.clone()));
                         Ok(())
                     }
                     _ => Err(CheckErr::CustomError(
@@ -127,11 +137,11 @@ impl<'src> TypeChecker<'src, '_> {
     fn check_method_decl(
         &self,
         method_decl: &MethodDecl<'src>,
-        type_env: &mut TypeEnv<'_>,
-    ) -> TResult<()> {
+        type_env: &mut TypeEnv<'_, 'src>,
+    ) -> TResult<'src, ()> {
         let type_ = type_env.get(method_decl.struct_name).unwrap();
 
-        let method_type = if let Type::User(_) = type_ {
+        let method_type = if let TypeKind::User(_) = type_.kind {
             type_env.push("self".to_owned(), type_.clone());
             self.check_func(&method_decl.func, type_env)?
         } else {
@@ -141,11 +151,13 @@ impl<'src> TypeChecker<'src, '_> {
         };
         type_env.pop(); // remove "self"
 
-        let Type::User(User { fields }) = type_env.get_mut(method_decl.struct_name).unwrap() else {
+        let TypeKind::User(User { fields }) =
+            &mut type_env.get_mut(method_decl.struct_name).unwrap().kind
+        else {
             unreachable!()
         };
 
-        fields.push((method_decl.method_name.to_owned(), method_type));
+        fields.push((method_decl.method_name, method_type));
 
         Ok(())
     }
@@ -153,8 +165,8 @@ impl<'src> TypeChecker<'src, '_> {
     fn check_multi_decl(
         &self,
         multi_decl: &MultiDecl<'src>,
-        type_env: &mut TypeEnv<'_>,
-    ) -> TResult<()> {
+        type_env: &mut TypeEnv<'_, 'src>,
+    ) -> TResult<'src, ()> {
         // ok so we need to basically flatten the types. so for example
         // a, b, c := twoReturnFunction(), oneReturnFunction()
         // a, b, c := (type1, type2), type3
@@ -163,7 +175,7 @@ impl<'src> TypeChecker<'src, '_> {
 
         for rhs in &multi_decl.rhs_arr {
             let expr_type = self.check_expr(*rhs, type_env)?;
-            if let Type::Multiple(mult) = expr_type {
+            if let TypeKind::Multiple(mult) = expr_type.kind {
                 types.extend(mult);
             } else {
                 types.push(expr_type);
@@ -174,7 +186,13 @@ impl<'src> TypeChecker<'src, '_> {
             if i < types.len() {
                 type_env.push((*name).to_owned(), types[i].clone());
             } else {
-                type_env.push((*name).to_owned(), Type::Nil);
+                type_env.push(
+                    (*name).to_owned(),
+                    Type {
+                        kind: TypeKind::Nil,
+                        src: None,
+                    },
+                );
             }
         }
 
@@ -184,8 +202,8 @@ impl<'src> TypeChecker<'src, '_> {
     fn check_multi_assign(
         &self,
         multi_assign: &MultiAssign<'src>,
-        type_env: &mut TypeEnv<'_>,
-    ) -> TResult<()> {
+        type_env: &mut TypeEnv<'_, 'src>,
+    ) -> TResult<'src, ()> {
         // ok so we need to basically flatten the types. so for example
         // a, b, c := twoReturnFunction(), oneReturnFunction()
         // a, b, c := (type1, type2), type3
@@ -194,19 +212,22 @@ impl<'src> TypeChecker<'src, '_> {
 
         for rhs in &multi_assign.rhs_arr {
             let rhs_type = self.check_expr(*rhs, type_env)?;
-            if let Type::Multiple(mult) = rhs_type {
+            if let TypeKind::Multiple(mult) = rhs_type.kind {
                 types.extend(mult);
             } else {
                 types.push(rhs_type);
             }
         }
 
-        for (i, suffixed_expr) in multi_assign.lhs_arr.iter().enumerate() {
+        for (idx, suffixed_expr) in multi_assign.lhs_arr.iter().enumerate() {
             let expected = self.check_suffixed_expr(suffixed_expr, type_env)?;
-            let recieved = if i < types.len() {
-                &types[i]
+            let recieved = if idx < types.len() {
+                &types[idx]
             } else {
-                &Type::Nil
+                &Type {
+                    kind: TypeKind::Nil,
+                    src: None,
+                }
             };
 
             if !expected.can_equal(recieved) {
@@ -220,23 +241,25 @@ impl<'src> TypeChecker<'src, '_> {
         Ok(())
     }
 
-    fn check_expr(&self, expr: ExprRef, type_env: &TypeEnv<'_>) -> TResult<Type> {
+    fn check_expr(&self, expr: ExprRef, type_env: &TypeEnv<'_, 'src>) -> TResult<'src, Type<'src>> {
         match &self.pool[expr] {
             Expr::BinOp(binop) => self.check_binop(binop, type_env),
             Expr::UnOp(unop) => match unop.op {
                 UnOpKind::Neg => {
-                    if std::mem::discriminant(&self.check_expr(unop.val, type_env)?)
-                        == std::mem::discriminant(&Type::Number)
-                    {
-                        Ok(Type::Number)
+                    let res = self.check_expr(unop.val, type_env)?;
+                    if let TypeKind::Number = res.kind {
+                        Ok(res)
                     } else {
                         Err(CheckErr::EmptyError)
                     }
                 }
-                UnOpKind::Len => Ok(Type::Number),
+                UnOpKind::Len => Ok(Type {
+                    kind: TypeKind::Number,
+                    src: None,
+                }),
                 UnOpKind::Not => {
                     let res = self.check_expr(unop.val, type_env)?;
-                    if let Type::Boolean = res {
+                    if let TypeKind::Boolean = res.kind {
                         Ok(res)
                     } else {
                         Err(CheckErr::EmptyError)
@@ -247,7 +270,7 @@ impl<'src> TypeChecker<'src, '_> {
             Expr::Simple(simple_expr) => self.check_simple_expr(simple_expr, type_env),
             Expr::Name(str) => match type_env.get(*str) {
                 Some(type_) => Ok(type_.clone()),
-                None => Err(CheckErr::NoSuchVal((*str).to_owned())),
+                None => Err(CheckErr::NoSuchVal(str)),
             },
         }
     }
@@ -255,8 +278,8 @@ impl<'src> TypeChecker<'src, '_> {
     fn check_field(
         &self,
         field_node: &FieldNode<'src>,
-        type_env: &TypeEnv<'_>,
-    ) -> TResult<TableType> {
+        type_env: &TypeEnv<'_, 'src>,
+    ) -> TResult<'src, TableType<'src>> {
         Ok(TableType {
             key_type: Rc::new(self.check_field_key(field_node, type_env)?),
             val_type: Rc::new(self.check_field_val(field_node, type_env)?),
@@ -266,20 +289,26 @@ impl<'src> TypeChecker<'src, '_> {
     fn check_field_key(
         &self,
         field_node: &FieldNode<'src>,
-        type_env: &TypeEnv<'_>,
-    ) -> TResult<Type> {
+        type_env: &TypeEnv<'_, 'src>,
+    ) -> TResult<'src, Type<'src>> {
         match field_node {
-            FieldNode::Field { .. } => Ok(Type::String),
+            FieldNode::Field { key, .. } => Ok(Type {
+                kind: TypeKind::String,
+                src: Some(key),
+            }),
             FieldNode::ExprField { key, .. } => self.check_expr(*key, type_env),
-            FieldNode::ValField { .. } => Ok(Type::Number),
+            FieldNode::ValField { .. } => Ok(Type {
+                kind: TypeKind::Number,
+                src: None,
+            }),
         }
     }
 
     fn check_field_val(
         &self,
         field_node: &FieldNode<'src>,
-        type_env: &TypeEnv<'_>,
-    ) -> TResult<Type> {
+        type_env: &TypeEnv<'_, 'src>,
+    ) -> TResult<'src, Type<'src>> {
         match field_node {
             FieldNode::Field { val, .. }
             | FieldNode::ExprField { val, .. }
@@ -290,12 +319,12 @@ impl<'src> TypeChecker<'src, '_> {
     fn check_table(
         &self,
         table_node: &TableNode<'src>,
-        type_env: &TypeEnv<'_>,
-    ) -> TResult<TableType> {
+        type_env: &TypeEnv<'_, 'src>,
+    ) -> TResult<'src, TableType<'src>> {
         if table_node.fields.is_empty() {
             return Ok(TableType {
-                key_type: Rc::new(Type::Adaptable),
-                val_type: Rc::new(Type::Adaptable),
+                key_type: Rc::new(TypeKind::Adaptable.into()),
+                val_type: Rc::new(TypeKind::Adaptable.into()),
             });
         }
 
@@ -306,7 +335,7 @@ impl<'src> TypeChecker<'src, '_> {
                 .key_type
                 .can_equal(&self.check_field_key(field, type_env)?)
             {
-                result.key_type = Rc::new(Type::Any);
+                result.key_type = Rc::new(TypeKind::Any.into());
                 break;
             }
         }
@@ -316,7 +345,7 @@ impl<'src> TypeChecker<'src, '_> {
                 .val_type
                 .can_equal(&self.check_field_val(field, type_env)?)
             {
-                result.val_type = Rc::new(Type::Any);
+                result.val_type = Rc::new(TypeKind::Any.into());
                 break;
             }
         }
@@ -327,16 +356,28 @@ impl<'src> TypeChecker<'src, '_> {
     fn check_simple_expr(
         &self,
         simple_expr: &SimpleExpr<'src>,
-        type_env: &TypeEnv<'_>,
-    ) -> TResult<Type> {
+        type_env: &TypeEnv<'_, 'src>,
+    ) -> TResult<'src, Type<'src>> {
         match simple_expr {
-            SimpleExpr::Num(_) => Ok(Type::Number),
-            SimpleExpr::Str(_) => Ok(Type::String),
-            SimpleExpr::Bool(_) => Ok(Type::Boolean),
-            SimpleExpr::Nil(_) => Ok(Type::Nil),
+            SimpleExpr::Num(s) => Ok(Type {
+                kind: TypeKind::Number,
+                src: Some(s),
+            }),
+            SimpleExpr::Str(s) => Ok(Type {
+                kind: TypeKind::String,
+                src: Some(s),
+            }),
+            SimpleExpr::Bool(s) => Ok(Type {
+                kind: TypeKind::Boolean,
+                src: Some(s),
+            }),
+            SimpleExpr::Nil(s) => Ok(Type {
+                kind: TypeKind::Nil,
+                src: Some(s),
+            }),
             SimpleExpr::FuncNode(func) => self.check_func(func, type_env),
             SimpleExpr::TableNode(table_node) => {
-                Ok(Type::Table(self.check_table(table_node, type_env)?))
+                Ok(TypeKind::Table(self.check_table(table_node, type_env)?).into())
             }
             SimpleExpr::SuffixedExpr(suffixed_expr) => {
                 self.check_suffixed_expr(suffixed_expr, type_env)
@@ -344,32 +385,36 @@ impl<'src> TypeChecker<'src, '_> {
         }
     }
 
-    fn check_func(&self, func: &'src FuncNode<'src>, type_env: &TypeEnv<'_>) -> TResult<Type> {
+    fn check_func(
+        &self,
+        func: &FuncNode<'src>,
+        type_env: &TypeEnv<'_, 'src>,
+    ) -> TResult<'src, Type<'src>> {
         let mut new_env = TypeEnv::new_with_parent(type_env);
         for (name, type_) in &func.type_.params {
-            new_env.push(name.to_owned(), type_.clone());
+            new_env.push((*name).to_owned(), type_.clone());
         }
 
-        if *func.type_.returns == Type::Nil {
-            return Ok(Type::Nil);
+        if let TypeKind::Nil = func.type_.returns.kind {
+            return Ok(TypeKind::Function(*func.type_.clone()).into());
         }
 
         let has_return =
             self.check_func_body(&func.body, &mut new_env, func.type_.returns.as_ref())?;
 
         if !has_return {
-            return Err(CheckErr::NoReturn);
+            return Err(CheckErr::NoReturn(func.clone()));
         }
 
-        Ok(Type::Function(*func.type_.clone()))
+        Ok(TypeKind::Function(*func.type_.clone()).into())
     }
 
     fn check_func_body(
         &self,
         body: &[Statement<'src>],
-        type_env: &mut TypeEnv<'_>,
-        return_type: &Type,
-    ) -> TResult<bool> {
+        type_env: &mut TypeEnv<'_, 'src>,
+        return_type: &Type<'src>,
+    ) -> TResult<'src, bool> {
         let start_len = type_env.len();
         for stmt in body {
             match stmt {
@@ -400,7 +445,7 @@ impl<'src> TypeChecker<'src, '_> {
                         return Err(CheckErr::ReturnCount);
                     }
 
-                    if let Type::Multiple(types) = return_type {
+                    if let TypeKind::Multiple(types) = &return_type.kind {
                         if types.len() != vals.len() {
                             return Err(CheckErr::ReturnCount);
                         }
@@ -443,10 +488,10 @@ impl<'src> TypeChecker<'src, '_> {
     fn check_suffixed_name(
         &self,
         suffixed_name: &SuffixedName<'src>,
-        type_env: &mut TypeEnv<'_>,
-    ) -> TResult<Type> {
+        type_env: &mut TypeEnv<'_, 'src>,
+    ) -> TResult<'src, Type<'src>> {
         let Some(mut type_) = type_env.get(suffixed_name.name) else {
-            return Err(CheckErr::NoSuchVal(suffixed_name.name.to_owned()));
+            return Err(CheckErr::NoSuchVal(suffixed_name.name));
         };
 
         for suffix in &suffixed_name.suffixes {
@@ -459,8 +504,8 @@ impl<'src> TypeChecker<'src, '_> {
     fn check_suffixed_expr(
         &self,
         suffixed_expr: &SuffixedExpr<'src>,
-        type_env: &TypeEnv<'_>,
-    ) -> TResult<Type> {
+        type_env: &TypeEnv<'_, 'src>,
+    ) -> TResult<'src, Type<'src>> {
         let mut type_ = &self.check_expr(suffixed_expr.val, type_env)?;
 
         for suffix in &suffixed_expr.suffixes {
@@ -472,30 +517,37 @@ impl<'src> TypeChecker<'src, '_> {
 
     fn check_suffix<'a>(
         &self,
-        mut base: &'a Type,
+        mut base: &'a Type<'src>,
         suffix: &Suffix<'src>,
-        type_env: &TypeEnv<'_>,
-    ) -> TResult<&'a Type> {
+        type_env: &TypeEnv<'_, 'src>,
+    ) -> TResult<'src, &'a Type<'src>> {
         match suffix {
-            Suffix::Index(Index { .. }) => match base {
-                Type::Table(TableType { val_type, .. }) => base = val_type,
-                Type::String => (),
-                _ => unreachable!(),
+            Suffix::Index(Index { .. }) => match &base.kind {
+                TypeKind::Table(TableType { val_type, .. }) => base = val_type,
+                TypeKind::String | TypeKind::Adaptable | TypeKind::Any => (),
+                _ => {
+                    return Err(CheckErr::CustomError(
+                        format!("you can't index a {base:?}",),
+                    ));
+                }
             },
-            Suffix::Access(Access { field_name: str }) => match base {
-                Type::User(_) => {
-                    if let Some(field) = base.get_field(str) {
+            Suffix::Access(Access { field_name: str }) => match &base.kind {
+                TypeKind::User(_) => {
+                    if let Some(field) = base.kind.get_field(str) {
                         base = field;
                     } else {
-                        return Err(CheckErr::NoSuchField((*str).to_owned()));
+                        return Err(CheckErr::NoSuchField(str));
                     }
                 }
-                Type::Table(TableType { key_type, val_type }) => {
-                    if Type::String.can_equal(key_type) {
+                TypeKind::Table(TableType { key_type, val_type }) => {
+                    if TypeKind::String.can_equal(&key_type.kind) {
                         base = val_type;
                     } else {
                         return Err(CheckErr::MismatchedTypes {
-                            expected: Type::String,
+                            expected: Type {
+                                kind: TypeKind::String,
+                                src: Some(str),
+                            },
                             recieved: key_type.as_ref().to_owned(),
                         });
                     }
@@ -511,16 +563,17 @@ impl<'src> TypeChecker<'src, '_> {
                     self.check_expr(*arg, type_env)?;
                 }
 
-                if let Type::Function(func_type) = base {
+                if let TypeKind::Function(func_type) = &base.kind {
                     base = func_type.returns.as_ref();
-                } else if *base == Type::Adaptable {
+                } else if let TypeKind::Adaptable = base.kind {
                     return Ok(base);
                 } else {
                     return Err(CheckErr::MismatchedTypes {
-                        expected: Type::Function(Function {
+                        expected: TypeKind::Function(Function {
                             params: Vec::new(),
                             returns: Box::default(),
-                        }),
+                        })
+                        .into(),
                         recieved: base.clone(),
                     });
                 }
@@ -530,10 +583,10 @@ impl<'src> TypeChecker<'src, '_> {
             }) => {
                 if name == &"new" {
                     return Ok(base);
-                } else if let Some(method) = base.get_field(name) {
+                } else if let Some(method) = base.kind.get_field(name) {
                     base = method;
                 } else {
-                    return Err(CheckErr::NoSuchMethod((*name).to_owned()));
+                    return Err(CheckErr::NoSuchMethod(name));
                 }
             }
         }
@@ -541,14 +594,18 @@ impl<'src> TypeChecker<'src, '_> {
         Ok(base)
     }
 
-    fn check_binop(&self, binop: &BinOp, type_env: &TypeEnv<'_>) -> TResult<Type> {
+    fn check_binop(
+        &self,
+        binop: &BinOp,
+        type_env: &TypeEnv<'_, 'src>,
+    ) -> TResult<'src, Type<'src>> {
         match binop.op {
             OpKind::Add | OpKind::Sub | OpKind::Mul | OpKind::Div | OpKind::Mod | OpKind::Pow => {
                 let lhs_type = self.check_expr(binop.lhs, type_env)?;
                 if lhs_type == self.check_expr(binop.rhs, type_env)? {
                     Ok(lhs_type)
                 } else {
-                    Ok(Type::Adaptable)
+                    Ok(TypeKind::Adaptable.into())
                 }
             }
             OpKind::And | OpKind::Or => {
@@ -569,7 +626,7 @@ impl<'src> TypeChecker<'src, '_> {
                 let rhs_type = self.check_expr(binop.rhs, type_env)?;
 
                 if lhs_type == rhs_type {
-                    Ok(Type::Boolean)
+                    Ok(TypeKind::Boolean.into())
                 } else {
                     Err(CheckErr::MismatchedTypes {
                         expected: lhs_type,
@@ -577,15 +634,19 @@ impl<'src> TypeChecker<'src, '_> {
                     })
                 }
             }
-            OpKind::Cat => Ok(Type::String),
+            OpKind::Cat => Ok(TypeKind::String.into()),
         }
     }
 
-    fn check_if_stat(&self, if_stat: &IfStat<'src>, type_env: &TypeEnv<'_>) -> TResult<()> {
+    fn check_if_stat(
+        &self,
+        if_stat: &IfStat<'src>,
+        type_env: &TypeEnv<'_, 'src>,
+    ) -> TResult<'src, ()> {
         let condition_type = self.check_expr(if_stat.condition, type_env)?;
-        if !condition_type.can_equal(&Type::Boolean) {
+        if !condition_type.kind.can_equal(&TypeKind::Boolean) {
             return Err(CheckErr::MismatchedTypes {
-                expected: Type::Boolean,
+                expected: TypeKind::Boolean.into(),
                 recieved: condition_type,
             });
         }
@@ -614,13 +675,13 @@ impl<'src> TypeChecker<'src, '_> {
 
     fn check_while_stat(
         &self,
-        while_stat: &WhileStat<'_>,
-        type_env: &mut TypeEnv<'_>,
-    ) -> TResult<()> {
+        while_stat: &WhileStat<'src>,
+        type_env: &mut TypeEnv<'_, 'src>,
+    ) -> TResult<'src, ()> {
         let condition_type = self.check_expr(while_stat.condition, type_env)?;
-        if !condition_type.can_equal(&Type::Boolean) {
+        if !condition_type.kind.can_equal(&TypeKind::Boolean) {
             return Err(CheckErr::MismatchedTypes {
-                expected: Type::Boolean,
+                expected: TypeKind::Boolean.into(),
                 recieved: condition_type,
             });
         }
@@ -634,27 +695,31 @@ impl<'src> TypeChecker<'src, '_> {
         Ok(())
     }
 
-    fn check_range_for(&self, range_for: &RangeFor<'src>, type_env: &TypeEnv<'_>) -> TResult<()> {
+    fn check_range_for(
+        &self,
+        range_for: &RangeFor<'src>,
+        type_env: &TypeEnv<'_, 'src>,
+    ) -> TResult<'src, ()> {
         let lhs_type = self.check_expr(range_for.range.lhs, type_env)?;
         let rhs_type = self.check_expr(range_for.range.lhs, type_env)?;
 
-        if !lhs_type.can_equal(&Type::Number) {
+        if !lhs_type.kind.can_equal(&TypeKind::Number) {
             return Err(CheckErr::MismatchedTypes {
-                expected: Type::Number,
+                expected: TypeKind::Number.into(),
                 recieved: lhs_type,
             });
         }
 
-        if !rhs_type.can_equal(&Type::Number) {
+        if !rhs_type.kind.can_equal(&TypeKind::Number) {
             return Err(CheckErr::MismatchedTypes {
-                expected: Type::Number,
+                expected: TypeKind::Number.into(),
                 recieved: rhs_type,
             });
         }
 
         let mut new_env = TypeEnv::new_with_parent(type_env);
 
-        new_env.push(range_for.var.to_owned(), Type::Number);
+        new_env.push(range_for.var.to_owned(), TypeKind::Number.into());
 
         for stmt in &range_for.body {
             self.check_statement(stmt, &mut new_env)?;
@@ -666,8 +731,8 @@ impl<'src> TypeChecker<'src, '_> {
     fn check_keyval_for(
         &self,
         keyval_for: &KeyValFor<'src>,
-        type_env: &TypeEnv<'_>,
-    ) -> TResult<()> {
+        type_env: &TypeEnv<'_, 'src>,
+    ) -> TResult<'src, ()> {
         // now because i'm evil, we have to retokenize the `key, val` string_view
         // but who cares.
         let names = keyval_for.names.as_bytes();
@@ -690,7 +755,7 @@ impl<'src> TypeChecker<'src, '_> {
 
         let lhs_type = self.check_expr(keyval_for.iter, type_env)?;
 
-        if let Type::Table(TableType { key_type, val_type }) = lhs_type {
+        if let TypeKind::Table(TableType { key_type, val_type }) = lhs_type.kind {
             let mut new_env = TypeEnv::new_with_parent(type_env);
 
             new_env.push(key_name.to_owned(), (*key_type).clone());

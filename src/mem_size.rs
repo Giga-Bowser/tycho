@@ -206,28 +206,28 @@ mod parser {
 
 mod types {
     use super::*;
-    use crate::types::{Function, Type, User};
+    use crate::types::{Function, Type, TypeKind, User};
 
-    impl DeepSize for Type {
+    impl DeepSize for Type<'_> {
         fn deep_size_of_children(&self) -> usize {
-            match self {
-                Type::Function(function) => function.deep_size_of_children(),
-                Type::Table(_) => 0, // Rc<>
-                Type::User(user) => user.deep_size_of_children(),
-                Type::Multiple(vec) => vec.deep_size_of_children(),
-                Type::Optional(opt) => opt.deep_size_of_children(),
+            match &self.kind {
+                TypeKind::Function(function) => function.deep_size_of_children(),
+                TypeKind::Table(_) => 0, // Rc<>
+                TypeKind::User(user) => user.deep_size_of_children(),
+                TypeKind::Multiple(vec) => vec.deep_size_of_children(),
+                TypeKind::Optional(opt) => opt.deep_size_of_children(),
                 _ => 0,
             }
         }
     }
 
-    impl DeepSize for Function {
+    impl DeepSize for Function<'_> {
         fn deep_size_of_children(&self) -> usize {
             self.params.deep_size_of_children() + self.returns.deep_size_of_children()
         }
     }
 
-    impl DeepSize for User {
+    impl DeepSize for User<'_> {
         fn deep_size_of_children(&self) -> usize {
             self.fields.deep_size_of_children()
         }
@@ -238,7 +238,7 @@ mod type_env {
     use super::*;
     use crate::type_env::TypeEnv;
 
-    impl DeepSize for TypeEnv<'_> {
+    impl DeepSize for TypeEnv<'_, '_> {
         fn deep_size_of_children(&self) -> usize {
             self.current_scope.deep_size_of_children()
                 + self

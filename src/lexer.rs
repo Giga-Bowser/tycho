@@ -171,7 +171,7 @@ impl<'s> Iterator for Lexer<'s> {
         let kind = unsafe { ManuallyDrop::take(&mut self.token) };
         kind.map(|kind| Token {
             kind,
-            str: self.text(),
+            text: self.text(),
         })
     }
 }
@@ -179,7 +179,7 @@ impl<'s> Iterator for Lexer<'s> {
 #[derive(Debug, Clone)]
 pub struct Token<'source> {
     pub kind: TokenKind,
-    pub str: &'source str,
+    pub text: &'source str,
 }
 
 #[derive(Debug, Clone)]
@@ -188,34 +188,38 @@ pub struct Tokens<'source>(pub VecDeque<Token<'source>>);
 impl<'source> Index<usize> for Tokens<'source> {
     type Output = Token<'source>;
 
+    #[inline]
     fn index(&self, index: usize) -> &Self::Output {
         &self.0[index]
     }
 }
 
 impl<'source> Tokens<'source> {
-    pub fn pop_front(&mut self) -> Token<'_> {
+    #[inline]
+    pub fn pop_front(&mut self) -> Token<'source> {
         self.0.pop_front().unwrap()
     }
 
-    pub fn pop_name(&mut self) -> Result<&'source str, UnexpectedToken> {
+    pub fn pop_name(&mut self) -> Result<&'source str, UnexpectedToken<'source>> {
         if self.0[0].kind != TokenKind::Name {
             return Err(UnexpectedToken {
-                token: (&self.0[0]).into(),
+                token: self.0[0].clone(),
                 expected_kinds: vec![TokenKind::Name],
             });
         }
 
-        Ok(self.0.pop_front().unwrap().str)
+        Ok(self.pop_front().text)
     }
 
-    pub fn expect(&mut self, expected_kind: TokenKind) -> Result<(), UnexpectedToken> {
+    pub fn expect(
+        &mut self,
+        expected_kind: TokenKind,
+    ) -> Result<Token<'source>, UnexpectedToken<'source>> {
         if self.0[0].kind == expected_kind {
-            self.0.pop_front();
-            Ok(())
+            Ok(self.pop_front())
         } else {
             Err(UnexpectedToken {
-                token: (&self.0[0]).into(),
+                token: self.0[0].clone(),
                 expected_kinds: vec![expected_kind],
             })
         }
@@ -227,7 +231,7 @@ impl<'source> FromIterator<Token<'source>> for Tokens<'source> {
         let mut dq = VecDeque::from_iter(iter);
         dq.push_back(Token {
             kind: TokenKind::EndOfFile,
-            str: "",
+            text: "",
         });
         Tokens(dq)
     }
@@ -244,7 +248,7 @@ impl From<&Token<'_>> for PermaToken {
     fn from(value: &Token<'_>) -> Self {
         Self {
             kind: value.kind,
-            str: value.str.to_owned(),
+            str: value.text.to_owned(),
         }
     }
 }

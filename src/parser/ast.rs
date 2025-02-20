@@ -24,7 +24,7 @@ pub enum Statement<'a> {
 #[derive(Debug, Clone)]
 pub struct Declare<'a> {
     pub lhs: Box<SuffixedName<'a>>,
-    pub type_: Box<Type>,
+    pub type_: Box<Type<'a>>,
     pub val: Option<ExprRef>,
 }
 
@@ -102,7 +102,7 @@ pub struct KeyValFor<'a> {
 #[derive(Debug, Clone)]
 pub struct StructDecl<'a> {
     pub name: &'a str,
-    pub type_: Box<User>,
+    pub type_: Box<User<'a>>,
     pub constructor: Option<FuncNode<'a>>,
 }
 
@@ -146,7 +146,7 @@ pub enum SimpleExpr<'a> {
 
 #[derive(Debug, Clone)]
 pub struct FuncNode<'a> {
-    pub type_: Box<Function>,
+    pub type_: Box<Function<'a>>,
     pub body: Vec<Statement<'a>>,
 }
 

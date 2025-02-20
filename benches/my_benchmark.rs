@@ -1,12 +1,12 @@
 use std::{
-    path::Path,
+    path::PathBuf,
     time::{Duration, Instant},
 };
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use mimalloc::MiMalloc;
 use tycho::{
-    driver::add_defines,
+    driver::{add_defines, define_sources},
     lexer::{Lexer, TokenKind, Tokens},
     luajit::{
         bytecode::{dump_bc, Header},
@@ -69,9 +69,13 @@ fn benchmark_parser(c: &mut Criterion) {
 
 fn benchmark_typechecker(c: &mut Criterion) {
     let mut type_env_orig = TypeEnv::default();
-    let includes = ["includes/basic.ty", "includes/math.ty"];
-    for filename in includes {
-        add_defines(Path::new(filename), &mut type_env_orig);
+    let includes = vec![
+        PathBuf::from("includes/basic.ty"),
+        PathBuf::from("includes/math.ty"),
+    ];
+    let include_sources = define_sources(includes);
+    for (_, source) in &include_sources {
+        add_defines(source, &mut type_env_orig);
     }
 
     let contents = std::fs::read_to_string("test/test.ty").unwrap_or_else(|e| panic!("{e}"));
@@ -190,11 +194,15 @@ fn benchmark_transpiler(c: &mut Criterion) {
 
 fn benchmark_all_compile(c: &mut Criterion) {
     let mut type_env_orig = TypeEnv::default();
-    let includes = ["includes/basic.ty", "includes/math.ty"];
-    let contents = std::fs::read_to_string("test/test.ty").unwrap_or_else(|e| panic!("{e}"));
-    for filename in includes {
-        add_defines(Path::new(filename), &mut type_env_orig);
+    let includes = vec![
+        PathBuf::from("includes/basic.ty"),
+        PathBuf::from("includes/math.ty"),
+    ];
+    let include_sources = define_sources(includes);
+    for (_, source) in &include_sources {
+        add_defines(source, &mut type_env_orig);
     }
+    let contents = std::fs::read_to_string("test/test.ty").unwrap_or_else(|e| panic!("{e}"));
 
     c.bench_function("all [compile]", |b| {
         b.iter_custom(|iters| {
@@ -241,11 +249,15 @@ fn benchmark_all_compile(c: &mut Criterion) {
 
 fn benchmark_all_transpile(c: &mut Criterion) {
     let mut type_env_orig = TypeEnv::default();
-    let includes = ["includes/basic.ty", "includes/math.ty"];
-    let contents = std::fs::read_to_string("test/test.ty").unwrap_or_else(|e| panic!("{e}"));
-    for filename in includes {
-        add_defines(Path::new(filename), &mut type_env_orig);
+    let includes = vec![
+        PathBuf::from("includes/basic.ty"),
+        PathBuf::from("includes/math.ty"),
+    ];
+    let include_sources = define_sources(includes);
+    for (_, source) in &include_sources {
+        add_defines(source, &mut type_env_orig);
     }
+    let contents = std::fs::read_to_string("test/test.ty").unwrap_or_else(|e| panic!("{e}"));
 
     c.bench_function("all [transpile]", |b| {
         b.iter_custom(|iters| {
