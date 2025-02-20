@@ -101,8 +101,8 @@ fn benchmark_typechecker(c: &mut Criterion) {
                 let mut type_env = type_env_orig.clone();
 
                 let start = Instant::now();
-                for stat in &statements {
-                    match typechecker.check_statement(black_box(stat), &mut type_env) {
+                for stmt in &statements {
+                    match typechecker.check_statement(black_box(stmt), &mut type_env) {
                         Ok(()) => (),
                         Err(_) => {
                             panic!()
@@ -177,8 +177,8 @@ fn benchmark_transpiler(c: &mut Criterion) {
             for _i in 0..iters {
                 let mut compiler = Transpiler::new(&pool);
                 let start = Instant::now();
-                for stat in &statements {
-                    compiler.transpile_statement(black_box(stat));
+                for stmt in &statements {
+                    compiler.transpile_statement(black_box(stmt));
                 }
                 elapsed += start.elapsed();
                 black_box(compiler.result);
@@ -224,9 +224,9 @@ fn benchmark_all_compile(c: &mut Criterion) {
 
                 let typechecker = TypeChecker { pool: &pool };
                 let mut compiler = LJCompiler::new(&pool);
-                for stat in &statements {
-                    typechecker.check_statement(stat, &mut type_env).unwrap();
-                    compiler.compile_statement(black_box(stat));
+                for stmt in &statements {
+                    typechecker.check_statement(stmt, &mut type_env).unwrap();
+                    compiler.compile_statement(black_box(stmt));
                     compiler.func_state.free_reg = compiler.func_state.nactvar;
                 }
 
@@ -275,9 +275,9 @@ fn benchmark_all_transpile(c: &mut Criterion) {
 
                 let typechecker = TypeChecker { pool: &pool };
                 let mut transpiler = Transpiler::new(&pool);
-                for stat in &statements {
-                    typechecker.check_statement(stat, &mut type_env).unwrap();
-                    transpiler.transpile_statement(black_box(stat));
+                for stmt in &statements {
+                    typechecker.check_statement(stmt, &mut type_env).unwrap();
+                    transpiler.transpile_statement(black_box(stmt));
                 }
 
                 elapsed += start.elapsed();

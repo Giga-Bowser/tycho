@@ -35,9 +35,9 @@ impl<'src, 'pool> Transpiler<'src, 'pool> {
             Statement::Block(statements) => {
                 self.result += "do";
                 self.indent();
-                for stat in statements {
+                for stmt in statements {
                     self.result += &self.newline();
-                    self.transpile_statement(stat);
+                    self.transpile_statement(stmt);
                 }
                 self.dedent();
                 self.result += &self.newline();

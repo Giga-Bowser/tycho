@@ -19,10 +19,10 @@ pub struct TypeChecker<'src, 'pool> {
 impl<'src> TypeChecker<'src, '_> {
     pub fn check_statement(
         &self,
-        stat: &Statement<'src>,
+        stmt: &Statement<'src>,
         type_env: &mut TypeEnv<'_>,
     ) -> TResult<()> {
-        match stat {
+        match stmt {
             Statement::Declare(decl) => self.check_decl(decl, type_env),
             Statement::MethodDecl(method_decl) => self.check_method_decl(method_decl, type_env),
             Statement::MultiDecl(multi_decl) => self.check_multi_decl(multi_decl, type_env),
@@ -49,8 +49,8 @@ impl<'src> TypeChecker<'src, '_> {
             }
             Statement::Block(statements) => {
                 let mut new_env = TypeEnv::new_with_parent(type_env);
-                for stat in statements {
-                    self.check_statement(stat, &mut new_env)?;
+                for stmt in statements {
+                    self.check_statement(stmt, &mut new_env)?;
                 }
                 Ok(())
             }
@@ -371,8 +371,8 @@ impl<'src> TypeChecker<'src, '_> {
         return_type: &Type,
     ) -> TResult<bool> {
         let start_len = type_env.len();
-        for stat in body {
-            match stat {
+        for stmt in body {
+            match stmt {
                 Statement::IfStat(IfStat { body: if_body, .. }) => {
                     if self.check_func_body(if_body, type_env, return_type)? {
                         return Ok(true);
@@ -433,7 +433,7 @@ impl<'src> TypeChecker<'src, '_> {
                 }
                 _ => (),
             }
-            self.check_statement(stat, type_env)?;
+            self.check_statement(stmt, type_env)?;
         }
 
         type_env.truncate(start_len);
@@ -592,16 +592,16 @@ impl<'src> TypeChecker<'src, '_> {
 
         let mut new_env = TypeEnv::new_with_parent(type_env);
 
-        for stat in &if_stat.body {
-            self.check_statement(stat, &mut new_env)?;
+        for stmt in &if_stat.body {
+            self.check_statement(stmt, &mut new_env)?;
         }
 
         match &if_stat.else_ {
             Some(else_) => match else_.as_ref() {
                 ElseBranch::Else(body) => {
                     let mut new_env = TypeEnv::new_with_parent(type_env);
-                    for stat in body {
-                        self.check_statement(stat, &mut new_env)?;
+                    for stmt in body {
+                        self.check_statement(stmt, &mut new_env)?;
                     }
 
                     Ok(())
@@ -627,8 +627,8 @@ impl<'src> TypeChecker<'src, '_> {
 
         let mut new_env = TypeEnv::new_with_parent(type_env);
 
-        for stat in &while_stat.body {
-            self.check_statement(stat, &mut new_env)?;
+        for stmt in &while_stat.body {
+            self.check_statement(stmt, &mut new_env)?;
         }
 
         Ok(())
@@ -656,8 +656,8 @@ impl<'src> TypeChecker<'src, '_> {
 
         new_env.push(range_for.var.to_owned(), Type::Number);
 
-        for stat in &range_for.body {
-            self.check_statement(stat, &mut new_env)?;
+        for stmt in &range_for.body {
+            self.check_statement(stmt, &mut new_env)?;
         }
 
         Ok(())
@@ -696,8 +696,8 @@ impl<'src> TypeChecker<'src, '_> {
             new_env.push(key_name.to_owned(), (*key_type).clone());
             new_env.push(val_name.to_owned(), (*val_type).clone());
 
-            for stat in &keyval_for.body {
-                self.check_statement(stat, &mut new_env)?;
+            for stmt in &keyval_for.body {
+                self.check_statement(stmt, &mut new_env)?;
             }
 
             Ok(())

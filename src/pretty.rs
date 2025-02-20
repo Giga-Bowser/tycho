@@ -46,12 +46,12 @@ pub struct Printer<'src, 'pool> {
 }
 
 impl Printer<'_, '_> {
-    pub fn print(&self, stat: &Statement<'_>) -> String {
-        self.print_statement("", stat, true)
+    pub fn print(&self, stmt: &Statement<'_>) -> String {
+        self.print_statement("", stmt, true)
     }
 
-    fn print_statement(&self, prefix: &str, stat: &Statement<'_>, is_end: bool) -> String {
-        match stat {
+    fn print_statement(&self, prefix: &str, stmt: &Statement<'_>, is_end: bool) -> String {
+        match stmt {
             Statement::Assign(assign) => self.print_assign(prefix, assign, is_end),
             Statement::Break => format!("{prefix}{}break\n", if is_end { "└── " } else { "├── " }),
             Statement::MethodDecl(method_decl) => {
@@ -255,8 +255,8 @@ impl Printer<'_, '_> {
 
         let new_prefix = prefix.to_owned() + if is_end { "    " } else { "│   " };
 
-        for stat in func_node.body.iter().take(func_node.body.len() - 1) {
-            result += &self.print_statement(&new_prefix, stat, false);
+        for stmt in func_node.body.iter().take(func_node.body.len() - 1) {
+            result += &self.print_statement(&new_prefix, stmt, false);
         }
 
         result += &self.print_statement(&new_prefix, func_node.body.last().unwrap(), true);
@@ -418,8 +418,8 @@ impl Printer<'_, '_> {
         );
 
         if !if_stat.body.is_empty() {
-            for stat in if_stat.body.iter().take(if_stat.body.len() - 1) {
-                result += &self.print_statement(&new_prefix, stat, false);
+            for stmt in if_stat.body.iter().take(if_stat.body.len() - 1) {
+                result += &self.print_statement(&new_prefix, stmt, false);
             }
 
             result += &self.print_statement(
@@ -434,8 +434,8 @@ impl Printer<'_, '_> {
             match else_.as_ref() {
                 ElseBranch::Else(body) => {
                     if !body.is_empty() {
-                        for stat in body.iter().take(body.len() - 1) {
-                            result += &self.print_statement(&new_prefix, stat, false);
+                        for stmt in body.iter().take(body.len() - 1) {
+                            result += &self.print_statement(&new_prefix, stmt, false);
                         }
 
                         result += &self.print_statement(&new_prefix, body.last().unwrap(), true);

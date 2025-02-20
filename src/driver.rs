@@ -72,26 +72,26 @@ fn build(args: &BuildOpt) {
         pool: &mut pool,
     };
 
-    let mut stats = Vec::new();
+    let mut stmts = Vec::new();
     while parser.tokens[0].kind != TokenKind::EndOfFile {
-        stats.push(parser.parse_statement(&mut typelist).unwrap());
+        stmts.push(parser.parse_statement(&mut typelist).unwrap());
     }
 
     if args.verbose {
         eprintln!("parsing done: {}", duration_fmt(parse_timer.elapsed()));
-        eprintln!("ast memory: {}", ByteFmt(stats.deep_size_of()));
+        eprintln!("ast memory: {}", ByteFmt(stmts.deep_size_of()));
         eprintln!("pool memory: {}", ByteFmt(pool.vec.deep_size_of()));
     }
 
     let check_timer = Instant::now();
 
     let typechecker = TypeChecker { pool: &pool };
-    for stat in &stats {
-        match typechecker.check_statement(stat, &mut type_env) {
+    for stmt in &stmts {
+        match typechecker.check_statement(stmt, &mut type_env) {
             Ok(()) => (),
             Err(e) => {
                 let printer = Printer { pool: &pool };
-                panic!("typechecking error: {e}\n{}", printer.print(stat))
+                panic!("typechecking error: {e}\n{}", printer.print(stmt))
             }
         }
     }
@@ -104,9 +104,9 @@ fn build(args: &BuildOpt) {
     let compile_timer = Instant::now();
 
     let result = if args.bc {
-        compile(&pool, &stats)
+        compile(&pool, &stmts)
     } else {
-        transpile(&pool, &stats)
+        transpile(&pool, &stmts)
     };
 
     if args.verbose {
@@ -169,26 +169,26 @@ pub fn print_main(args: &PrintOpt) {
         pool: &mut pool,
     };
 
-    let mut stats = Vec::new();
+    let mut stmts = Vec::new();
     while parser.tokens[0].kind != TokenKind::EndOfFile {
-        stats.push(parser.parse_statement(&mut typelist).unwrap());
+        stmts.push(parser.parse_statement(&mut typelist).unwrap());
     }
 
     if args.verbose {
         eprintln!("parsing done: {}", duration_fmt(parse_timer.elapsed()));
-        eprintln!("ast memory: {}", ByteFmt(stats.deep_size_of()));
+        eprintln!("ast memory: {}", ByteFmt(stmts.deep_size_of()));
         eprintln!("pool memory: {}", ByteFmt(pool.vec.deep_size_of()));
     }
 
     let check_timer = Instant::now();
 
     let typechecker = TypeChecker { pool: &pool };
-    for stat in &stats {
-        match typechecker.check_statement(stat, &mut type_env) {
+    for stmt in &stmts {
+        match typechecker.check_statement(stmt, &mut type_env) {
             Ok(()) => (),
             Err(e) => {
                 let printer = Printer { pool: &pool };
-                panic!("typechecking error: {e}\n{}", printer.print(stat))
+                panic!("typechecking error: {e}\n{}", printer.print(stmt))
             }
         }
     }
@@ -201,7 +201,7 @@ pub fn print_main(args: &PrintOpt) {
     let compile_timer = Instant::now();
 
     let mut compiler = LJCompiler::new(&pool);
-    compiler.compile_chunk(&stats);
+    compiler.compile_chunk(&stmts);
     compiler.fs_finish();
 
     if args.verbose {
@@ -211,18 +211,18 @@ pub fn print_main(args: &PrintOpt) {
     eprintln!("{:#?}", compiler.protos);
 }
 
-fn transpile<'pool>(pool: &'pool ExprPool<'pool>, stats: &[ast::Statement<'_>]) -> Vec<u8> {
+fn transpile<'pool>(pool: &'pool ExprPool<'pool>, stmts: &[ast::Statement<'_>]) -> Vec<u8> {
     let mut compiler = Transpiler::new(pool);
-    for stat in stats {
-        compiler.transpile_statement(stat);
+    for stmt in stmts {
+        compiler.transpile_statement(stmt);
         compiler.result.push('\n');
     }
     compiler.result.into_bytes()
 }
 
-fn compile<'pool>(pool: &'pool ExprPool<'pool>, stats: &[ast::Statement<'_>]) -> Vec<u8> {
+fn compile<'pool>(pool: &'pool ExprPool<'pool>, stmts: &[ast::Statement<'_>]) -> Vec<u8> {
     let mut compiler = LJCompiler::new(pool);
-    compiler.compile_chunk(stats);
+    compiler.compile_chunk(stmts);
 
     compiler.fs_finish();
     dump_bc(&Header::default(), &compiler.protos)
@@ -243,16 +243,16 @@ pub fn add_defines(file_path: &Path, type_env: &mut TypeEnv<'_>) {
         pool: &mut pool,
     };
 
-    let mut stats = Vec::new();
+    let mut stmts = Vec::new();
 
     while parser.tokens[0].kind != TokenKind::EndOfFile {
-        stats.push(parser.parse_statement(&mut typelist).unwrap());
+        stmts.push(parser.parse_statement(&mut typelist).unwrap());
     }
 
     let typechecker = TypeChecker { pool: &pool };
 
-    for stat in stats {
-        match typechecker.check_statement(&stat, type_env) {
+    for stmt in stmts {
+        match typechecker.check_statement(&stmt, type_env) {
             Ok(()) => (),
             Err(err) => panic!("{}", err),
         }
