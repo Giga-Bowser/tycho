@@ -427,7 +427,7 @@ impl<'s, 'pool> Transpiler<'s, 'pool> {
         }
     }
 
-    fn expr_list(&mut self, exprs: &[usize], sep: &'static str) {
+    fn expr_list(&mut self, exprs: &[ExprRef], sep: &'static str) {
         if exprs.is_empty() {
             return;
         }
