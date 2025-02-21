@@ -12,16 +12,16 @@ use crate::{
 
 type TResult<'s, T> = Result<T, CheckErr<'s>>;
 
-pub struct TypeChecker<'src, 'pool> {
-    pub pool: &'pool ExprPool<'src>,
+pub struct TypeChecker<'s, 'pool> {
+    pub pool: &'pool ExprPool<'s>,
 }
 
-impl<'src> TypeChecker<'src, '_> {
+impl<'s> TypeChecker<'s, '_> {
     pub fn check_statement(
         &self,
-        stmt: &Statement<'src>,
-        type_env: &mut TypeEnv<'_, 'src>,
-    ) -> TResult<'src, ()> {
+        stmt: &Statement<'s>,
+        type_env: &mut TypeEnv<'_, 's>,
+    ) -> TResult<'s, ()> {
         match stmt {
             Statement::Declare(decl) => self.check_decl(decl, type_env),
             Statement::MethodDecl(method_decl) => self.check_method_decl(method_decl, type_env),
@@ -72,11 +72,7 @@ impl<'src> TypeChecker<'src, '_> {
         }
     }
 
-    fn check_decl(
-        &self,
-        decl: &Declare<'src>,
-        type_env: &mut TypeEnv<'_, 'src>,
-    ) -> TResult<'src, ()> {
+    fn check_decl(&self, decl: &Declare<'s>, type_env: &mut TypeEnv<'_, 's>) -> TResult<'s, ()> {
         if let Some(val) = decl.val {
             let lhs_type = self.check_expr(val, type_env)?;
 
@@ -136,9 +132,9 @@ impl<'src> TypeChecker<'src, '_> {
 
     fn check_method_decl(
         &self,
-        method_decl: &MethodDecl<'src>,
-        type_env: &mut TypeEnv<'_, 'src>,
-    ) -> TResult<'src, ()> {
+        method_decl: &MethodDecl<'s>,
+        type_env: &mut TypeEnv<'_, 's>,
+    ) -> TResult<'s, ()> {
         let type_ = type_env.get(method_decl.struct_name).unwrap();
 
         let method_type = if let TypeKind::User(_) = type_.kind {
@@ -164,9 +160,9 @@ impl<'src> TypeChecker<'src, '_> {
 
     fn check_multi_decl(
         &self,
-        multi_decl: &MultiDecl<'src>,
-        type_env: &mut TypeEnv<'_, 'src>,
-    ) -> TResult<'src, ()> {
+        multi_decl: &MultiDecl<'s>,
+        type_env: &mut TypeEnv<'_, 's>,
+    ) -> TResult<'s, ()> {
         // ok so we need to basically flatten the types. so for example
         // a, b, c := twoReturnFunction(), oneReturnFunction()
         // a, b, c := (type1, type2), type3
@@ -201,9 +197,9 @@ impl<'src> TypeChecker<'src, '_> {
 
     fn check_multi_assign(
         &self,
-        multi_assign: &MultiAssign<'src>,
-        type_env: &mut TypeEnv<'_, 'src>,
-    ) -> TResult<'src, ()> {
+        multi_assign: &MultiAssign<'s>,
+        type_env: &mut TypeEnv<'_, 's>,
+    ) -> TResult<'s, ()> {
         // ok so we need to basically flatten the types. so for example
         // a, b, c := twoReturnFunction(), oneReturnFunction()
         // a, b, c := (type1, type2), type3
@@ -241,7 +237,7 @@ impl<'src> TypeChecker<'src, '_> {
         Ok(())
     }
 
-    fn check_expr(&self, expr: ExprRef, type_env: &TypeEnv<'_, 'src>) -> TResult<'src, Type<'src>> {
+    fn check_expr(&self, expr: ExprRef, type_env: &TypeEnv<'_, 's>) -> TResult<'s, Type<'s>> {
         match &self.pool[expr] {
             Expr::BinOp(binop) => self.check_binop(binop, type_env),
             Expr::UnOp(unop) => match unop.op {
@@ -277,9 +273,9 @@ impl<'src> TypeChecker<'src, '_> {
 
     fn check_field(
         &self,
-        field_node: &FieldNode<'src>,
-        type_env: &TypeEnv<'_, 'src>,
-    ) -> TResult<'src, TableType<'src>> {
+        field_node: &FieldNode<'s>,
+        type_env: &TypeEnv<'_, 's>,
+    ) -> TResult<'s, TableType<'s>> {
         Ok(TableType {
             key_type: Rc::new(self.check_field_key(field_node, type_env)?),
             val_type: Rc::new(self.check_field_val(field_node, type_env)?),
@@ -288,9 +284,9 @@ impl<'src> TypeChecker<'src, '_> {
 
     fn check_field_key(
         &self,
-        field_node: &FieldNode<'src>,
-        type_env: &TypeEnv<'_, 'src>,
-    ) -> TResult<'src, Type<'src>> {
+        field_node: &FieldNode<'s>,
+        type_env: &TypeEnv<'_, 's>,
+    ) -> TResult<'s, Type<'s>> {
         match field_node {
             FieldNode::Field { key, .. } => Ok(Type {
                 kind: TypeKind::String,
@@ -306,9 +302,9 @@ impl<'src> TypeChecker<'src, '_> {
 
     fn check_field_val(
         &self,
-        field_node: &FieldNode<'src>,
-        type_env: &TypeEnv<'_, 'src>,
-    ) -> TResult<'src, Type<'src>> {
+        field_node: &FieldNode<'s>,
+        type_env: &TypeEnv<'_, 's>,
+    ) -> TResult<'s, Type<'s>> {
         match field_node {
             FieldNode::Field { val, .. }
             | FieldNode::ExprField { val, .. }
@@ -318,9 +314,9 @@ impl<'src> TypeChecker<'src, '_> {
 
     fn check_table(
         &self,
-        table_node: &TableNode<'src>,
-        type_env: &TypeEnv<'_, 'src>,
-    ) -> TResult<'src, TableType<'src>> {
+        table_node: &TableNode<'s>,
+        type_env: &TypeEnv<'_, 's>,
+    ) -> TResult<'s, TableType<'s>> {
         if table_node.fields.is_empty() {
             return Ok(TableType {
                 key_type: Rc::new(TypeKind::Adaptable.into()),
@@ -355,9 +351,9 @@ impl<'src> TypeChecker<'src, '_> {
 
     fn check_simple_expr(
         &self,
-        simple_expr: &SimpleExpr<'src>,
-        type_env: &TypeEnv<'_, 'src>,
-    ) -> TResult<'src, Type<'src>> {
+        simple_expr: &SimpleExpr<'s>,
+        type_env: &TypeEnv<'_, 's>,
+    ) -> TResult<'s, Type<'s>> {
         match simple_expr {
             SimpleExpr::Num(s) => Ok(Type {
                 kind: TypeKind::Number,
@@ -385,11 +381,7 @@ impl<'src> TypeChecker<'src, '_> {
         }
     }
 
-    fn check_func(
-        &self,
-        func: &FuncNode<'src>,
-        type_env: &TypeEnv<'_, 'src>,
-    ) -> TResult<'src, Type<'src>> {
+    fn check_func(&self, func: &FuncNode<'s>, type_env: &TypeEnv<'_, 's>) -> TResult<'s, Type<'s>> {
         let mut new_env = TypeEnv::new_with_parent(type_env);
         for (name, type_) in &func.type_.params {
             new_env.push((*name).to_owned(), type_.clone());
@@ -411,10 +403,10 @@ impl<'src> TypeChecker<'src, '_> {
 
     fn check_func_body(
         &self,
-        body: &[Statement<'src>],
-        type_env: &mut TypeEnv<'_, 'src>,
-        return_type: &Type<'src>,
-    ) -> TResult<'src, bool> {
+        body: &[Statement<'s>],
+        type_env: &mut TypeEnv<'_, 's>,
+        return_type: &Type<'s>,
+    ) -> TResult<'s, bool> {
         let start_len = type_env.len();
         for stmt in body {
             match stmt {
@@ -487,9 +479,9 @@ impl<'src> TypeChecker<'src, '_> {
 
     fn check_suffixed_name(
         &self,
-        suffixed_name: &SuffixedName<'src>,
-        type_env: &mut TypeEnv<'_, 'src>,
-    ) -> TResult<'src, Type<'src>> {
+        suffixed_name: &SuffixedName<'s>,
+        type_env: &mut TypeEnv<'_, 's>,
+    ) -> TResult<'s, Type<'s>> {
         let Some(mut type_) = type_env.get(suffixed_name.name) else {
             return Err(CheckErr::NoSuchVal(suffixed_name.name));
         };
@@ -503,9 +495,9 @@ impl<'src> TypeChecker<'src, '_> {
 
     fn check_suffixed_expr(
         &self,
-        suffixed_expr: &SuffixedExpr<'src>,
-        type_env: &TypeEnv<'_, 'src>,
-    ) -> TResult<'src, Type<'src>> {
+        suffixed_expr: &SuffixedExpr<'s>,
+        type_env: &TypeEnv<'_, 's>,
+    ) -> TResult<'s, Type<'s>> {
         let mut type_ = &self.check_expr(suffixed_expr.val, type_env)?;
 
         for suffix in &suffixed_expr.suffixes {
@@ -517,10 +509,10 @@ impl<'src> TypeChecker<'src, '_> {
 
     fn check_suffix<'a>(
         &self,
-        mut base: &'a Type<'src>,
-        suffix: &Suffix<'src>,
-        type_env: &TypeEnv<'_, 'src>,
-    ) -> TResult<'src, &'a Type<'src>> {
+        mut base: &'a Type<'s>,
+        suffix: &Suffix<'s>,
+        type_env: &TypeEnv<'_, 's>,
+    ) -> TResult<'s, &'a Type<'s>> {
         match suffix {
             Suffix::Index(Index { .. }) => match &base.kind {
                 TypeKind::Table(TableType { val_type, .. }) => base = val_type,
@@ -594,11 +586,7 @@ impl<'src> TypeChecker<'src, '_> {
         Ok(base)
     }
 
-    fn check_binop(
-        &self,
-        binop: &BinOp,
-        type_env: &TypeEnv<'_, 'src>,
-    ) -> TResult<'src, Type<'src>> {
+    fn check_binop(&self, binop: &BinOp, type_env: &TypeEnv<'_, 's>) -> TResult<'s, Type<'s>> {
         match binop.op {
             OpKind::Add | OpKind::Sub | OpKind::Mul | OpKind::Div | OpKind::Mod | OpKind::Pow => {
                 let lhs_type = self.check_expr(binop.lhs, type_env)?;
@@ -638,11 +626,7 @@ impl<'src> TypeChecker<'src, '_> {
         }
     }
 
-    fn check_if_stat(
-        &self,
-        if_stat: &IfStat<'src>,
-        type_env: &TypeEnv<'_, 'src>,
-    ) -> TResult<'src, ()> {
+    fn check_if_stat(&self, if_stat: &IfStat<'s>, type_env: &TypeEnv<'_, 's>) -> TResult<'s, ()> {
         let condition_type = self.check_expr(if_stat.condition, type_env)?;
         if !condition_type.kind.can_equal(&TypeKind::Boolean) {
             return Err(CheckErr::MismatchedTypes {
@@ -675,9 +659,9 @@ impl<'src> TypeChecker<'src, '_> {
 
     fn check_while_stat(
         &self,
-        while_stat: &WhileStat<'src>,
-        type_env: &mut TypeEnv<'_, 'src>,
-    ) -> TResult<'src, ()> {
+        while_stat: &WhileStat<'s>,
+        type_env: &mut TypeEnv<'_, 's>,
+    ) -> TResult<'s, ()> {
         let condition_type = self.check_expr(while_stat.condition, type_env)?;
         if !condition_type.kind.can_equal(&TypeKind::Boolean) {
             return Err(CheckErr::MismatchedTypes {
@@ -697,9 +681,9 @@ impl<'src> TypeChecker<'src, '_> {
 
     fn check_range_for(
         &self,
-        range_for: &RangeFor<'src>,
-        type_env: &TypeEnv<'_, 'src>,
-    ) -> TResult<'src, ()> {
+        range_for: &RangeFor<'s>,
+        type_env: &TypeEnv<'_, 's>,
+    ) -> TResult<'s, ()> {
         let lhs_type = self.check_expr(range_for.range.lhs, type_env)?;
         let rhs_type = self.check_expr(range_for.range.lhs, type_env)?;
 
@@ -730,9 +714,9 @@ impl<'src> TypeChecker<'src, '_> {
 
     fn check_keyval_for(
         &self,
-        keyval_for: &KeyValFor<'src>,
-        type_env: &TypeEnv<'_, 'src>,
-    ) -> TResult<'src, ()> {
+        keyval_for: &KeyValFor<'s>,
+        type_env: &TypeEnv<'_, 's>,
+    ) -> TResult<'s, ()> {
         // now because i'm evil, we have to retokenize the `key, val` string_view
         // but who cares.
         let names = keyval_for.names.as_bytes();

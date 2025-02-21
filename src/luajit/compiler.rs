@@ -18,16 +18,16 @@ use crate::{
 const LJ_FR2: bool = true;
 
 #[derive(Debug)]
-pub struct LJCompiler<'src, 'pool> {
-    pub pool: &'pool ExprPool<'src>,
+pub struct LJCompiler<'s, 'pool> {
+    pub pool: &'pool ExprPool<'s>,
     pub func_state: FuncState,
     prev_states: Vec<FuncState>,
     var_info: Vec<VarInfo>,
     pub protos: Vec<Proto>,
 }
 
-impl<'src, 'pool> LJCompiler<'src, 'pool> {
-    pub fn new(pool: &'pool ExprPool<'src>) -> Self {
+impl<'s, 'pool> LJCompiler<'s, 'pool> {
+    pub fn new(pool: &'pool ExprPool<'s>) -> Self {
         let mut result = Self {
             pool,
             func_state: FuncState::top(),
@@ -173,8 +173,8 @@ impl LJCompiler<'_, '_> {
     }
 }
 
-impl<'src> LJCompiler<'src, '_> {
-    pub fn compile_statement(&mut self, statement: &Statement<'src>) {
+impl<'s> LJCompiler<'s, '_> {
+    pub fn compile_statement(&mut self, statement: &Statement<'s>) {
         match statement {
             Statement::Declare(decl) => self.compile_decl(decl),
             Statement::MultiDecl(multi_decl) => self.compile_multi_decl(multi_decl),
@@ -209,7 +209,7 @@ impl<'src> LJCompiler<'src, '_> {
         }
     }
 
-    fn compile_decl(&mut self, decl: &Declare<'src>) {
+    fn compile_decl(&mut self, decl: &Declare<'s>) {
         self.var_new(0, decl.lhs.name);
 
         let Some(val) = decl.val else {
@@ -244,7 +244,7 @@ impl<'src> LJCompiler<'src, '_> {
         // self.compile_expr(val);
     }
 
-    fn compile_multi_decl(&mut self, multi_decl: &MultiDecl<'src>) {
+    fn compile_multi_decl(&mut self, multi_decl: &MultiDecl<'s>) {
         for (idx, var_name) in multi_decl.lhs_arr.iter().enumerate() {
             self.var_new(idx as u32, var_name);
         }
@@ -261,7 +261,7 @@ impl<'src> LJCompiler<'src, '_> {
         self.var_add(nvars);
     }
 
-    fn compile_method_decl(&mut self, method_decl: &MethodDecl<'src>) {
+    fn compile_method_decl(&mut self, method_decl: &MethodDecl<'s>) {
         let mut lhs = self.var_lookup(method_decl.struct_name);
         self.func_state.expr_toanyreg(&mut lhs);
         let mut key = ExprDesc::new(ExprKind::KString(method_decl.method_name));
@@ -271,7 +271,7 @@ impl<'src> LJCompiler<'src, '_> {
         self.bcemit_store(&lhs, func);
     }
 
-    fn compile_assign(&mut self, assign: &Assign<'src>) {
+    fn compile_assign(&mut self, assign: &Assign<'s>) {
         let lhs = self.compile_suffixed_name(assign.lhs.as_ref());
         let mut rhs = self.compile_expr(assign.rhs);
         if let ExprKind::Call { instr_idx, base } = rhs.kind {
@@ -285,7 +285,7 @@ impl<'src> LJCompiler<'src, '_> {
         self.bcemit_store(&lhs, rhs);
     }
 
-    fn compile_multi_assign(&mut self, multi_assign: &MultiAssign<'src>) {
+    fn compile_multi_assign(&mut self, multi_assign: &MultiAssign<'s>) {
         let mut lhs_list: Vec<_> = multi_assign
             .lhs_arr
             .iter()
@@ -327,8 +327,8 @@ impl<'src> LJCompiler<'src, '_> {
         &mut self,
         nvars: BCReg,
         nexprs: BCReg,
-        mut expr: ExprDesc<'src>,
-    ) -> ExprDesc<'src> {
+        mut expr: ExprDesc<'s>,
+    ) -> ExprDesc<'s> {
         let mut extra = nvars as i32 - nexprs as i32;
         match expr.kind {
             ExprKind::Call { instr_idx, base: _ } => {
@@ -364,7 +364,7 @@ impl<'src> LJCompiler<'src, '_> {
         expr
     }
 
-    fn compile_if_stat(&mut self, mut if_stat: &IfStat<'src>) {
+    fn compile_if_stat(&mut self, mut if_stat: &IfStat<'s>) {
         let mut flist = self.compile_if_body(if_stat);
         let mut escape_list = NO_JMP;
 
@@ -395,7 +395,7 @@ impl<'src> LJCompiler<'src, '_> {
         self.func_state.jmp_tohere(escape_list);
     }
 
-    fn compile_if_body(&mut self, if_stat: &IfStat<'src>) -> BCPos {
+    fn compile_if_body(&mut self, if_stat: &IfStat<'s>) -> BCPos {
         let condexit = {
             // expr_cond
             self.expr_cond(if_stat.condition)
@@ -406,7 +406,7 @@ impl<'src> LJCompiler<'src, '_> {
         condexit
     }
 
-    fn compile_while_stat(&mut self, while_stat: &WhileStat<'src>) {
+    fn compile_while_stat(&mut self, while_stat: &WhileStat<'s>) {
         self.func_state.last_target = self.func_state.bc.len();
         let start = self.func_state.bc.len();
         let cond_exit = self.expr_cond(while_stat.condition);
@@ -435,7 +435,7 @@ impl<'src> LJCompiler<'src, '_> {
         v.false_jumplist
     }
 
-    fn compile_range_for(&mut self, range_for: &RangeFor<'src>) {
+    fn compile_range_for(&mut self, range_for: &RangeFor<'s>) {
         const FORL_IDX: BCReg = 0;
         const FORL_STOP: BCReg = 1;
         const FORL_STEP: BCReg = 2;
@@ -473,7 +473,7 @@ impl<'src> LJCompiler<'src, '_> {
         self.fscope_end();
     }
 
-    fn compile_keyval_for(&mut self, keyval_for: &KeyValFor<'src>) {
+    fn compile_keyval_for(&mut self, keyval_for: &KeyValFor<'s>) {
         const FOR_GEN: &str = "(gen)";
         const FOR_STATE: &str = "(state)";
         const FOR_CTL: &str = "(ctl)";
@@ -549,7 +549,7 @@ impl<'src> LJCompiler<'src, '_> {
         self.fscope_end();
     }
 
-    fn compile_expr(&mut self, expr: ExprRef) -> ExprDesc<'src> {
+    fn compile_expr(&mut self, expr: ExprRef) -> ExprDesc<'s> {
         match &self.pool[expr] {
             Expr::BinOp(binop) => self.compile_binop(binop),
             Expr::UnOp(unop) => self.compile_unop(unop),
@@ -559,7 +559,7 @@ impl<'src> LJCompiler<'src, '_> {
         }
     }
 
-    fn compile_binop(&mut self, binop: &BinOp) -> ExprDesc<'src> {
+    fn compile_binop(&mut self, binop: &BinOp) -> ExprDesc<'s> {
         let mut lhs = self.compile_expr(binop.lhs);
         // fixup left side
         match binop.op {
@@ -641,9 +641,9 @@ impl<'src> LJCompiler<'src, '_> {
     fn compile_binop_arith(
         &mut self,
         binop: &BinOp,
-        mut lhs: ExprDesc<'src>,
-        mut rhs: ExprDesc<'src>,
-    ) -> ExprDesc<'src> {
+        mut lhs: ExprDesc<'s>,
+        mut rhs: ExprDesc<'s>,
+    ) -> ExprDesc<'s> {
         let mut bc_op = BCOp::from_ast(binop.op);
 
         let (rb, rc) = if let OpKind::Pow = binop.op {
@@ -703,9 +703,9 @@ impl<'src> LJCompiler<'src, '_> {
     fn compile_binop_cmp(
         &mut self,
         binop: &BinOp,
-        mut e1: ExprDesc<'src>,
-        mut e2: ExprDesc<'src>,
-    ) -> ExprDesc<'src> {
+        mut e1: ExprDesc<'s>,
+        mut e2: ExprDesc<'s>,
+    ) -> ExprDesc<'s> {
         let mut op = match binop.op {
             OpKind::Equ => BCOp::ISEQV,
             OpKind::Neq => BCOp::ISNEV,
@@ -787,7 +787,7 @@ impl<'src> LJCompiler<'src, '_> {
         e1
     }
 
-    fn compile_unop(&mut self, unop: &UnOp) -> ExprDesc<'src> {
+    fn compile_unop(&mut self, unop: &UnOp) -> ExprDesc<'s> {
         let mut val = self.compile_expr(unop.val);
 
         if matches!(unop.op, UnOpKind::Neg) && !val.has_jump() {
@@ -810,7 +810,7 @@ impl<'src> LJCompiler<'src, '_> {
         val
     }
 
-    fn compile_simple_expr(&mut self, simple_expr: &SimpleExpr<'src>) -> ExprDesc<'src> {
+    fn compile_simple_expr(&mut self, simple_expr: &SimpleExpr<'s>) -> ExprDesc<'s> {
         match simple_expr {
             SimpleExpr::Num(str) => ExprDesc::new(ExprKind::KNumber(numlit::parse(str))),
             SimpleExpr::Str(str) => ExprDesc::new(ExprKind::KString(unsafe {
@@ -827,7 +827,7 @@ impl<'src> LJCompiler<'src, '_> {
         }
     }
 
-    pub fn compile_chunk(&mut self, statements: &[Statement<'src>]) {
+    pub fn compile_chunk(&mut self, statements: &[Statement<'s>]) {
         for statement in statements {
             self.compile_statement(statement);
             debug_assert!(
@@ -842,7 +842,7 @@ impl<'src> LJCompiler<'src, '_> {
         }
     }
 
-    fn compile_func<const METHOD: bool>(&mut self, func_node: &FuncNode<'src>) -> ExprDesc<'src> {
+    fn compile_func<const METHOD: bool>(&mut self, func_node: &FuncNode<'s>) -> ExprDesc<'s> {
         self.fs_init();
         self.fscope_begin(ScopeFlags::empty());
         self.func_state.num_params = self.compile_params::<METHOD>(&func_node.type_.params);
@@ -866,10 +866,7 @@ impl<'src> LJCompiler<'src, '_> {
         e
     }
 
-    fn compile_params<const METHOD: bool>(
-        &mut self,
-        params: &[(&'src str, types::Type<'src>)],
-    ) -> u8 {
+    fn compile_params<const METHOD: bool>(&mut self, params: &[(&'s str, types::Type<'s>)]) -> u8 {
         let mut num_params = if METHOD {
             self.var_new(0, "self");
             1
@@ -890,7 +887,7 @@ impl<'src> LJCompiler<'src, '_> {
         num_params as u8
     }
 
-    fn compile_block(&mut self, statements: &[Statement<'src>]) {
+    fn compile_block(&mut self, statements: &[Statement<'s>]) {
         self.fscope_begin(ScopeFlags::empty());
         self.compile_chunk(statements);
         self.fscope_end();
@@ -948,7 +945,7 @@ impl<'src> LJCompiler<'src, '_> {
         self.bcemit(instr);
     }
 
-    fn compile_struct_decl(&mut self, struct_decl: &StructDecl<'src>) {
+    fn compile_struct_decl(&mut self, struct_decl: &StructDecl<'s>) {
         self.var_new(0, struct_decl.name);
         let local_reg = self.func_state.free_reg;
         self.func_state.bcreg_reserve(1);
@@ -970,7 +967,7 @@ impl<'src> LJCompiler<'src, '_> {
         }
     }
 
-    fn compile_constructor(&mut self, constructor: &FuncNode<'src>, struct_name: &'src str) {
+    fn compile_constructor(&mut self, constructor: &FuncNode<'s>, struct_name: &'s str) {
         let mut lhs = self.var_lookup(struct_name);
         self.func_state.expr_toanyreg(&mut lhs);
         let mut key = ExprDesc::new(ExprKind::KString("new"));
@@ -1078,7 +1075,7 @@ impl<'src> LJCompiler<'src, '_> {
         self.bcemit_store(&lhs, func);
     }
 
-    fn compile_table(&mut self, table_node: &TableNode<'src>) -> ExprDesc<'src> {
+    fn compile_table(&mut self, table_node: &TableNode<'s>) -> ExprDesc<'s> {
         let mut t_idx: Option<usize> = None;
         let mut free_reg = self.func_state.free_reg;
         let pc = self.bcemit(BCInstr::new_ad(BCOp::TNEW, free_reg as u8, 0));
@@ -1275,7 +1272,7 @@ impl<'src> LJCompiler<'src, '_> {
         table_expr
     }
 
-    fn compile_suffixed_expr(&mut self, suffixed_expr: &SuffixedExpr<'src>) -> ExprDesc<'src> {
+    fn compile_suffixed_expr(&mut self, suffixed_expr: &SuffixedExpr<'s>) -> ExprDesc<'s> {
         let mut expr = self.compile_expr(suffixed_expr.val);
 
         for suffix in &suffixed_expr.suffixes {
@@ -1285,7 +1282,7 @@ impl<'src> LJCompiler<'src, '_> {
         expr
     }
 
-    fn compile_suffixed_name(&mut self, suffixed_name: &SuffixedName<'src>) -> ExprDesc<'src> {
+    fn compile_suffixed_name(&mut self, suffixed_name: &SuffixedName<'s>) -> ExprDesc<'s> {
         let mut expr = self.var_lookup(suffixed_name.name);
 
         for suffix in &suffixed_name.suffixes {
@@ -1295,11 +1292,7 @@ impl<'src> LJCompiler<'src, '_> {
         expr
     }
 
-    fn compile_suffix(
-        &mut self,
-        suffix: &Suffix<'src>,
-        mut base: ExprDesc<'src>,
-    ) -> ExprDesc<'src> {
+    fn compile_suffix(&mut self, suffix: &Suffix<'s>, mut base: ExprDesc<'s>) -> ExprDesc<'s> {
         match suffix {
             Suffix::Method(Method { method_name, args }) => {
                 base = self.bcemit_method(base, method_name);
@@ -1328,7 +1321,7 @@ impl<'src> LJCompiler<'src, '_> {
         base
     }
 
-    fn compile_index(&mut self, base: &mut ExprDesc<'src>, key: &mut ExprDesc<'src>) {
+    fn compile_index(&mut self, base: &mut ExprDesc<'s>, key: &mut ExprDesc<'s>) {
         let ExprKind::NonReloc { result_reg } = base.kind else {
             unreachable!("compile_index called on bad expr: {base:?}")
         };
@@ -1359,7 +1352,7 @@ impl<'src> LJCompiler<'src, '_> {
         };
     }
 
-    fn expr_list(&mut self, exprs: &[ExprRef]) -> ExprDesc<'src> {
+    fn expr_list(&mut self, exprs: &[ExprRef]) -> ExprDesc<'s> {
         let mut last = self.compile_expr(exprs[0]);
 
         for expr in &exprs[1..] {
@@ -1370,7 +1363,7 @@ impl<'src> LJCompiler<'src, '_> {
         last
     }
 
-    fn compile_args(&mut self, func: &ExprDesc<'src>, args: &[ExprRef]) -> ExprDesc<'src> {
+    fn compile_args(&mut self, func: &ExprDesc<'s>, args: &[ExprRef]) -> ExprDesc<'s> {
         let mut arg_expr = if args.is_empty() {
             ExprDesc::new(ExprKind::Void)
         } else {
@@ -1423,17 +1416,13 @@ impl<'src> LJCompiler<'src, '_> {
     }
 }
 
-impl<'src> LJCompiler<'src, '_> {
+impl<'s> LJCompiler<'s, '_> {
     #[inline]
     pub fn bcemit(&mut self, instr: BCInstr) -> BCPos {
         self.func_state.bcemit(instr)
     }
 
-    pub fn bcemit_store(
-        &mut self,
-        var: &ExprDesc<'src>,
-        mut expr: ExprDesc<'src>,
-    ) -> ExprDesc<'src> {
+    pub fn bcemit_store(&mut self, var: &ExprDesc<'s>, mut expr: ExprDesc<'s>) -> ExprDesc<'s> {
         let instr = match var.kind {
             ExprKind::Local {
                 local_reg,
@@ -1499,11 +1488,7 @@ impl<'src> LJCompiler<'src, '_> {
         expr
     }
 
-    pub fn bcemit_method(
-        &mut self,
-        mut base: ExprDesc<'src>,
-        method_name: &'src str,
-    ) -> ExprDesc<'src> {
+    pub fn bcemit_method(&mut self, mut base: ExprDesc<'s>, method_name: &'s str) -> ExprDesc<'s> {
         let obj = self.func_state.expr_toanyreg(&mut base);
         self.func_state.expr_free(&base);
         let func = self.func_state.free_reg as u8;
@@ -1537,7 +1522,7 @@ impl<'src> LJCompiler<'src, '_> {
 }
 
 // Variable info handling
-impl<'src> LJCompiler<'src, '_> {
+impl<'s> LJCompiler<'s, '_> {
     fn var_get(&mut self, reg: BCReg) -> &mut VarInfo {
         let idx = self.func_state.var_map[reg as usize];
         &mut self.var_info[idx as usize]
@@ -1589,7 +1574,7 @@ impl<'src> LJCompiler<'src, '_> {
         self.func_state.uv_map.len() as u16 - 1
     }
 
-    fn var_lookup(&mut self, name: &'src str) -> ExprDesc<'src> {
+    fn var_lookup(&mut self, name: &'s str) -> ExprDesc<'s> {
         let mut first = true;
         let all_states = self
             .prev_states

@@ -9,14 +9,14 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub struct Transpiler<'src, 'pool> {
-    pub pool: &'pool ExprPool<'src>,
+pub struct Transpiler<'s, 'pool> {
+    pub pool: &'pool ExprPool<'s>,
     pub result: String,
     indent: Cell<usize>,
 }
 
-impl<'src, 'pool> Transpiler<'src, 'pool> {
-    pub fn new(pool: &'pool ExprPool<'src>) -> Self {
+impl<'s, 'pool> Transpiler<'s, 'pool> {
+    pub fn new(pool: &'pool ExprPool<'s>) -> Self {
         Self {
             pool,
             result: "require(\"lualib.tycho\")\n".to_owned(),
@@ -24,7 +24,7 @@ impl<'src, 'pool> Transpiler<'src, 'pool> {
         }
     }
 
-    pub fn transpile_statement(&mut self, statement: &Statement<'src>) {
+    pub fn transpile_statement(&mut self, statement: &Statement<'s>) {
         match statement {
             Statement::Declare(decl) => self.transpile_decl(decl),
             Statement::MultiDecl(multi_decl) => self.transpile_multi_decl(multi_decl),
@@ -60,7 +60,7 @@ impl<'src, 'pool> Transpiler<'src, 'pool> {
         }
     }
 
-    fn transpile_decl(&mut self, decl: &Declare<'src>) {
+    fn transpile_decl(&mut self, decl: &Declare<'s>) {
         let Some(val) = decl.val else {
             // no val is assigned, this means this statement is only useful for type checking
             format_to!(self.result, "local {}", decl.lhs.name);
@@ -87,14 +87,14 @@ impl<'src, 'pool> Transpiler<'src, 'pool> {
         self.transpile_expr(val);
     }
 
-    fn transpile_multi_decl(&mut self, multi_decl: &MultiDecl<'src>) {
+    fn transpile_multi_decl(&mut self, multi_decl: &MultiDecl<'s>) {
         let lhs_result = multi_decl.lhs_arr.join(", ");
 
         format_to!(self.result, "local {lhs_result} = ");
         self.expr_list(&multi_decl.rhs_arr, ", ");
     }
 
-    fn transpile_method_decl(&mut self, method_decl: &MethodDecl<'src>) {
+    fn transpile_method_decl(&mut self, method_decl: &MethodDecl<'s>) {
         // let Some(val) = method_decl.val else {
         //     // no val is assigned, this means this statement is only useful for type checking
         //     // we can just return an empty string
@@ -119,19 +119,19 @@ impl<'src, 'pool> Transpiler<'src, 'pool> {
         self.result.push_str("end");
     }
 
-    fn transpile_assign(&mut self, assign: &Assign<'src>) {
+    fn transpile_assign(&mut self, assign: &Assign<'s>) {
         self.transpile_suffixed_name(assign.lhs.as_ref());
         self.result += " = ";
         self.transpile_expr(assign.rhs);
     }
 
-    fn transpile_multi_assign(&mut self, multi_assign: &MultiAssign<'src>) {
+    fn transpile_multi_assign(&mut self, multi_assign: &MultiAssign<'s>) {
         self.suffixed_expr_list(&multi_assign.lhs_arr, ", ");
         self.result += " = ";
         self.expr_list(&multi_assign.rhs_arr, ", ");
     }
 
-    fn transpile_if_stat(&mut self, if_stat: &IfStat<'src>) {
+    fn transpile_if_stat(&mut self, if_stat: &IfStat<'s>) {
         self.result += "if ";
         self.transpile_expr(if_stat.condition);
         self.result += " then";
@@ -153,7 +153,7 @@ impl<'src, 'pool> Transpiler<'src, 'pool> {
         }
     }
 
-    fn transpile_while_stat(&mut self, while_stat: &WhileStat<'src>) {
+    fn transpile_while_stat(&mut self, while_stat: &WhileStat<'s>) {
         self.result += "while ";
         self.transpile_expr(while_stat.condition);
         self.result += " do";
@@ -161,7 +161,7 @@ impl<'src, 'pool> Transpiler<'src, 'pool> {
         self.result += "end";
     }
 
-    fn transpile_range_for(&mut self, range_for: &RangeFor<'src>) {
+    fn transpile_range_for(&mut self, range_for: &RangeFor<'s>) {
         self.result += "for ";
         self.result += range_for.var;
         self.result += " = ";
@@ -173,7 +173,7 @@ impl<'src, 'pool> Transpiler<'src, 'pool> {
         self.result += "end";
     }
 
-    fn transpile_keyval_for(&mut self, keyval_for: &KeyValFor<'src>) {
+    fn transpile_keyval_for(&mut self, keyval_for: &KeyValFor<'s>) {
         self.result += "for ";
         self.result += keyval_for.names;
         self.result += " in pairs(";
@@ -213,7 +213,7 @@ impl<'src, 'pool> Transpiler<'src, 'pool> {
         }
     }
 
-    fn transpile_simple_expr(&mut self, simple_expr: &SimpleExpr<'src>) {
+    fn transpile_simple_expr(&mut self, simple_expr: &SimpleExpr<'s>) {
         match simple_expr {
             SimpleExpr::Num(str)
             | SimpleExpr::Str(str)
@@ -225,7 +225,7 @@ impl<'src, 'pool> Transpiler<'src, 'pool> {
         }
     }
 
-    fn transpile_func(&mut self, func_node: &FuncNode<'src>) {
+    fn transpile_func(&mut self, func_node: &FuncNode<'s>) {
         self.result += "function(";
         let params = &func_node.type_.params;
 
@@ -243,7 +243,7 @@ impl<'src, 'pool> Transpiler<'src, 'pool> {
         self.result += "end";
     }
 
-    fn transpile_local_func(&mut self, func_node: &FuncNode<'src>, name: &str) {
+    fn transpile_local_func(&mut self, func_node: &FuncNode<'s>, name: &str) {
         format_to!(self.result, "local function {name}(");
         let params = &func_node.type_.params;
 
@@ -261,7 +261,7 @@ impl<'src, 'pool> Transpiler<'src, 'pool> {
         self.result += "end";
     }
 
-    fn transpile_block(&mut self, block: &[Statement<'src>]) {
+    fn transpile_block(&mut self, block: &[Statement<'s>]) {
         self.indent();
         for statement in block {
             self.result += &self.newline();
@@ -271,7 +271,7 @@ impl<'src, 'pool> Transpiler<'src, 'pool> {
         self.result += &self.newline();
     }
 
-    fn transpile_struct_decl(&mut self, struct_decl: &StructDecl<'src>) {
+    fn transpile_struct_decl(&mut self, struct_decl: &StructDecl<'s>) {
         let newline = self.newline();
         let name = struct_decl.name;
         format_to!(
@@ -296,7 +296,7 @@ impl<'src, 'pool> Transpiler<'src, 'pool> {
         }
     }
 
-    fn transpile_table(&mut self, table_node: &TableNode<'src>) {
+    fn transpile_table(&mut self, table_node: &TableNode<'s>) {
         self.result += "{";
         self.result += &self.newline();
         for field in &table_node.fields {
@@ -324,7 +324,7 @@ impl<'src, 'pool> Transpiler<'src, 'pool> {
         self.result.push('}');
     }
 
-    fn transpile_suffixed_expr(&mut self, suffixed_expr: &SuffixedExpr<'src>) {
+    fn transpile_suffixed_expr(&mut self, suffixed_expr: &SuffixedExpr<'s>) {
         self.transpile_expr(suffixed_expr.val);
 
         for suffix in &suffixed_expr.suffixes {
@@ -332,7 +332,7 @@ impl<'src, 'pool> Transpiler<'src, 'pool> {
         }
     }
 
-    fn transpile_suffixed_name(&mut self, suffixed_expr: &SuffixedName<'src>) {
+    fn transpile_suffixed_name(&mut self, suffixed_expr: &SuffixedName<'s>) {
         self.result += suffixed_expr.name;
 
         for suffix in &suffixed_expr.suffixes {
@@ -340,7 +340,7 @@ impl<'src, 'pool> Transpiler<'src, 'pool> {
         }
     }
 
-    fn transpile_suffix(&mut self, suffix: &Suffix<'src>) {
+    fn transpile_suffix(&mut self, suffix: &Suffix<'s>) {
         match suffix {
             Suffix::Method(Method {
                 method_name: name,
@@ -380,7 +380,7 @@ impl<'src, 'pool> Transpiler<'src, 'pool> {
         self.indent.set(new);
     }
 
-    fn jit_expr(&self, expr: ExprRef) -> Option<&'src str> {
+    fn jit_expr(&self, expr: ExprRef) -> Option<&'s str> {
         match &self.pool[expr] {
             Expr::BinOp(bin_op) => match bin_op.op {
                 OpKind::Neq | OpKind::And | OpKind::Or => None,
@@ -440,7 +440,7 @@ impl<'src, 'pool> Transpiler<'src, 'pool> {
         }
     }
 
-    fn suffixed_expr_list(&mut self, exprs: &[SuffixedExpr<'src>], sep: &'static str) {
+    fn suffixed_expr_list(&mut self, exprs: &[SuffixedExpr<'s>], sep: &'static str) {
         if exprs.is_empty() {
             return;
         }

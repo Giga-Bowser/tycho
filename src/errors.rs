@@ -53,33 +53,33 @@ pub struct Annotation {
     pub label: Option<String>,
 }
 
-pub trait Snippetize<'src> {
-    fn snippetize(self, source: &'src str) -> Diag;
+pub trait Snippetize<'s> {
+    fn snippetize(self, source: &'s str) -> Diag;
 }
 
 #[derive(Default, Debug)]
-pub enum ParseError<'a> {
+pub enum ParseError<'s> {
     #[default]
     EmptyError,
-    NoSuchType(&'a str),
-    UnexpectedToken(UnexpectedToken<'a>),
-    BadExprStat(ast::Expr<'a>),
+    NoSuchType(&'s str),
+    UnexpectedToken(UnexpectedToken<'s>),
+    BadExprStat(ast::Expr<'s>),
 }
 
 #[derive(Debug)]
-pub struct UnexpectedToken<'a> {
-    pub token: Token<'a>,
+pub struct UnexpectedToken<'s> {
+    pub token: Token<'s>,
     pub expected_kinds: Vec<TokenKind>,
 }
 
-impl<'a> From<UnexpectedToken<'a>> for ParseError<'a> {
-    fn from(value: UnexpectedToken<'a>) -> Self {
+impl<'s> From<UnexpectedToken<'s>> for ParseError<'s> {
+    fn from(value: UnexpectedToken<'s>) -> Self {
         ParseError::UnexpectedToken(value)
     }
 }
 
-impl<'src> Snippetize<'src> for ParseError<'src> {
-    fn snippetize(self, source: &'src str) -> Diag {
+impl<'s> Snippetize<'s> for ParseError<'s> {
+    fn snippetize(self, source: &'s str) -> Diag {
         match self {
             ParseError::EmptyError => Diag {
                 title: "oh no, empty error".to_owned(),
@@ -127,8 +127,8 @@ impl<'src> Snippetize<'src> for ParseError<'src> {
     }
 }
 
-impl<'src> Snippetize<'src> for UnexpectedToken<'src> {
-    fn snippetize(self, source: &'src str) -> Diag {
+impl<'s> Snippetize<'s> for UnexpectedToken<'s> {
+    fn snippetize(self, source: &'s str) -> Diag {
         let range = get_substring_range(source, self.token.text);
         let mut annotations = Vec::new();
 
@@ -156,24 +156,24 @@ impl<'src> Snippetize<'src> for UnexpectedToken<'src> {
 }
 
 #[derive(Default, Debug, Clone)]
-pub enum CheckErr<'src> {
+pub enum CheckErr<'s> {
     #[default]
     EmptyError,
-    NoSuchVal(&'src str),
+    NoSuchVal(&'s str),
     MismatchedTypes {
-        expected: Type<'src>,
-        recieved: Type<'src>,
+        expected: Type<'s>,
+        recieved: Type<'s>,
     },
     ReturnCount,
     NotIterable,
-    NoSuchField(&'src str),
-    NoSuchMethod(&'src str),
-    NoReturn(ast::FuncNode<'src>),
+    NoSuchField(&'s str),
+    NoSuchMethod(&'s str),
+    NoReturn(ast::FuncNode<'s>),
     CustomError(String),
 }
 
-impl<'src> Snippetize<'src> for CheckErr<'src> {
-    fn snippetize(self, source: &'src str) -> Diag {
+impl<'s> Snippetize<'s> for CheckErr<'s> {
+    fn snippetize(self, source: &'s str) -> Diag {
         match self {
             CheckErr::EmptyError => Diag {
                 title: "oh no, empty error".to_owned(),

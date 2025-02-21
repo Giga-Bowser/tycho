@@ -177,16 +177,16 @@ impl<'s> Iterator for Lexer<'s> {
 }
 
 #[derive(Debug, Clone)]
-pub struct Token<'source> {
+pub struct Token<'s> {
     pub kind: TokenKind,
-    pub text: &'source str,
+    pub text: &'s str,
 }
 
 #[derive(Debug, Clone)]
-pub struct Tokens<'source>(pub VecDeque<Token<'source>>);
+pub struct Tokens<'s>(pub VecDeque<Token<'s>>);
 
-impl<'source> Index<usize> for Tokens<'source> {
-    type Output = Token<'source>;
+impl<'s> Index<usize> for Tokens<'s> {
+    type Output = Token<'s>;
 
     #[inline]
     fn index(&self, index: usize) -> &Self::Output {
@@ -194,13 +194,13 @@ impl<'source> Index<usize> for Tokens<'source> {
     }
 }
 
-impl<'source> Tokens<'source> {
+impl<'s> Tokens<'s> {
     #[inline]
-    pub fn pop_front(&mut self) -> Token<'source> {
+    pub fn pop_front(&mut self) -> Token<'s> {
         self.0.pop_front().unwrap()
     }
 
-    pub fn pop_name(&mut self) -> Result<&'source str, UnexpectedToken<'source>> {
+    pub fn pop_name(&mut self) -> Result<&'s str, UnexpectedToken<'s>> {
         if self.0[0].kind != TokenKind::Name {
             return Err(UnexpectedToken {
                 token: self.0[0].clone(),
@@ -211,10 +211,7 @@ impl<'source> Tokens<'source> {
         Ok(self.pop_front().text)
     }
 
-    pub fn expect(
-        &mut self,
-        expected_kind: TokenKind,
-    ) -> Result<Token<'source>, UnexpectedToken<'source>> {
+    pub fn expect(&mut self, expected_kind: TokenKind) -> Result<Token<'s>, UnexpectedToken<'s>> {
         if self.0[0].kind == expected_kind {
             Ok(self.pop_front())
         } else {
@@ -226,8 +223,8 @@ impl<'source> Tokens<'source> {
     }
 }
 
-impl<'source> FromIterator<Token<'source>> for Tokens<'source> {
-    fn from_iter<T: IntoIterator<Item = Token<'source>>>(iter: T) -> Self {
+impl<'s> FromIterator<Token<'s>> for Tokens<'s> {
+    fn from_iter<T: IntoIterator<Item = Token<'s>>>(iter: T) -> Self {
         let mut dq = VecDeque::from_iter(iter);
         dq.push_back(Token {
             kind: TokenKind::EndOfFile,

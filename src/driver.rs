@@ -240,7 +240,7 @@ fn compile<'pool>(pool: &'pool ExprPool<'pool>, stmts: &[ast::Statement<'_>]) ->
     dump_bc(&Header::default(), &compiler.protos)
 }
 
-pub fn add_defines<'a>(source: &'a str, type_env: &mut TypeEnv<'_, 'a>) -> Result<(), Diag> {
+pub fn add_defines<'s>(source: &'s str, type_env: &mut TypeEnv<'_, 's>) -> Result<(), Diag> {
     let lex = Lexer::new(source);
     let tokens: Tokens<'_> = lex.collect();
 
@@ -292,7 +292,7 @@ pub fn define_sources(mut include_files: Vec<PathBuf>) -> Vec<(PathBuf, String)>
     include_sources
 }
 
-fn report_err<'a>(err: impl Snippetize<'a>, source: &'a str, path: &Path) -> String {
+fn report_err<'s>(err: impl Snippetize<'s>, source: &'s str, path: &Path) -> String {
     report_diag(err.snippetize(source), source, path)
 }
 

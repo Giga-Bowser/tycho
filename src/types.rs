@@ -1,24 +1,24 @@
 use std::rc::Rc;
 
 #[derive(Debug, Clone)]
-pub struct Function<'a> {
-    pub params: Vec<(&'a str, Type<'a>)>,
-    pub returns: Box<Type<'a>>,
+pub struct Function<'s> {
+    pub params: Vec<(&'s str, Type<'s>)>,
+    pub returns: Box<Type<'s>>,
 }
 
 #[derive(Debug, Clone)]
-pub struct TableType<'a> {
-    pub key_type: Rc<Type<'a>>,
-    pub val_type: Rc<Type<'a>>,
+pub struct TableType<'s> {
+    pub key_type: Rc<Type<'s>>,
+    pub val_type: Rc<Type<'s>>,
 }
 
 #[derive(Debug, Clone)]
-pub struct User<'a> {
-    pub fields: Vec<(&'a str, Type<'a>)>,
+pub struct User<'s> {
+    pub fields: Vec<(&'s str, Type<'s>)>,
 }
 
-impl<'a> User<'a> {
-    pub fn get_field(&self, key: &str) -> Option<&Type<'a>> {
+impl<'s> User<'s> {
+    pub fn get_field(&self, key: &str) -> Option<&Type<'s>> {
         for field in &self.fields {
             if field.0 == key {
                 return Some(&field.1);
@@ -27,7 +27,7 @@ impl<'a> User<'a> {
         None
     }
 
-    pub fn get_field_mut(&mut self, key: &str) -> Option<&mut Type<'a>> {
+    pub fn get_field_mut(&mut self, key: &str) -> Option<&mut Type<'s>> {
         for field in &mut self.fields {
             if field.0 == key {
                 return Some(&mut field.1);
@@ -38,26 +38,26 @@ impl<'a> User<'a> {
 }
 
 #[derive(Debug, Clone, Default)]
-pub enum TypeKind<'a> {
+pub enum TypeKind<'s> {
     #[default]
     Nil,
     Any,
     Number,
     String,
     Boolean,
-    Function(Function<'a>),
-    Table(TableType<'a>),
-    User(User<'a>),
+    Function(Function<'s>),
+    Table(TableType<'s>),
+    User(User<'s>),
     Adaptable,
     Variadic,
-    Multiple(Vec<Type<'a>>),
-    Optional(Box<Type<'a>>),
+    Multiple(Vec<Type<'s>>),
+    Optional(Box<Type<'s>>),
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct Type<'a> {
-    pub kind: TypeKind<'a>,
-    pub src: Option<&'a str>,
+pub struct Type<'s> {
+    pub kind: TypeKind<'s>,
+    pub src: Option<&'s str>,
 }
 
 impl PartialEq for Type<'_> {
@@ -115,7 +115,7 @@ impl PartialEq for TypeKind<'_> {
     }
 }
 
-impl<'a> TypeKind<'a> {
+impl<'s> TypeKind<'s> {
     /// please note this is NON-COMMUTATIVE
     pub fn can_equal(&self, rhs: &Self) -> bool {
         if let TypeKind::Any = self {
@@ -155,14 +155,14 @@ impl<'a> TypeKind<'a> {
         true
     }
 
-    pub fn get_field(&self, key: &str) -> Option<&Type<'a>> {
+    pub fn get_field(&self, key: &str) -> Option<&Type<'s>> {
         match self {
             Self::User(user) => user.get_field(key),
             _ => None,
         }
     }
 
-    pub fn get_field_mut(&mut self, key: &str) -> Option<&mut Type<'a>> {
+    pub fn get_field_mut(&mut self, key: &str) -> Option<&mut Type<'s>> {
         match self {
             Self::User(user) => user.get_field_mut(key),
             _ => None,
@@ -170,8 +170,8 @@ impl<'a> TypeKind<'a> {
     }
 }
 
-impl<'a> From<TypeKind<'a>> for Type<'a> {
-    fn from(value: TypeKind<'a>) -> Self {
+impl<'s> From<TypeKind<'s>> for Type<'s> {
+    fn from(value: TypeKind<'s>) -> Self {
         Self {
             kind: value,
             src: None,

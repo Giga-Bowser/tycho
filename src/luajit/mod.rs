@@ -20,14 +20,14 @@ pub fn read_main(args: ReadOpt) {
 }
 
 #[derive(Debug)]
-pub struct ExprDesc<'src> {
-    kind: ExprKind<'src>,
+pub struct ExprDesc<'s> {
+    kind: ExprKind<'s>,
     true_jumplist: BCPos,
     false_jumplist: BCPos,
 }
 
-impl<'src> ExprDesc<'src> {
-    pub fn new(kind: ExprKind<'src>) -> Self {
+impl<'s> ExprDesc<'s> {
+    pub fn new(kind: ExprKind<'s>) -> Self {
         ExprDesc {
             kind,
             true_jumplist: !0,
@@ -63,14 +63,14 @@ impl<'src> ExprDesc<'src> {
 }
 
 #[derive(Debug)]
-pub enum ExprKind<'src> {
+pub enum ExprKind<'s> {
     // Constant expressions must be first and in this order:
     KNil,
     KFalse,
     KTrue,
-    KString(&'src str), // sval = string value
-    KNumber(f64),       // nval = number value
-    KCData(u64),        // nval = cdata value, not treated as a constant expression
+    KString(&'s str), // sval = string value
+    KNumber(f64),     // nval = number value
+    KCData(u64),      // nval = cdata value, not treated as a constant expression
 
     // Non-constant expressions follow:
 
@@ -85,7 +85,7 @@ pub enum ExprKind<'src> {
         vstack_idx: VarIdx,
     },
     // sval = string value
-    Global(&'src str),
+    Global(&'s str),
     // info = table register, aux = index reg/byte/string const
     Indexed {
         table_reg: BCReg,
@@ -137,7 +137,7 @@ impl std::cmp::Eq for TValue {}
 
 #[derive(Debug, Default)]
 pub struct VarInfo {
-    // maybe this should be &'src str?
+    // maybe this should be &'s str?
     pub name: Option<Box<str>>,
     pub startpc: BCPos,
     pub endpc: BCPos,
