@@ -1251,7 +1251,7 @@ impl<'s> LJCompiler<'s, '_> {
             }
 
             if fix_t {
-                eprintln!("fix_t")
+                // eprintln!("fix_t")
             }
         } else {
             let instr = &mut self.func_state.bc[pc];
