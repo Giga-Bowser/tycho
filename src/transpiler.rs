@@ -32,10 +32,10 @@ impl<'s, 'pool> Transpiler<'s, 'pool> {
             Statement::Assign(assign) => self.transpile_assign(assign),
             Statement::MultiAssign(multi_assign) => self.transpile_multi_assign(multi_assign),
             Statement::ExprStat(suffixed_expr) => self.transpile_suffixed_expr(suffixed_expr),
-            Statement::Block(statements) => {
+            Statement::Block(block) => {
                 self.result += "do";
                 self.indent();
-                for stmt in statements {
+                for stmt in block {
                     self.result += &self.newline();
                     self.transpile_statement(stmt);
                 }

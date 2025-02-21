@@ -193,7 +193,7 @@ impl<'s> LJCompiler<'s, '_> {
                     _ => panic!("non-call suffix in ExprStat: {suffixed_expr:?}"),
                 }
             } // self.compile_suffixed_expr(suffixed_expr),
-            Statement::Block(statements) => self.compile_block(statements),
+            Statement::Block(block) => self.compile_block(block),
             Statement::Return(return_exprs) => self.compile_return(return_exprs),
             Statement::Break => {
                 self.func_state.scope.flags |= ScopeFlags::BREAK;

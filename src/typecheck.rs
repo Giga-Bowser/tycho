@@ -47,9 +47,9 @@ impl<'s> TypeChecker<'s, '_> {
             Statement::ExprStat(suffixed_expr) => {
                 self.check_suffixed_expr(suffixed_expr, type_env).map(drop)
             }
-            Statement::Block(statements) => {
+            Statement::Block(block) => {
                 let mut new_env = TypeEnv::new_with_parent(type_env);
-                for stmt in statements {
+                for stmt in block {
                     self.check_statement(stmt, &mut new_env)?;
                 }
                 Ok(())

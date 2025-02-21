@@ -48,18 +48,24 @@ impl<'s> Parser<'s, '_> {
                 Ok(Statement::Break)
             }
             Struct => Ok(Statement::StructDecl(self.parse_struct_decl(typelist)?)),
-            LCurly => {
-                self.tokens.pop_front();
-                let mut body = Vec::new();
-
-                while self.tokens[0].kind != RCurly {
-                    body.push(self.parse_statement(typelist)?);
-                }
-
-                Ok(Statement::Block(body))
-            }
+            LCurly => Ok(Statement::Block(self.parse_block(typelist)?)),
             _ => self.parse_expr_stat(typelist),
         }
+    }
+
+    fn parse_block(&mut self, typelist: &TypeList<'s>) -> PResult<'s, Block<'s>> {
+        // technically unnecessary sometimes. idk, probably no biggie
+        self.tokens.expect(LCurly)?; // `{`
+
+        let mut stmts = Vec::new();
+        let mut scoped_typelist = typelist.clone();
+        while self.tokens[0].kind != RCurly {
+            stmts.push(self.parse_statement(&mut scoped_typelist)?);
+        }
+
+        self.tokens.pop_front(); // `}`
+
+        Ok(Block { stmts })
     }
 
     fn parse_method_decl(&mut self, typelist: &TypeList<'s>) -> PResult<'s, MethodDecl<'s>> {
@@ -141,18 +147,7 @@ impl<'s> Parser<'s, '_> {
         self.tokens.pop_front(); // pop 'if'
 
         let condition = self.parse_expr(typelist)?;
-
-        self.tokens.expect(LCurly)?;
-
-        let mut scoped_typelist = typelist.clone();
-
-        let mut body = Vec::new();
-
-        while self.tokens[0].kind != RCurly {
-            body.push(self.parse_statement(&mut scoped_typelist)?);
-        }
-
-        self.tokens.pop_front(); // pop '}'
+        let body = self.parse_block(typelist)?;
 
         if self.tokens[0].kind != Else {
             return Ok(IfStat {
@@ -174,18 +169,7 @@ impl<'s> Parser<'s, '_> {
             });
         }
 
-        scoped_typelist = typelist.clone(); // reset typelist for next if
-
-        let mut else_body = Vec::new();
-
-        self.tokens.expect(LCurly)?;
-
-        while self.tokens[0].kind != RCurly {
-            else_body.push(self.parse_statement(&mut scoped_typelist)?);
-        }
-
-        self.tokens.pop_front(); // pop '}'
-
+        let else_body = self.parse_block(typelist)?;
         let else_ = Some(Box::new(ElseBranch::Else(else_body)));
 
         Ok(IfStat {
@@ -199,18 +183,7 @@ impl<'s> Parser<'s, '_> {
         self.tokens.pop_front(); // pop 'while'
 
         let condition = self.parse_expr(typelist)?;
-
-        self.tokens.expect(LCurly)?;
-
-        let mut scoped_typelist = typelist.clone();
-
-        let mut body = Vec::new();
-
-        while self.tokens[0].kind != RCurly {
-            body.push(self.parse_statement(&mut scoped_typelist)?);
-        }
-
-        self.tokens.pop_front(); // pop '}'
+        let body = self.parse_block(typelist)?;
 
         Ok(WhileStat { condition, body })
     }
@@ -238,17 +211,7 @@ impl<'s> Parser<'s, '_> {
 
                 let iter = self.parse_expr(typelist)?;
 
-                self.tokens.expect(LCurly)?;
-
-                let mut scoped_typelist = typelist.clone();
-
-                let mut body = Vec::new();
-
-                while self.tokens[0].kind != RCurly {
-                    body.push(self.parse_statement(&mut scoped_typelist)?);
-                }
-
-                self.tokens.pop_front(); // '}'
+                let body = self.parse_block(typelist)?;
 
                 Ok(Statement::KeyValFor(KeyValFor { names, iter, body }))
             }
@@ -261,17 +224,7 @@ impl<'s> Parser<'s, '_> {
 
                 let rhs = self.parse_range_expr(typelist)?;
 
-                self.tokens.expect(LCurly)?;
-
-                let mut scoped_typelist = typelist.clone();
-
-                let mut body = Vec::new();
-
-                while self.tokens[0].kind != RCurly {
-                    body.push(self.parse_statement(&mut scoped_typelist)?);
-                }
-
-                self.tokens.pop_front(); // '}'
+                let body = self.parse_block(typelist)?;
 
                 Ok(Statement::RangeFor(RangeFor {
                     var: first_name,
@@ -649,17 +602,7 @@ impl<'s> Parser<'s, '_> {
             }
         }
 
-        self.tokens.expect(LCurly)?;
-
-        let mut scoped_typelist = typelist.clone();
-
-        let mut body = Vec::new();
-
-        while self.tokens[0].kind != RCurly {
-            body.push(self.parse_statement(&mut scoped_typelist)?);
-        }
-
-        self.tokens.pop_front();
+        let body = self.parse_block(typelist)?;
 
         Ok(FuncNode {
             type_: Box::new(Function {
@@ -795,17 +738,7 @@ impl<'s> Parser<'s, '_> {
     fn func_constructor(&mut self, typelist: &TypeList<'s>) -> PResult<'s, FuncNode<'s>> {
         let ty = self.parse_func_header(typelist)?;
 
-        self.tokens.expect(LCurly)?;
-
-        let mut scoped_typelist = typelist.clone();
-
-        let mut body = Vec::new();
-
-        while self.tokens[0].kind != RCurly {
-            body.push(self.parse_statement(&mut scoped_typelist)?);
-        }
-
-        self.tokens.pop_front();
+        let body = self.parse_block(typelist)?;
 
         Ok(FuncNode {
             type_: Box::new(ty),

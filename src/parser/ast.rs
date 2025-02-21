@@ -11,7 +11,7 @@ pub enum Statement<'s> {
     Assign(Assign<'s>),
     MultiAssign(MultiAssign<'s>),
     ExprStat(SuffixedExpr<'s>),
-    Block(Vec<Statement<'s>>),
+    Block(Block<'s>),
     Return(Vec<ExprRef>),
     Break,
     IfStat(IfStat<'s>),
@@ -60,29 +60,52 @@ pub struct SuffixedName<'s> {
 }
 
 #[derive(Debug, Clone)]
+pub struct Block<'s> {
+    pub stmts: Vec<Statement<'s>>,
+}
+
+impl<'s> std::ops::Deref for Block<'s> {
+    type Target = [Statement<'s>];
+
+    #[inline]
+    fn deref(&self) -> &[Statement<'s>] {
+        self.stmts.as_slice()
+    }
+}
+
+impl<'a, 's> IntoIterator for &'a Block<'s> {
+    type Item = &'a Statement<'s>;
+    type IntoIter = std::slice::Iter<'a, Statement<'s>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct IfStat<'s> {
     pub condition: ExprRef,
-    pub body: Vec<Statement<'s>>,
+    pub body: Block<'s>,
     pub else_: Option<Box<ElseBranch<'s>>>,
 }
 
 #[derive(Debug, Clone)]
 pub enum ElseBranch<'s> {
-    Else(Vec<Statement<'s>>),
+    Else(Block<'s>),
     ElseIf(IfStat<'s>),
 }
 
 #[derive(Debug, Clone)]
 pub struct WhileStat<'s> {
     pub condition: ExprRef,
-    pub body: Vec<Statement<'s>>,
+    pub body: Block<'s>,
 }
 
 #[derive(Debug, Clone)]
 pub struct RangeFor<'s> {
     pub var: &'s str,
     pub range: Box<RangeExpr>,
-    pub body: Vec<Statement<'s>>,
+    pub body: Block<'s>,
 }
 
 #[derive(Debug, Clone)]
@@ -96,7 +119,7 @@ pub struct KeyValFor<'s> {
     /// this should be 'keyname, valname' in one str
     pub names: &'s str,
     pub iter: ExprRef,
-    pub body: Vec<Statement<'s>>,
+    pub body: Block<'s>,
 }
 
 #[derive(Debug, Clone)]
@@ -147,7 +170,7 @@ pub enum SimpleExpr<'s> {
 #[derive(Debug, Clone)]
 pub struct FuncNode<'s> {
     pub type_: Box<Function<'s>>,
-    pub body: Vec<Statement<'s>>,
+    pub body: Block<'s>,
 }
 
 #[derive(Debug, Clone)]

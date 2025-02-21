@@ -77,7 +77,7 @@ mod parser {
                 Statement::Assign(assign) => assign.deep_size_of_children(),
                 Statement::MultiAssign(multi_assign) => multi_assign.deep_size_of_children(),
                 Statement::ExprStat(suffixed_expr) => suffixed_expr.deep_size_of_children(),
-                Statement::Block(vec) => vec.deep_size_of_children(),
+                Statement::Block(block) => block.deep_size_of_children(),
                 Statement::Return(vec) => vec.deep_size_of_children(),
                 Statement::IfStat(if_stat) => if_stat.deep_size_of_children(),
                 Statement::WhileStat(while_stat) => while_stat.body.deep_size_of_children(),
@@ -150,6 +150,12 @@ mod parser {
     impl DeepSize for MultiAssign<'_> {
         fn deep_size_of_children(&self) -> usize {
             self.lhs_arr.deep_size_of_children() + self.rhs_arr.deep_size_of_children()
+        }
+    }
+
+    impl DeepSize for Block<'_> {
+        fn deep_size_of_children(&self) -> usize {
+            self.stmts.deep_size_of_children()
         }
     }
 
