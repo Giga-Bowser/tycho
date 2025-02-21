@@ -65,7 +65,7 @@ impl<'s> Parser<'s, '_> {
 
         self.tokens.pop_front(); // `}`
 
-        Ok(Block { stmts })
+        Ok(Block { stmts: stmts.into_boxed_slice() })
     }
 
     fn parse_method_decl(&mut self, typelist: &TypeList<'s>) -> PResult<'s, MethodDecl<'s>> {

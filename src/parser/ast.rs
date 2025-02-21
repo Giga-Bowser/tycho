@@ -61,7 +61,7 @@ pub struct SuffixedName<'s> {
 
 #[derive(Debug, Clone)]
 pub struct Block<'s> {
-    pub stmts: Vec<Statement<'s>>,
+    pub stmts: Box<[Statement<'s>]>,
 }
 
 impl<'s> std::ops::Deref for Block<'s> {
@@ -69,7 +69,7 @@ impl<'s> std::ops::Deref for Block<'s> {
 
     #[inline]
     fn deref(&self) -> &[Statement<'s>] {
-        self.stmts.as_slice()
+        self.stmts.as_ref()
     }
 }
 
