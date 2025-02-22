@@ -7,7 +7,7 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use mimalloc::MiMalloc;
 use tycho::{
     driver::{add_defines, define_sources},
-    lexer::{Lexer, TokenKind, Tokens},
+    lexer::{Lexer, TokenKind},
     luajit::{
         bytecode::{dump_bc, Header},
         compiler::LJCompiler,
@@ -28,8 +28,7 @@ fn benchmark_lexer(c: &mut Criterion) {
         b.iter_custom(|iters| {
             let start = Instant::now();
             for _i in 0..iters {
-                let lex = Lexer::new(black_box(&contents));
-                black_box(lex.collect::<Tokens<'_>>());
+                black_box(Lexer::lex_all_span(black_box(&contents)));
             }
             start.elapsed()
         });
@@ -38,8 +37,7 @@ fn benchmark_lexer(c: &mut Criterion) {
 
 fn benchmark_parser(c: &mut Criterion) {
     let contents = std::fs::read_to_string("test/test.ty").unwrap_or_else(|e| panic!("{e}"));
-    let lex = Lexer::new(&contents);
-    let tokens: Tokens<'_> = lex.collect();
+    let tokens = Lexer::lex_all_span(&contents);
     let mut pool = ExprPool::new();
     c.bench_function("parse", |b| {
         b.iter_custom(|iters| {
@@ -79,8 +77,7 @@ fn benchmark_typechecker(c: &mut Criterion) {
     }
 
     let contents = std::fs::read_to_string("test/test.ty").unwrap_or_else(|e| panic!("{e}"));
-    let lex = Lexer::new(&contents);
-    let tokens: Tokens<'_> = lex.collect();
+    let tokens = Lexer::lex_all_span(&contents);
 
     let mut typelist = TypeList::with_core();
 
@@ -96,7 +93,10 @@ fn benchmark_typechecker(c: &mut Criterion) {
         statements.push(parser.parse_statement(&mut typelist).unwrap());
     }
 
-    let typechecker = TypeChecker { pool: &pool };
+    let typechecker = TypeChecker {
+        pool: &pool,
+        source: &contents,
+    };
 
     c.bench_function("typecheck", |b| {
         b.iter_custom(|iters| {
@@ -123,8 +123,7 @@ fn benchmark_typechecker(c: &mut Criterion) {
 
 fn benchmark_compiler(c: &mut Criterion) {
     let contents = std::fs::read_to_string("test/test.ty").unwrap_or_else(|e| panic!("{e}"));
-    let lex = Lexer::new(&contents);
-    let tokens: Tokens<'_> = lex.collect();
+    let tokens = Lexer::lex_all_span(&contents);
 
     let mut typelist = TypeList::with_core();
 
@@ -144,7 +143,7 @@ fn benchmark_compiler(c: &mut Criterion) {
         b.iter_custom(|iters| {
             let mut elapsed = Duration::ZERO;
             for _i in 0..iters {
-                let mut compiler = LJCompiler::new(&pool);
+                let mut compiler = LJCompiler::new(&pool, &contents);
                 let start = Instant::now();
                 compiler.compile_chunk(&statements);
                 compiler.fs_finish();
@@ -158,8 +157,7 @@ fn benchmark_compiler(c: &mut Criterion) {
 
 fn benchmark_transpiler(c: &mut Criterion) {
     let contents = std::fs::read_to_string("test/test.ty").unwrap_or_else(|e| panic!("{e}"));
-    let lex = Lexer::new(&contents);
-    let tokens: Tokens<'_> = lex.collect();
+    let tokens = Lexer::lex_all_span(&contents);
 
     let mut typelist = TypeList::with_core();
 
@@ -179,7 +177,7 @@ fn benchmark_transpiler(c: &mut Criterion) {
         b.iter_custom(|iters| {
             let mut elapsed = Duration::ZERO;
             for _i in 0..iters {
-                let mut compiler = Transpiler::new(&pool);
+                let mut compiler = Transpiler::new(&pool, &contents);
                 let start = Instant::now();
                 for stmt in &statements {
                     compiler.transpile_statement(black_box(stmt));
@@ -202,19 +200,18 @@ fn benchmark_all_compile(c: &mut Criterion) {
     for (_, source) in &include_sources {
         add_defines(source, &mut type_env_orig);
     }
-    let contents = std::fs::read_to_string("test/test.ty").unwrap_or_else(|e| panic!("{e}"));
+    let source = std::fs::read_to_string("test/test.ty").unwrap_or_else(|e| panic!("{e}"));
 
     c.bench_function("all [compile]", |b| {
         b.iter_custom(|iters| {
             let mut elapsed = Duration::ZERO;
             for _i in 0..iters {
                 let mut type_env = type_env_orig.clone();
-                let contents = black_box(&contents);
+                let source = black_box(&source);
 
                 let start = Instant::now();
 
-                let lex = Lexer::new(contents);
-                let tokens: Tokens<'_> = lex.collect();
+                let tokens = Lexer::lex_all_span(source);
 
                 let mut typelist = TypeList::with_core();
 
@@ -230,8 +227,11 @@ fn benchmark_all_compile(c: &mut Criterion) {
                     statements.push(parser.parse_statement(&mut typelist).unwrap());
                 }
 
-                let typechecker = TypeChecker { pool: &pool };
-                let mut compiler = LJCompiler::new(&pool);
+                let typechecker = TypeChecker {
+                    pool: &pool,
+                    source,
+                };
+                let mut compiler = LJCompiler::new(&pool, source);
                 for stmt in &statements {
                     typechecker.check_statement(stmt, &mut type_env).unwrap();
                     compiler.compile_statement(black_box(stmt));
@@ -264,12 +264,11 @@ fn benchmark_all_transpile(c: &mut Criterion) {
             let mut elapsed = Duration::ZERO;
             for _i in 0..iters {
                 let mut type_env = type_env_orig.clone();
-                let contents = black_box(&contents);
+                let source = black_box(&contents);
 
                 let start = Instant::now();
 
-                let lex = Lexer::new(contents);
-                let tokens: Tokens<'_> = lex.collect();
+                let tokens = Lexer::lex_all_span(source);
 
                 let mut typelist = TypeList::with_core();
 
@@ -285,8 +284,11 @@ fn benchmark_all_transpile(c: &mut Criterion) {
                     statements.push(parser.parse_statement(&mut typelist).unwrap());
                 }
 
-                let typechecker = TypeChecker { pool: &pool };
-                let mut transpiler = Transpiler::new(&pool);
+                let typechecker = TypeChecker {
+                    pool: &pool,
+                    source,
+                };
+                let mut transpiler = Transpiler::new(&pool, source);
                 for stmt in &statements {
                     typechecker.check_statement(stmt, &mut type_env).unwrap();
                     transpiler.transpile_statement(black_box(stmt));

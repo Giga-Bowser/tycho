@@ -1,4 +1,4 @@
-use crate::parser::pool::ExprRef;
+use crate::{lexer::Span, parser::pool::ExprRef};
 
 pub trait DeepSize {
     fn deep_size_of(&self) -> usize {
@@ -59,6 +59,12 @@ impl DeepSize for ExprRef {
 }
 
 impl DeepSize for &str {
+    fn deep_size_of_children(&self) -> usize {
+        0
+    }
+}
+
+impl DeepSize for Span<'_> {
     fn deep_size_of_children(&self) -> usize {
         0
     }

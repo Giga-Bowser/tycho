@@ -3,7 +3,7 @@ use std::ops::Range;
 use ariadne::{Color, ReportKind};
 
 use crate::{
-    lexer::{Token, TokenKind},
+    lexer::{Span, SpanToken, TokenKind},
     parser::ast,
     types::Type,
 };
@@ -61,14 +61,14 @@ pub trait Snippetize<'s> {
 pub enum ParseError<'s> {
     #[default]
     EmptyError,
-    NoSuchType(&'s str),
+    NoSuchType(Span<'s>),
     UnexpectedToken(UnexpectedToken<'s>),
     BadExprStat(ast::Expr<'s>),
 }
 
 #[derive(Debug)]
 pub struct UnexpectedToken<'s> {
-    pub token: Token<'s>,
+    pub token: SpanToken<'s>,
     pub expected_kinds: Vec<TokenKind>,
 }
 
@@ -87,10 +87,13 @@ impl<'s> Snippetize<'s> for ParseError<'s> {
                 annotations: vec![],
             },
             ParseError::NoSuchType(val_name) => {
-                let range = get_substring_range(source, val_name);
+                let range = val_name.to_range();
 
                 Diag {
-                    title: format!("cannot find type `{val_name}` in this scope"),
+                    title: format!(
+                        "cannot find type `{}` in this scope",
+                        val_name.to_str(source)
+                    ),
                     level: Level::Error,
                     annotations: vec![Annotation {
                         level: Level::Error,
@@ -102,18 +105,18 @@ impl<'s> Snippetize<'s> for ParseError<'s> {
             ParseError::UnexpectedToken(unexpected_token) => unexpected_token.snippetize(source),
             ParseError::BadExprStat(expr) => {
                 let mut annotations = Vec::new();
-                if let ast::Expr::Name(name) = expr {
-                    let range = get_substring_range(source, name);
+                if let ast::Expr::Name(name) = &expr {
                     annotations.push(Annotation {
                         level: Level::Error,
-                        range: range.clone(),
+                        range: name.to_range(),
                         label: Some("expression statement here".to_owned()),
                     });
-                    if let "local" | "let" = name {
+                    let name_str = name.to_str(source);
+                    if let "local" | "let" = name_str {
                         annotations.push(Annotation {
                             level: Level::Help,
-                            range,
-                            label: Some(format!("tycho does not have `{name}` statements.")),
+                            range: name.to_range(),
+                            label: Some(format!("tycho does not have `{name_str}` statements.")),
                         });
                     }
                 }
@@ -128,9 +131,12 @@ impl<'s> Snippetize<'s> for ParseError<'s> {
 }
 
 impl<'s> Snippetize<'s> for UnexpectedToken<'s> {
-    fn snippetize(self, source: &'s str) -> Diag {
-        let range = get_substring_range(source, self.token.text);
-        let mut annotations = Vec::new();
+    fn snippetize(self, _source: &'s str) -> Diag {
+        let mut annotations = vec![Annotation {
+            level: Level::Error,
+            range: self.token.text.to_range(),
+            label: Some("token here".to_owned()),
+        }];
 
         if !self.expected_kinds.is_empty() {
             let kinds = self
@@ -142,7 +148,7 @@ impl<'s> Snippetize<'s> for UnexpectedToken<'s> {
 
             annotations.push(Annotation {
                 level: Level::Info,
-                range,
+                range: self.token.text.to_range(),
                 label: Some(format!("expected: {kinds}")),
             });
         }
@@ -159,15 +165,15 @@ impl<'s> Snippetize<'s> for UnexpectedToken<'s> {
 pub enum CheckErr<'s> {
     #[default]
     EmptyError,
-    NoSuchVal(&'s str),
+    NoSuchVal(Span<'s>),
     MismatchedTypes {
         expected: Type<'s>,
         recieved: Type<'s>,
     },
     ReturnCount,
     NotIterable,
-    NoSuchField(&'s str),
-    NoSuchMethod(&'s str),
+    NoSuchField(Span<'s>),
+    NoSuchMethod(Span<'s>),
     NoReturn(ast::FuncNode<'s>),
     CustomError(String),
 }
@@ -181,40 +187,36 @@ impl<'s> Snippetize<'s> for CheckErr<'s> {
                 annotations: vec![],
             },
             CheckErr::NoSuchVal(val_name) => {
-                let range = get_substring_range(source, val_name);
+                let val_str = val_name.to_str(source);
 
                 Diag {
-                    title: format!("cannot find value `{val_name}` in this scope"),
+                    title: format!("cannot find value `{val_str}` in this scope"),
                     level: Level::Error,
                     annotations: vec![Annotation {
                         level: Level::Error,
-                        range,
+                        range: val_name.to_range(),
                         label: Some("not found in this scope".to_owned()),
                     }],
                 }
             }
             CheckErr::MismatchedTypes { expected, recieved } => {
-                let expected_str = expected.src;
-                let recieved_str = recieved.src;
+                let expected_span = expected.span;
+                let recieved_span = recieved.span;
 
                 let mut annotations = Vec::new();
 
-                if let Some(expected_str) = expected_str {
-                    let range = get_substring_range(source, expected_str);
-
+                if let Some(expected_span) = expected_span {
                     annotations.push(Annotation {
                         level: Level::Info,
-                        range,
+                        range: expected_span.to_range(),
                         label: Some("expected due to this".to_owned()),
                     });
                 }
 
-                if let Some(recieved_str) = recieved_str {
-                    let range = get_substring_range(source, recieved_str);
-
+                if let Some(recieved_str) = recieved_span {
                     annotations.push(Annotation {
                         level: Level::Error,
-                        range,
+                        range: recieved_str.to_range(),
                         label: Some(format!(
                             "expected `{:?}`, found `{:?}`",
                             expected.kind, recieved.kind
@@ -243,30 +245,28 @@ impl<'s> Snippetize<'s> for CheckErr<'s> {
                 level: Level::Error,
                 annotations: vec![Annotation {
                     level: Level::Error,
-                    range: get_substring_range(source, field),
+                    range: field.to_range(),
                     label: Some("this field".to_owned()),
                 }],
             },
             CheckErr::NoSuchMethod(method) => Diag {
-                title: format!("no method named `{method}`"),
+                title: format!("no method named `{}`", method.to_str(source)),
                 level: Level::Error,
                 annotations: vec![Annotation {
                     level: Level::Error,
-                    range: get_substring_range(source, method),
+                    range: method.to_range(),
                     label: Some("method not found".to_owned()),
                 }],
             },
             CheckErr::NoReturn(func_node) => {
-                let return_str = func_node.type_.returns.src;
+                let return_span = func_node.type_.returns.span;
 
                 let mut annotations = Vec::new();
 
-                if let Some(return_str) = return_str {
-                    let range = get_substring_range(source, return_str);
-
+                if let Some(return_span) = return_span {
                     annotations.push(Annotation {
                         level: Level::Error,
-                        range,
+                        range: return_span.to_range(),
                         label: Some("expected return type".to_owned()),
                     });
                 }
@@ -284,15 +284,4 @@ impl<'s> Snippetize<'s> for CheckErr<'s> {
             },
         }
     }
-}
-
-fn get_substring_range(source: &str, substr: &str) -> Range<usize> {
-    let offset = unsafe { substr.as_ptr().offset_from(source.as_ptr()).abs() };
-
-    let start_idx = offset.try_into().unwrap();
-    let end_idx = start_idx + substr.len();
-
-    assert!(end_idx <= source.len(), "substr exceeds source");
-
-    start_idx..end_idx
 }

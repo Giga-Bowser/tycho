@@ -8,7 +8,7 @@ use ariadne::{Label, Report, Source};
 
 use crate::{
     errors::{Diag, Snippetize},
-    lexer::{Lexer, Token, TokenKind, Tokens},
+    lexer::{Lexer, SpanToken, TokenKind},
     luajit::{
         bytecode::{dump_bc, Header},
         compiler::LJCompiler,
@@ -53,14 +53,13 @@ fn build(args: &BuildOpt) {
 
     let lex_timer = Instant::now();
 
-    let lex = Lexer::new(&contents);
-    let tokens: Tokens<'_> = lex.collect();
+    let tokens = Lexer::lex_all_span(&contents);
 
     if args.verbose {
         eprintln!("lexing done: {}", duration_fmt(lex_timer.elapsed()));
         eprintln!(
             "tokens memory: {}",
-            ByteFmt(tokens.0.len() * size_of::<Token<'_>>())
+            ByteFmt(tokens.dq.len() * size_of::<SpanToken<'_>>())
         );
     }
 
@@ -90,7 +89,10 @@ fn build(args: &BuildOpt) {
 
     let check_timer = Instant::now();
 
-    let typechecker = TypeChecker { pool: &pool };
+    let typechecker = TypeChecker {
+        pool: &pool,
+        source: &contents,
+    };
     for stmt in &stmts {
         match typechecker.check_statement(stmt, &mut type_env) {
             Ok(()) => (),
@@ -106,9 +108,9 @@ fn build(args: &BuildOpt) {
     let compile_timer = Instant::now();
 
     let result = if args.bc {
-        compile(&pool, &stmts)
+        compile(&pool, &stmts, &contents)
     } else {
-        transpile(&pool, &stmts)
+        transpile(&pool, &stmts, &contents)
     };
 
     if args.verbose {
@@ -160,14 +162,13 @@ pub fn print_main(args: &PrintOpt) {
 
     let lex_timer = Instant::now();
 
-    let lex = Lexer::new(&contents);
-    let tokens: Tokens<'_> = lex.collect();
+    let tokens = Lexer::lex_all_span(&contents);
 
     if args.verbose {
         eprintln!("lexing done: {}", duration_fmt(lex_timer.elapsed()));
         eprintln!(
             "tokens memory: {}",
-            ByteFmt(tokens.0.len() * size_of::<Token<'_>>())
+            ByteFmt(tokens.dq.len() * size_of::<SpanToken<'_>>())
         );
     }
 
@@ -197,7 +198,10 @@ pub fn print_main(args: &PrintOpt) {
 
     let check_timer = Instant::now();
 
-    let typechecker = TypeChecker { pool: &pool };
+    let typechecker = TypeChecker {
+        pool: &pool,
+        source: &contents,
+    };
     for stmt in &stmts {
         match typechecker.check_statement(stmt, &mut type_env) {
             Ok(()) => (),
@@ -212,7 +216,7 @@ pub fn print_main(args: &PrintOpt) {
 
     let compile_timer = Instant::now();
 
-    let mut compiler = LJCompiler::new(&pool);
+    let mut compiler = LJCompiler::new(&pool, &contents);
     compiler.compile_chunk(&stmts);
     compiler.fs_finish();
 
@@ -223,8 +227,12 @@ pub fn print_main(args: &PrintOpt) {
     eprintln!("{:#?}", compiler.protos);
 }
 
-fn transpile<'pool>(pool: &'pool ExprPool<'pool>, stmts: &[ast::Statement<'_>]) -> Vec<u8> {
-    let mut compiler = Transpiler::new(pool);
+fn transpile<'pool>(
+    pool: &'pool ExprPool<'pool>,
+    stmts: &[ast::Statement<'_>],
+    source: &str,
+) -> Vec<u8> {
+    let mut compiler = Transpiler::new(pool, source);
     for stmt in stmts {
         compiler.transpile_statement(stmt);
         compiler.result.push('\n');
@@ -232,8 +240,12 @@ fn transpile<'pool>(pool: &'pool ExprPool<'pool>, stmts: &[ast::Statement<'_>]) 
     compiler.result.into_bytes()
 }
 
-fn compile<'pool>(pool: &'pool ExprPool<'pool>, stmts: &[ast::Statement<'_>]) -> Vec<u8> {
-    let mut compiler = LJCompiler::new(pool);
+fn compile<'pool>(
+    pool: &'pool ExprPool<'pool>,
+    stmts: &[ast::Statement<'_>],
+    source: &str,
+) -> Vec<u8> {
+    let mut compiler = LJCompiler::new(pool, source);
     compiler.compile_chunk(stmts);
 
     compiler.fs_finish();
@@ -241,8 +253,7 @@ fn compile<'pool>(pool: &'pool ExprPool<'pool>, stmts: &[ast::Statement<'_>]) ->
 }
 
 pub fn add_defines<'s>(source: &'s str, type_env: &mut TypeEnv<'_, 's>) -> Result<(), Diag> {
-    let lex = Lexer::new(source);
-    let tokens: Tokens<'_> = lex.collect();
+    let tokens = Lexer::lex_all_span(source);
 
     let mut typelist = TypeList::with_core();
 
@@ -261,7 +272,10 @@ pub fn add_defines<'s>(source: &'s str, type_env: &mut TypeEnv<'_, 's>) -> Resul
         stmts.push(stmt);
     }
 
-    let typechecker = TypeChecker { pool: &pool };
+    let typechecker = TypeChecker {
+        pool: &pool,
+        source,
+    };
 
     for stmt in stmts {
         typechecker

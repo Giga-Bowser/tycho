@@ -1,4 +1,9 @@
-use std::{collections::VecDeque, mem::ManuallyDrop, ops::Index};
+use std::{
+    collections::VecDeque,
+    marker::PhantomData,
+    mem::ManuallyDrop,
+    ops::{Index, Range},
+};
 
 use crate::errors::UnexpectedToken;
 
@@ -73,6 +78,32 @@ impl<'s> Lexer<'s> {
             token_start: 0,
             token_end: 0,
         }
+    }
+
+    pub fn lex_all_span(source: &'s str) -> SpanTokens<'s> {
+        let mut lexer = Self::new(source);
+
+        let mut dq = VecDeque::new();
+
+        loop {
+            lexer.token_start = lexer.token_end;
+
+            lexer.lex();
+
+            // This basically treats self.token as a temporary field.
+            // Since we always immediately return a newly set token here,
+            // we don't have to replace it with `None` or manually drop
+            // it later.
+
+            let kind = unsafe { ManuallyDrop::take(&mut lexer.token) };
+            let token = SpanToken::new(kind.unwrap_or(TokenKind::EndOfFile), lexer.span());
+            dq.push_back(token);
+            if kind.is_none() {
+                break;
+            }
+        }
+
+        SpanTokens { source, dq }
     }
 
     #[inline]
@@ -152,10 +183,15 @@ impl<'s> Lexer<'s> {
     fn text(&self) -> &'s str {
         unsafe { self.source.get_unchecked(self.token_start..self.token_end) }
     }
+
+    #[inline]
+    fn span(&self) -> Span<'s> {
+        Span::new(self.token_start as SrcLoc, self.token_end as SrcLoc)
+    }
 }
 
 impl<'s> Iterator for Lexer<'s> {
-    type Item = Token<'s>;
+    type Item = SpanToken<'s>;
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
@@ -169,41 +205,94 @@ impl<'s> Iterator for Lexer<'s> {
         // it later.
 
         let kind = unsafe { ManuallyDrop::take(&mut self.token) };
-        kind.map(|kind| Token {
-            kind,
-            text: self.text(),
-        })
+        kind.map(|kind| SpanToken::new(kind, self.span()))
+    }
+}
+
+pub type SrcLoc = u32;
+
+#[derive(Debug, Clone, Copy)]
+pub struct Span<'s> {
+    pub start: SrcLoc,
+    pub end: SrcLoc,
+    _m: PhantomData<&'s str>,
+}
+
+impl<'s> Span<'s> {
+    #[inline]
+    pub const fn new(start: SrcLoc, end: SrcLoc) -> Self {
+        Self {
+            start,
+            end,
+            _m: PhantomData,
+        }
+    }
+
+    #[inline]
+    pub const fn empty(offset: SrcLoc) -> Self {
+        Self::new(offset, offset)
+    }
+
+    #[inline]
+    pub const fn offset_len(offset: SrcLoc, len: SrcLoc) -> Self {
+        Self::new(offset, offset + len)
+    }
+
+    #[inline]
+    pub fn cover(v1: Self, v2: Self) -> Self {
+        let start = SrcLoc::min(v1.start, v1.end);
+        let end = SrcLoc::min(v1.end, v2.end);
+        Self::new(start, end)
+    }
+
+    #[inline]
+    pub fn to_str(&self, source: &'s str) -> &'s str {
+        unsafe { source.get_unchecked(self.to_range()) }
+    }
+
+    #[inline]
+    pub const fn to_range(&self) -> Range<usize> {
+        (self.start as usize)..(self.end as usize)
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct Token<'s> {
+pub struct SpanToken<'s> {
     pub kind: TokenKind,
-    pub text: &'s str,
+    pub text: Span<'s>,
+}
+
+impl<'s> SpanToken<'s> {
+    pub fn new(kind: TokenKind, span: Span<'s>) -> Self {
+        Self { kind, text: span }
+    }
 }
 
 #[derive(Debug, Clone)]
-pub struct Tokens<'s>(pub VecDeque<Token<'s>>);
+pub struct SpanTokens<'s> {
+    pub source: &'s str,
+    pub dq: VecDeque<SpanToken<'s>>,
+}
 
-impl<'s> Index<usize> for Tokens<'s> {
-    type Output = Token<'s>;
+impl<'s> Index<usize> for SpanTokens<'s> {
+    type Output = SpanToken<'s>;
 
     #[inline]
     fn index(&self, index: usize) -> &Self::Output {
-        &self.0[index]
+        &self.dq[index]
     }
 }
 
-impl<'s> Tokens<'s> {
+impl<'s> SpanTokens<'s> {
     #[inline]
-    pub fn pop_front(&mut self) -> Token<'s> {
-        self.0.pop_front().unwrap()
+    pub fn pop_front(&mut self) -> SpanToken<'s> {
+        self.dq.pop_front().unwrap()
     }
 
-    pub fn pop_name(&mut self) -> Result<&'s str, UnexpectedToken<'s>> {
-        if self.0[0].kind != TokenKind::Name {
+    pub fn pop_name(&mut self) -> Result<Span<'s>, UnexpectedToken<'s>> {
+        if self.dq[0].kind != TokenKind::Name {
             return Err(UnexpectedToken {
-                token: self.0[0].clone(),
+                token: self.dq[0].clone(),
                 expected_kinds: vec![TokenKind::Name],
             });
         }
@@ -211,41 +300,17 @@ impl<'s> Tokens<'s> {
         Ok(self.pop_front().text)
     }
 
-    pub fn expect(&mut self, expected_kind: TokenKind) -> Result<Token<'s>, UnexpectedToken<'s>> {
-        if self.0[0].kind == expected_kind {
+    pub fn expect(
+        &mut self,
+        expected_kind: TokenKind,
+    ) -> Result<SpanToken<'s>, UnexpectedToken<'s>> {
+        if self.dq[0].kind == expected_kind {
             Ok(self.pop_front())
         } else {
             Err(UnexpectedToken {
-                token: self.0[0].clone(),
+                token: self.dq[0].clone(),
                 expected_kinds: vec![expected_kind],
             })
-        }
-    }
-}
-
-impl<'s> FromIterator<Token<'s>> for Tokens<'s> {
-    fn from_iter<T: IntoIterator<Item = Token<'s>>>(iter: T) -> Self {
-        let mut dq = VecDeque::from_iter(iter);
-        dq.push_back(Token {
-            kind: TokenKind::EndOfFile,
-            text: "",
-        });
-        Tokens(dq)
-    }
-}
-
-/// permanent token for error reporting.
-#[derive(Debug)]
-pub struct PermaToken {
-    pub kind: TokenKind,
-    pub str: String,
-}
-
-impl From<&Token<'_>> for PermaToken {
-    fn from(value: &Token<'_>) -> Self {
-        Self {
-            kind: value.kind,
-            str: value.text.to_owned(),
         }
     }
 }

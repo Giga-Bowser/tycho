@@ -1,5 +1,7 @@
 use std::rc::Rc;
 
+use crate::lexer::Span;
+
 #[derive(Debug, Clone)]
 pub struct Function<'s> {
     pub params: Vec<(&'s str, Type<'s>)>,
@@ -57,7 +59,7 @@ pub enum TypeKind<'s> {
 #[derive(Debug, Clone, Default)]
 pub struct Type<'s> {
     pub kind: TypeKind<'s>,
-    pub src: Option<&'s str>,
+    pub span: Option<Span<'s>>,
 }
 
 impl PartialEq for Type<'_> {
@@ -174,7 +176,7 @@ impl<'s> From<TypeKind<'s>> for Type<'s> {
     fn from(value: TypeKind<'s>) -> Self {
         Self {
             kind: value,
-            src: None,
+            span: None,
         }
     }
 }

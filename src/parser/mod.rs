@@ -1,7 +1,7 @@
 pub mod ast;
 pub mod pool;
 
-use std::{rc::Rc, slice, str};
+use std::rc::Rc;
 
 use rustc_hash::FxHashMap;
 
@@ -10,8 +10,8 @@ use self::{ast::*, pool::*};
 use crate::{
     errors::{ParseError, UnexpectedToken},
     lexer::{
+        Span, SpanTokens, SrcLoc,
         TokenKind::{self, *},
-        Tokens,
     },
     types::{Function, TableType, Type, TypeKind, User},
 };
@@ -19,7 +19,7 @@ use crate::{
 type PResult<'s, T> = Result<T, ParseError<'s>>;
 
 pub struct Parser<'s, 'pool> {
-    pub tokens: Tokens<'s>,
+    pub tokens: SpanTokens<'s>,
     pub pool: &'pool mut ExprPool<'s>,
 }
 
@@ -65,7 +65,9 @@ impl<'s> Parser<'s, '_> {
 
         self.tokens.pop_front(); // `}`
 
-        Ok(Block { stmts: stmts.into_boxed_slice() })
+        Ok(Block {
+            stmts: stmts.into_boxed_slice(),
+        })
     }
 
     fn parse_method_decl(&mut self, typelist: &TypeList<'s>) -> PResult<'s, MethodDecl<'s>> {
@@ -101,7 +103,7 @@ impl<'s> Parser<'s, '_> {
                 lhs: Box::new(lhs),
                 type_: Box::new(Type {
                     kind: TypeKind::Adaptable,
-                    src: None,
+                    span: None,
                 }),
                 val: Some(val),
             });
@@ -199,13 +201,8 @@ impl<'s> Parser<'s, '_> {
 
                 let second_name = self.tokens.pop_name()?;
 
-                let len = second_name.as_ptr() as usize - first_name.as_ptr() as usize
-                    + second_name.len();
-
                 // this is gross
-                let names = unsafe {
-                    str::from_utf8_unchecked(slice::from_raw_parts(first_name.as_ptr(), len))
-                };
+                let names = Span::new(first_name.start, second_name.end);
 
                 self.tokens.expect(In)?;
 
@@ -567,7 +564,7 @@ impl<'s> Parser<'s, '_> {
         let name = self.tokens.pop_name()?;
         self.tokens.expect(Colon)?;
 
-        Ok((name, self.parse_type(typelist)?))
+        Ok((name.to_str(self.tokens.source), self.parse_type(typelist)?))
     }
 
     fn parse_struct_constructor(&mut self, typelist: &TypeList<'s>) -> PResult<'s, FuncNode<'s>> {
@@ -585,10 +582,14 @@ impl<'s> Parser<'s, '_> {
                     self.tokens.pop_front();
                     self.tokens.pop_front();
 
-                    params.push((argname, self.parse_type(typelist)?));
-                } else {
                     params.push((
-                        empty_str_from_ptr(self.tokens[0].text.as_ptr()),
+                        argname.to_str(self.tokens.source),
+                        self.parse_type(typelist)?,
+                    ));
+                } else {
+                    let offset = self.tokens[0].text.start;
+                    params.push((
+                        Span::empty(offset).to_str(self.tokens.source),
                         self.parse_type(typelist)?,
                     ));
                 }
@@ -614,7 +615,7 @@ impl<'s> Parser<'s, '_> {
     }
 
     fn parse_struct_decl(&mut self, typelist: &mut TypeList<'s>) -> PResult<'s, StructDecl<'s>> {
-        let start_ptr = self.tokens.pop_front().text.as_ptr(); // pop 'struct'
+        let start = self.tokens.pop_front().text.start; // pop 'struct'
 
         let name = self.tokens.pop_name()?;
 
@@ -623,14 +624,14 @@ impl<'s> Parser<'s, '_> {
         let mut fields = Vec::new();
 
         if self.tokens[0].kind == RCurly {
-            let end_str = self.tokens.pop_front().text;
+            let end_str = self.tokens.pop_front().text.end;
 
             let type_ = Box::new(User { fields });
             typelist.insert(
-                name.to_owned(),
+                name.to_str(self.tokens.source).to_owned(),
                 Type {
                     kind: TypeKind::User(*type_.clone()),
-                    src: Some(unsafe { str_from_ptr_str(start_ptr, end_str) }),
+                    span: Some(Span::new(start, end_str)),
                 },
             );
             return Ok(StructDecl {
@@ -653,10 +654,10 @@ impl<'s> Parser<'s, '_> {
 
         let type_ = Box::new(User { fields });
         typelist.insert(
-            name.to_owned(),
+            name.to_str(self.tokens.source).to_owned(),
             Type {
                 kind: TypeKind::User(*type_.clone()),
-                src: unsafe { Some(str_from_ptr_range(start_ptr, self.tokens[0].text.as_ptr())) },
+                span: Some(Span::new(start, self.tokens[0].text.start)),
             },
         );
 
@@ -696,12 +697,12 @@ impl<'s> Parser<'s, '_> {
         } else {
             loop {
                 if self.tokens[0].kind == Elipsis {
-                    let src = self.tokens.pop_front().text;
+                    let span = self.tokens.pop_front().text;
                     params.push((
-                        src,
+                        span.to_str(self.tokens.source),
                         Type {
                             kind: TypeKind::Variadic,
-                            src: Some(src),
+                            span: Some(span),
                         },
                     ));
                     self.tokens.expect(RParen)?;
@@ -709,14 +710,15 @@ impl<'s> Parser<'s, '_> {
                 }
 
                 if self.tokens[0].kind == Name && self.tokens[1].kind == Colon {
-                    let argname = self.tokens[0].text;
+                    let argname = self.tokens[0].text.to_str(self.tokens.source);
                     self.tokens.pop_front();
                     self.tokens.pop_front();
 
                     params.push((argname, self.parse_type(typelist)?));
                 } else {
+                    let offset = self.tokens[0].text.start;
                     params.push((
-                        empty_str_from_ptr(self.tokens[0].text.as_ptr()),
+                        Span::empty(offset).to_str(self.tokens.source),
                         self.parse_type(typelist)?,
                     ));
                 }
@@ -750,11 +752,12 @@ impl<'s> Parser<'s, '_> {
         if self.tokens[0].kind != Arrow {
             return Ok(Type {
                 kind: TypeKind::Nil,
-                src: Some(empty_str_from_ptr(self.tokens[0].text.as_ptr())),
+                span: Some(Span::empty(self.tokens[0].text.start)),
             });
         }
 
-        let start_ptr = self.tokens.pop_front().text.as_ptr(); // pop '->'
+        self.tokens.pop_front(); // pop '->'
+        let ty_start = self.tokens[0].text.start;
         if self.tokens[0].kind == LParen {
             self.tokens.pop_front();
             let mut result = Vec::new();
@@ -765,11 +768,11 @@ impl<'s> Parser<'s, '_> {
                 result.push(self.parse_type(typelist)?);
             }
 
-            let end_str = self.tokens.expect(RParen)?.text;
+            let ty_end = self.tokens.expect(RParen)?.text.end;
 
             Ok(Type {
                 kind: TypeKind::Multiple(result),
-                src: Some(unsafe { str_from_ptr_str(start_ptr, end_str) }),
+                span: Some(Span::new(ty_start, ty_end)),
             })
         } else {
             Ok(self.parse_type(typelist)?)
@@ -781,20 +784,20 @@ impl<'s> Parser<'s, '_> {
             Name => {
                 let name = self.tokens.pop_front().text;
 
-                if !typelist.contains(name) {
+                if !typelist.contains(name.to_str(self.tokens.source)) {
                     return Err(ParseError::NoSuchType(name));
                 }
 
                 Ok(Type {
-                    kind: typelist[name].kind.clone(),
-                    src: Some(name),
+                    kind: typelist[name.to_str(self.tokens.source)].kind.clone(),
+                    span: Some(name),
                 })
             }
             Nil => {
                 let nil = self.tokens.pop_front();
                 Ok(Type {
                     kind: TypeKind::Nil,
-                    src: Some(nil.text),
+                    span: Some(nil.text),
                 })
             }
             LSquare => {
@@ -807,11 +810,11 @@ impl<'s> Parser<'s, '_> {
                         kind: TypeKind::Table(TableType {
                             key_type: Rc::new(Type {
                                 kind: TypeKind::Number,
-                                src: None,
+                                span: None,
                             }),
                             val_type: Rc::new(self.parse_type(typelist)?),
                         }),
-                        src: None,
+                        span: None,
                     });
                 }
 
@@ -826,19 +829,21 @@ impl<'s> Parser<'s, '_> {
                         key_type: Rc::new(key_type),
                         val_type: Rc::new(val_type),
                     }),
-                    src: None,
+                    span: None,
                 })
             }
             Func => {
-                let func_str = self.tokens[0].text;
+                let func_span = self.tokens[0].text;
                 let ty = self.parse_func_header(typelist)?;
                 let src = match ty.params.last() {
-                    Some((last_str, _)) => unsafe { str_from_ptr_str(func_str.as_ptr(), last_str) },
-                    None => func_str,
+                    Some((last_str, _)) => {
+                        Span::offset_len(func_span.start, last_str.len() as SrcLoc)
+                    }
+                    None => func_span,
                 };
                 Ok(Type {
                     kind: TypeKind::Function(ty),
-                    src: Some(src),
+                    span: Some(src),
                 })
             }
             _ => Err(ParseError::UnexpectedToken(UnexpectedToken {
@@ -852,14 +857,16 @@ impl<'s> Parser<'s, '_> {
         let mut result = self.parse_basic_type(typelist)?;
 
         if self.tokens[0].kind == Question {
-            let len = self.tokens.pop_front().text.len();
-            let src = result.src.map(|it| unsafe {
-                str::from_utf8_unchecked(slice::from_raw_parts(it.as_ptr(), it.len() + len))
-            });
+            let question = self.tokens.pop_front().text;
+
+            let span = match result.span {
+                Some(span) => Span::cover(span, question),
+                None => question,
+            };
 
             result = Type {
                 kind: TypeKind::Optional(Box::new(result)),
-                src,
+                span: Some(span),
             };
         }
 
@@ -920,28 +927,28 @@ impl<'s> TypeList<'s> {
                     "number".to_owned(),
                     Type {
                         kind: TypeKind::Number,
-                        src: None,
+                        span: None,
                     },
                 ),
                 (
                     "string".to_owned(),
                     Type {
                         kind: TypeKind::String,
-                        src: None,
+                        span: None,
                     },
                 ),
                 (
                     "boolean".to_owned(),
                     Type {
                         kind: TypeKind::Boolean,
-                        src: None,
+                        span: None,
                     },
                 ),
                 (
                     "any".to_owned(),
                     Type {
                         kind: TypeKind::Any,
-                        src: None,
+                        span: None,
                     },
                 ),
             ]),
@@ -1035,24 +1042,5 @@ fn get_unop(tok: TokenKind) -> Option<UnOpKind> {
         Octothorpe => Some(UnOpKind::Len),
         Not => Some(UnOpKind::Not),
         _ => None,
-    }
-}
-
-fn empty_str_from_ptr<'a>(ptr: *const u8) -> &'a str {
-    unsafe { str::from_utf8_unchecked(slice::from_raw_parts(ptr, 0)) }
-}
-
-unsafe fn str_from_ptr_str(start: *const u8, end: &str) -> &str {
-    let end_ptr = unsafe { end.as_ptr().add(end.len()) };
-
-    unsafe { str_from_ptr_range(start, end_ptr) }
-}
-
-unsafe fn str_from_ptr_range<'a>(start: *const u8, end: *const u8) -> &'a str {
-    unsafe {
-        str::from_utf8_unchecked(slice::from_raw_parts(
-            start,
-            end.offset_from(start) as usize,
-        ))
     }
 }

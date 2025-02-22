@@ -20,6 +20,7 @@ const LJ_FR2: bool = true;
 #[derive(Debug)]
 pub struct LJCompiler<'s, 'pool> {
     pub pool: &'pool ExprPool<'s>,
+    pub source: &'s str,
     pub func_state: FuncState,
     prev_states: Vec<FuncState>,
     var_info: Vec<VarInfo>,
@@ -27,9 +28,10 @@ pub struct LJCompiler<'s, 'pool> {
 }
 
 impl<'s, 'pool> LJCompiler<'s, 'pool> {
-    pub fn new(pool: &'pool ExprPool<'s>) -> Self {
+    pub fn new(pool: &'pool ExprPool<'s>, source: &'s str) -> Self {
         let mut result = Self {
             pool,
+            source,
             func_state: FuncState::top(),
             prev_states: Vec::new(),
             var_info: Vec::new(),
@@ -210,7 +212,7 @@ impl<'s> LJCompiler<'s, '_> {
     }
 
     fn compile_decl(&mut self, decl: &Declare<'s>) {
-        self.var_new(0, decl.lhs.name);
+        self.var_new(0, decl.lhs.name.to_str(self.source));
 
         let Some(val) = decl.val else {
             self.assign_adjust(1, 0, ExprDesc::new(ExprKind::Void));
@@ -246,7 +248,7 @@ impl<'s> LJCompiler<'s, '_> {
 
     fn compile_multi_decl(&mut self, multi_decl: &MultiDecl<'s>) {
         for (idx, var_name) in multi_decl.lhs_arr.iter().enumerate() {
-            self.var_new(idx as u32, var_name);
+            self.var_new(idx as u32, var_name.to_str(self.source));
         }
         let nvars = multi_decl.lhs_arr.len() as u32;
         let nexprs = multi_decl.rhs_arr.len() as u32;
@@ -262,9 +264,11 @@ impl<'s> LJCompiler<'s, '_> {
     }
 
     fn compile_method_decl(&mut self, method_decl: &MethodDecl<'s>) {
-        let mut lhs = self.var_lookup(method_decl.struct_name);
+        let mut lhs = self.var_lookup(method_decl.struct_name.to_str(self.source));
         self.func_state.expr_toanyreg(&mut lhs);
-        let mut key = ExprDesc::new(ExprKind::KString(method_decl.method_name));
+        let mut key = ExprDesc::new(ExprKind::KString(
+            method_decl.method_name.to_str(self.source),
+        ));
         self.compile_index(&mut lhs, &mut key);
         let func = self.compile_func::<true>(method_decl.func.as_ref());
 
@@ -447,7 +451,7 @@ impl<'s> LJCompiler<'s, '_> {
         self.var_new(FORL_STOP, "(for limit)");
         self.var_new(FORL_STEP, "(for step)");
 
-        self.var_new(FORL_EXT, range_for.var);
+        self.var_new(FORL_EXT, range_for.var.to_str(self.source));
         let mut lhs = self.compile_expr(range_for.range.lhs);
         self.func_state.expr_tonextreg(&mut lhs);
         let mut rhs = self.compile_expr(range_for.range.rhs);
@@ -488,7 +492,7 @@ impl<'s> LJCompiler<'s, '_> {
 
         // now because i'm evil, we have to retokenize the `key, val` string_view
         // but who cares.
-        let names = keyval_for.names.as_bytes();
+        let names = keyval_for.names.to_str(self.source).as_bytes();
 
         let mut i = 0;
         while names[i] != b',' {
@@ -555,7 +559,7 @@ impl<'s> LJCompiler<'s, '_> {
             Expr::UnOp(unop) => self.compile_unop(unop),
             Expr::Paren(ParenExpr { val }) => self.compile_expr(*val),
             Expr::Simple(simple_expr) => self.compile_simple_expr(simple_expr),
-            Expr::Name(name) => self.var_lookup(name),
+            Expr::Name(name) => self.var_lookup(name.to_str(self.source)),
         }
     }
 
@@ -812,11 +816,14 @@ impl<'s> LJCompiler<'s, '_> {
 
     fn compile_simple_expr(&mut self, simple_expr: &SimpleExpr<'s>) -> ExprDesc<'s> {
         match simple_expr {
-            SimpleExpr::Num(str) => ExprDesc::new(ExprKind::KNumber(numlit::parse(str))),
+            SimpleExpr::Num(str) => {
+                ExprDesc::new(ExprKind::KNumber(numlit::parse(str.to_str(self.source))))
+            }
             SimpleExpr::Str(str) => ExprDesc::new(ExprKind::KString(unsafe {
+                let str = str.to_str(self.source);
                 str.get_unchecked(1..str.len() - 1)
             })),
-            SimpleExpr::Bool(str) => match str.chars().next().unwrap() {
+            SimpleExpr::Bool(str) => match str.to_str(self.source).chars().next().unwrap() {
                 't' => ExprDesc::new(ExprKind::KTrue),
                 _ => ExprDesc::new(ExprKind::KFalse),
             },
@@ -946,7 +953,7 @@ impl<'s> LJCompiler<'s, '_> {
     }
 
     fn compile_struct_decl(&mut self, struct_decl: &StructDecl<'s>) {
-        self.var_new(0, struct_decl.name);
+        self.var_new(0, struct_decl.name.to_str(self.source));
         let local_reg = self.func_state.free_reg;
         self.func_state.bcreg_reserve(1);
         self.var_add(1);
@@ -958,12 +965,12 @@ impl<'s> LJCompiler<'s, '_> {
 
         let mut key = ExprDesc::new(ExprKind::KString("__index"));
         self.compile_index(&mut table_expr, &mut key);
-        let mut rhs = self.var_lookup(struct_decl.name);
+        let mut rhs = self.var_lookup(struct_decl.name.to_str(self.source));
         self.func_state.expr_toanyreg(&mut rhs);
         self.bcemit_store(&table_expr, rhs);
 
         if let Some(constructor) = &struct_decl.constructor {
-            self.compile_constructor(constructor, struct_decl.name);
+            self.compile_constructor(constructor, struct_decl.name.to_str(self.source));
         }
     }
 
@@ -1111,7 +1118,10 @@ impl<'s> LJCompiler<'s, '_> {
                 }
                 FieldNode::Field { key, val } => {
                     hash_len += 1;
-                    (ExprDesc::new(ExprKind::KString(key)), *val)
+                    (
+                        ExprDesc::new(ExprKind::KString(key.to_str(self.source))),
+                        *val,
+                    )
                 }
                 FieldNode::ValField { val } => {
                     let key = ExprDesc::new(ExprKind::KNumber(array_len as f64));
@@ -1283,7 +1293,7 @@ impl<'s> LJCompiler<'s, '_> {
     }
 
     fn compile_suffixed_name(&mut self, suffixed_name: &SuffixedName<'s>) -> ExprDesc<'s> {
-        let mut expr = self.var_lookup(suffixed_name.name);
+        let mut expr = self.var_lookup(suffixed_name.name.to_str(self.source));
 
         for suffix in &suffixed_name.suffixes {
             expr = self.compile_suffix(suffix, expr);
@@ -1295,7 +1305,7 @@ impl<'s> LJCompiler<'s, '_> {
     fn compile_suffix(&mut self, suffix: &Suffix<'s>, mut base: ExprDesc<'s>) -> ExprDesc<'s> {
         match suffix {
             Suffix::Method(Method { method_name, args }) => {
-                base = self.bcemit_method(base, method_name);
+                base = self.bcemit_method(base, method_name.to_str(self.source));
                 base = self.compile_args(&base, args);
             }
             Suffix::Call(Call { args }) => {
@@ -1307,7 +1317,7 @@ impl<'s> LJCompiler<'s, '_> {
             }
             Suffix::Access(Access { field_name }) => {
                 self.func_state.expr_toanyreg(&mut base);
-                let mut key = ExprDesc::new(ExprKind::KString(field_name));
+                let mut key = ExprDesc::new(ExprKind::KString(field_name.to_str(self.source)));
                 self.compile_index(&mut base, &mut key);
             }
             Suffix::Index(Index { key }) => {

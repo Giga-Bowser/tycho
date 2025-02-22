@@ -1,4 +1,5 @@
 use crate::{
+    lexer::Span,
     parser::ExprRef,
     types::{Function, Type, User},
 };
@@ -30,14 +31,14 @@ pub struct Declare<'s> {
 
 #[derive(Debug, Clone)]
 pub struct MultiDecl<'s> {
-    pub lhs_arr: Vec<&'s str>,
+    pub lhs_arr: Vec<Span<'s>>,
     pub rhs_arr: Vec<ExprRef>,
 }
 
 #[derive(Debug, Clone)]
 pub struct MethodDecl<'s> {
-    pub struct_name: &'s str,
-    pub method_name: &'s str,
+    pub struct_name: Span<'s>,
+    pub method_name: Span<'s>,
     pub func: Box<FuncNode<'s>>,
 }
 
@@ -55,7 +56,7 @@ pub struct MultiAssign<'s> {
 
 #[derive(Debug, Clone)]
 pub struct SuffixedName<'s> {
-    pub name: &'s str,
+    pub name: Span<'s>,
     pub suffixes: Vec<Suffix<'s>>,
 }
 
@@ -103,7 +104,7 @@ pub struct WhileStat<'s> {
 
 #[derive(Debug, Clone)]
 pub struct RangeFor<'s> {
-    pub var: &'s str,
+    pub var: Span<'s>,
     pub range: Box<RangeExpr>,
     pub body: Block<'s>,
 }
@@ -117,14 +118,14 @@ pub struct RangeExpr {
 #[derive(Debug, Clone)]
 pub struct KeyValFor<'s> {
     /// this should be 'keyname, valname' in one str
-    pub names: &'s str,
+    pub names: Span<'s>,
     pub iter: ExprRef,
     pub body: Block<'s>,
 }
 
 #[derive(Debug, Clone)]
 pub struct StructDecl<'s> {
-    pub name: &'s str,
+    pub name: Span<'s>,
     pub type_: Box<User<'s>>,
     pub constructor: Option<FuncNode<'s>>,
 }
@@ -135,7 +136,7 @@ pub enum Expr<'s> {
     UnOp(UnOp),
     Paren(ParenExpr),
     Simple(SimpleExpr<'s>),
-    Name(&'s str),
+    Name(Span<'s>),
 }
 
 #[derive(Debug, Clone)]
@@ -158,10 +159,10 @@ pub struct ParenExpr {
 
 #[derive(Debug, Clone)]
 pub enum SimpleExpr<'s> {
-    Num(&'s str),
-    Str(&'s str),
-    Bool(&'s str),
-    Nil(&'s str),
+    Num(Span<'s>),
+    Str(Span<'s>),
+    Bool(Span<'s>),
+    Nil(Span<'s>),
     FuncNode(FuncNode<'s>),
     TableNode(TableNode<'s>),
     SuffixedExpr(SuffixedExpr<'s>),
@@ -180,7 +181,7 @@ pub struct TableNode<'s> {
 
 #[derive(Debug, Clone)]
 pub enum FieldNode<'s> {
-    Field { key: &'s str, val: ExprRef },
+    Field { key: Span<'s>, val: ExprRef },
     ExprField { key: ExprRef, val: ExprRef },
     ValField { val: ExprRef },
 }
@@ -206,7 +207,7 @@ pub struct Index {
 
 #[derive(Debug, Clone)]
 pub struct Access<'s> {
-    pub field_name: &'s str,
+    pub field_name: Span<'s>,
 }
 
 #[derive(Debug, Clone)]
@@ -216,7 +217,7 @@ pub struct Call {
 
 #[derive(Debug, Clone)]
 pub struct Method<'s> {
-    pub method_name: &'s str,
+    pub method_name: Span<'s>,
     pub args: Vec<ExprRef>,
 }
 
