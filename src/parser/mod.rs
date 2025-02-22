@@ -16,7 +16,7 @@ use crate::{
     types::{Function, TableType, Type, TypeKind, User},
 };
 
-type PResult<'s, T> = Result<T, ParseError<'s>>;
+type PResult<'s, T> = Result<T, Box<ParseError<'s>>>;
 
 pub struct Parser<'s, 'pool> {
     pub tokens: SpanTokens<'s>,
@@ -229,10 +229,10 @@ impl<'s> Parser<'s, '_> {
                     body,
                 }))
             }
-            _ => Err(ParseError::UnexpectedToken(UnexpectedToken {
+            _ => Err(Box::new(ParseError::UnexpectedToken(UnexpectedToken {
                 token: self.tokens[0].clone(),
                 expected_kinds: vec![Comma, In],
-            })),
+            }))),
         }
     }
 
@@ -262,7 +262,9 @@ impl<'s> Parser<'s, '_> {
 
             if self.tokens[0].kind != Comma {
                 if sufexpr.suffixes.is_empty() {
-                    return Err(ParseError::BadExprStat(self.pool[sufexpr.val].clone()));
+                    return Err(Box::new(ParseError::BadExprStat(
+                        self.pool[sufexpr.val].clone(),
+                    )));
                 }
                 return Ok(Statement::ExprStat(sufexpr));
             }
@@ -276,7 +278,7 @@ impl<'s> Parser<'s, '_> {
                     Expr::Name(..) => {
                         lhs_arr.push(temp);
                     }
-                    _ => return Err(ParseError::EmptyError),
+                    _ => return Err(Box::new(ParseError::EmptyError)),
                 }
             }
 
@@ -295,7 +297,7 @@ impl<'s> Parser<'s, '_> {
 
                             new_lhs_arr.push(name);
                         } else {
-                            return Err(ParseError::EmptyError);
+                            return Err(Box::new(ParseError::EmptyError));
                         }
                     }
 
@@ -310,15 +312,17 @@ impl<'s> Parser<'s, '_> {
 
                     Ok(Statement::MultiAssign(MultiAssign { lhs_arr, rhs_arr }))
                 }
-                _ => Err(ParseError::UnexpectedToken(UnexpectedToken {
+                _ => Err(Box::new(ParseError::UnexpectedToken(UnexpectedToken {
                     token: self.tokens[0].clone(),
                     expected_kinds: vec![Colon, Equal],
-                })),
+                }))),
             };
         }
 
         if sufexpr.suffixes.is_empty() {
-            return Err(ParseError::BadExprStat(self.pool[sufexpr.val].clone()));
+            return Err(Box::new(ParseError::BadExprStat(
+                self.pool[sufexpr.val].clone(),
+            )));
         }
 
         Ok(Statement::ExprStat(sufexpr))
@@ -346,10 +350,10 @@ impl<'s> Parser<'s, '_> {
                         self.tokens.pop_front(); // name
 
                         if self.tokens[0].kind != LParen {
-                            return Err(ParseError::UnexpectedToken(UnexpectedToken {
+                            return Err(Box::new(ParseError::UnexpectedToken(UnexpectedToken {
                                 token: self.tokens[0].clone(),
                                 expected_kinds: vec![LParen],
-                            }));
+                            })));
                         }
 
                         suffixes.push(Suffix::Method(Method {
@@ -431,10 +435,10 @@ impl<'s> Parser<'s, '_> {
 
                 Ok(self.pool.add(Expr::Paren(ParenExpr { val })))
             }
-            _ => Err(ParseError::UnexpectedToken(UnexpectedToken {
+            _ => Err(Box::new(ParseError::UnexpectedToken(UnexpectedToken {
                 token: self.tokens[0].clone(),
                 expected_kinds: vec![Name, LParen],
-            })),
+            }))),
         }
     }
 
@@ -679,10 +683,10 @@ impl<'s> Parser<'s, '_> {
                     constructor,
                 })
             }
-            _ => Err(ParseError::UnexpectedToken(UnexpectedToken {
+            _ => Err(Box::new(ParseError::UnexpectedToken(UnexpectedToken {
                 token: self.tokens[0].clone(),
                 expected_kinds: vec![RCurly, Constructor],
-            })),
+            }))),
         }
     }
 
@@ -785,7 +789,7 @@ impl<'s> Parser<'s, '_> {
                 let name = self.tokens.pop_front().text;
 
                 if !typelist.contains(name.to_str(self.tokens.source)) {
-                    return Err(ParseError::NoSuchType(name));
+                    return Err(Box::new(ParseError::NoSuchType(name)));
                 }
 
                 Ok(Type {
@@ -846,10 +850,10 @@ impl<'s> Parser<'s, '_> {
                     span: Some(src),
                 })
             }
-            _ => Err(ParseError::UnexpectedToken(UnexpectedToken {
+            _ => Err(Box::new(ParseError::UnexpectedToken(UnexpectedToken {
                 token: self.tokens[0].clone(),
                 expected_kinds: vec![Name, Nil, LSquare, Func],
-            })),
+            }))),
         }
     }
 

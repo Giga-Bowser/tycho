@@ -5,7 +5,7 @@ use std::{
     ops::{Index, Range},
 };
 
-use crate::errors::UnexpectedToken;
+use crate::errors::{ParseError, UnexpectedToken};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TokenKind {
@@ -289,12 +289,12 @@ impl<'s> SpanTokens<'s> {
         self.dq.pop_front().unwrap()
     }
 
-    pub fn pop_name(&mut self) -> Result<Span<'s>, UnexpectedToken<'s>> {
+    pub fn pop_name(&mut self) -> Result<Span<'s>, Box<ParseError<'s>>> {
         if self.dq[0].kind != TokenKind::Name {
-            return Err(UnexpectedToken {
+            return Err(Box::new(ParseError::UnexpectedToken(UnexpectedToken {
                 token: self.dq[0].clone(),
                 expected_kinds: vec![TokenKind::Name],
-            });
+            })));
         }
 
         Ok(self.pop_front().text)
@@ -303,14 +303,14 @@ impl<'s> SpanTokens<'s> {
     pub fn expect(
         &mut self,
         expected_kind: TokenKind,
-    ) -> Result<SpanToken<'s>, UnexpectedToken<'s>> {
+    ) -> Result<SpanToken<'s>, Box<ParseError<'s>>> {
         if self.dq[0].kind == expected_kind {
             Ok(self.pop_front())
         } else {
-            Err(UnexpectedToken {
+            Err(Box::new(ParseError::UnexpectedToken(UnexpectedToken {
                 token: self.dq[0].clone(),
                 expected_kinds: vec![expected_kind],
-            })
+            })))
         }
     }
 }

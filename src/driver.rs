@@ -77,7 +77,7 @@ fn build(args: &BuildOpt) {
     while parser.tokens[0].kind != TokenKind::EndOfFile {
         match parser.parse_statement(&mut typelist) {
             Ok(stmt) => stmts.push(stmt),
-            Err(e) => panic!("{}", report_err(e, &contents, &args.file)),
+            Err(e) => panic!("{}", report_err(*e, &contents, &args.file)),
         }
     }
 
@@ -96,7 +96,7 @@ fn build(args: &BuildOpt) {
     for stmt in &stmts {
         match typechecker.check_statement(stmt, &mut type_env) {
             Ok(()) => (),
-            Err(e) => panic!("{}", report_err(e, &contents, &args.file)),
+            Err(e) => panic!("{}", report_err(*e, &contents, &args.file)),
         }
     }
 
@@ -186,7 +186,7 @@ pub fn print_main(args: &PrintOpt) {
     while parser.tokens[0].kind != TokenKind::EndOfFile {
         match parser.parse_statement(&mut typelist) {
             Ok(stmt) => stmts.push(stmt),
-            Err(e) => panic!("{}", report_err(e, &contents, &args.file)),
+            Err(e) => panic!("{}", report_err(*e, &contents, &args.file)),
         }
     }
 
@@ -205,7 +205,7 @@ pub fn print_main(args: &PrintOpt) {
     for stmt in &stmts {
         match typechecker.check_statement(stmt, &mut type_env) {
             Ok(()) => (),
-            Err(e) => panic!("{}", report_err(e, &contents, &args.file)),
+            Err(e) => panic!("{}", report_err(*e, &contents, &args.file)),
         }
     }
 
