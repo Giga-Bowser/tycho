@@ -621,7 +621,8 @@ impl<'s> Parser<'s, '_> {
     fn parse_struct_decl(&mut self, typelist: &mut TypeList<'s>) -> PResult<'s, StructDecl<'s>> {
         let start = self.tokens.pop_front().text.start; // pop 'struct'
 
-        let name = self.tokens.pop_name()?;
+        let name_span = self.tokens.pop_name()?;
+        let name_str = name_span.to_str(self.tokens.source);
 
         self.tokens.expect(LCurly)?;
 
@@ -630,9 +631,12 @@ impl<'s> Parser<'s, '_> {
         if self.tokens[0].kind == RCurly {
             let end_str = self.tokens.pop_front().text.end;
 
-            let type_ = Box::new(User { fields });
+            let type_ = Box::new(User {
+                fields,
+                name: name_str,
+            });
             typelist.insert(
-                name.to_str(self.tokens.source).to_owned(),
+                name_str.to_owned(),
                 Type {
                     kind: TypeKind::User(*type_.clone()),
                     span: Some(Span::new(start, end_str)),
@@ -641,7 +645,7 @@ impl<'s> Parser<'s, '_> {
             return Ok(StructDecl {
                 type_,
                 constructor: None,
-                name,
+                name: name_span,
             });
         }
 
@@ -656,9 +660,9 @@ impl<'s> Parser<'s, '_> {
             fields.push(self.member(typelist)?);
         }
 
-        let type_ = Box::new(User { fields });
+        let type_ = Box::new(User { fields, name: name_str });
         typelist.insert(
-            name.to_str(self.tokens.source).to_owned(),
+            name_str.to_owned(),
             Type {
                 kind: TypeKind::User(*type_.clone()),
                 span: Some(Span::new(start, self.tokens[0].text.start)),
@@ -671,14 +675,14 @@ impl<'s> Parser<'s, '_> {
                 Ok(StructDecl {
                     type_,
                     constructor: None,
-                    name,
+                    name: name_span,
                 })
             }
             Constructor => {
                 let constructor = Some(self.parse_struct_constructor(typelist)?);
                 self.tokens.expect(RCurly)?;
                 Ok(StructDecl {
-                    name,
+                    name: name_span,
                     type_,
                     constructor,
                 })

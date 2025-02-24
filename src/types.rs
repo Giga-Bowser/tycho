@@ -16,6 +16,7 @@ pub struct TableType<'s> {
 
 #[derive(Debug, Clone)]
 pub struct User<'s> {
+    pub name: &'s str,
     pub fields: Vec<(&'s str, Type<'s>)>,
 }
 
@@ -177,6 +178,53 @@ impl<'s> From<TypeKind<'s>> for Type<'s> {
         Self {
             kind: value,
             span: None,
+        }
+    }
+}
+
+impl std::fmt::Display for Type<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.kind {
+            TypeKind::Nil => f.write_str("nil"),
+            TypeKind::Any => f.write_str("any"),
+            TypeKind::Number => f.write_str("number"),
+            TypeKind::String => f.write_str("string"),
+            TypeKind::Boolean => f.write_str("boolean"),
+            TypeKind::Function(function) => {
+                write!(f, "func")?;
+
+                // params
+                let inner = function
+                    .params
+                    .iter()
+                    .map(|(name, ty)| {
+                        if name.is_empty() {
+                            format!("{ty}")
+                        } else {
+                            format!("{name}: {ty}")
+                        }
+                    })
+                    .collect::<Vec<String>>()
+                    .join(", ");
+
+                write!(f, "({inner})")
+            }
+            TypeKind::Table(TableType { key_type, val_type }) => {
+                write!(f, "[{}]{}", key_type, val_type)
+            }
+            TypeKind::User(user) => f.write_str(user.name),
+            TypeKind::Adaptable => f.write_str("<adaptable>"),
+            TypeKind::Variadic => f.write_str("..."),
+            TypeKind::Multiple(items) => {
+                let inner = items
+                    .iter()
+                    .map(|ty| format!("{ty}"))
+                    .collect::<Vec<String>>()
+                    .join(", ");
+
+                write!(f, "({inner})")
+            }
+            TypeKind::Optional(inner) => write!(f, "{}?", inner),
         }
     }
 }

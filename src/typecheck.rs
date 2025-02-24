@@ -157,7 +157,7 @@ impl<'s> TypeChecker<'s, '_> {
         };
         type_env.pop(); // remove "self"
 
-        let TypeKind::User(User { fields }) = &mut type_env
+        let TypeKind::User(User { fields, name: _ }) = &mut type_env
             .get_mut(method_decl.struct_name.to_str(self.source))
             .unwrap()
             .kind
