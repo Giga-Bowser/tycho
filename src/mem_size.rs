@@ -84,7 +84,7 @@ mod parser {
                 Statement::MultiAssign(multi_assign) => multi_assign.deep_size_of_children(),
                 Statement::ExprStat(suffixed_expr) => suffixed_expr.deep_size_of_children(),
                 Statement::Block(block) => block.deep_size_of_children(),
-                Statement::Return(vec) => vec.deep_size_of_children(),
+                Statement::Return(ReturnStmt { vals, .. }) => vals.deep_size_of_children(),
                 Statement::IfStat(if_stat) => if_stat.deep_size_of_children(),
                 Statement::WhileStat(while_stat) => while_stat.body.deep_size_of_children(),
                 Statement::RangeFor(range_for) => {

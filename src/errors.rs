@@ -54,7 +54,7 @@ pub struct Annotation {
 }
 
 pub trait Snippetize<'s> {
-    fn snippetize(self, source: &'s str) -> Diag;
+    fn snippetize(&self, source: &'s str) -> Diag;
 }
 
 #[derive(Default, Debug)]
@@ -79,7 +79,7 @@ impl<'s> From<UnexpectedToken<'s>> for ParseError<'s> {
 }
 
 impl<'s> Snippetize<'s> for ParseError<'s> {
-    fn snippetize(self, source: &'s str) -> Diag {
+    fn snippetize(&self, source: &'s str) -> Diag {
         match self {
             ParseError::EmptyError => Diag {
                 title: "oh no, empty error".to_owned(),
@@ -131,7 +131,7 @@ impl<'s> Snippetize<'s> for ParseError<'s> {
 }
 
 impl<'s> Snippetize<'s> for UnexpectedToken<'s> {
-    fn snippetize(self, _source: &'s str) -> Diag {
+    fn snippetize(&self, source: &'s str) -> Diag {
         let mut annotations = vec![Annotation {
             level: Level::Error,
             range: self.token.text.to_range(),
@@ -141,7 +141,7 @@ impl<'s> Snippetize<'s> for UnexpectedToken<'s> {
         if !self.expected_kinds.is_empty() {
             let kinds = self
                 .expected_kinds
-                .into_iter()
+                .iter()
                 .map(|it| format!("`{it:?}`"))
                 .collect::<Vec<String>>()
                 .join(", ");
@@ -154,134 +154,258 @@ impl<'s> Snippetize<'s> for UnexpectedToken<'s> {
         }
 
         Diag {
-            title: format!("unexpected token: {:?}", self.token),
+            title: format!("unexpected token: `{}`", self.token.text.to_str(source)),
             level: Level::Error,
             annotations,
         }
     }
 }
 
-#[derive(Default, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub enum CheckErr<'s> {
-    #[default]
-    EmptyError,
-    NoSuchVal(Span<'s>),
-    MismatchedTypes {
-        expected: Type<'s>,
-        recieved: Type<'s>,
-    },
-    ReturnCount,
+    MismatchedTypes(MismatchedTypes<'s>),
+    NoReturn(NoReturn<'s>),
+    ReturnCount(ReturnCount<'s>),
+    MethodOnWrongType(MethodOnWrongType<'s>),
+    NoSuchVal(NoSuchVal<'s>),
+    NoSuchField(NoSuchField<'s>),
+    NoSuchMethod(NoSuchMethod<'s>),
     NotIterable,
-    NoSuchField(Span<'s>),
-    NoSuchMethod(Span<'s>),
-    NoReturn(ast::FuncNode<'s>),
-    CustomError(String),
+    BadAccess { span: Span<'s>, ty: Type<'s> },
+    BadIndex { span: Span<'s>, ty: Type<'s> },
+    BadNegate { op_span: Span<'s>, ty: Type<'s> },
+    BadNot { op_span: Span<'s>, ty: Type<'s> },
 }
 
 impl<'s> Snippetize<'s> for CheckErr<'s> {
-    fn snippetize(self, source: &'s str) -> Diag {
+    fn snippetize(&self, source: &'s str) -> Diag {
         match self {
-            CheckErr::EmptyError => Diag {
-                title: "oh no, empty error".to_owned(),
-                level: Level::Error,
-                annotations: vec![],
-            },
-            CheckErr::NoSuchVal(val_name) => {
-                let val_str = val_name.to_str(source);
-
-                Diag {
-                    title: format!("cannot find value `{val_str}` in this scope"),
-                    level: Level::Error,
-                    annotations: vec![Annotation {
-                        level: Level::Error,
-                        range: val_name.to_range(),
-                        label: Some("not found in this scope".to_owned()),
-                    }],
-                }
+            CheckErr::MismatchedTypes(mismatched_types) => mismatched_types.snippetize(source),
+            CheckErr::NoReturn(no_return) => no_return.snippetize(source),
+            CheckErr::ReturnCount(return_count) => return_count.snippetize(source),
+            CheckErr::MethodOnWrongType(method_on_wrong_type) => {
+                method_on_wrong_type.snippetize(source)
             }
-            CheckErr::MismatchedTypes { expected, recieved } => {
-                let expected_span = expected.span;
-                let recieved_span = recieved.span;
-
-                let mut annotations = Vec::new();
-
-                if let Some(expected_span) = expected_span {
-                    annotations.push(Annotation {
-                        level: Level::Info,
-                        range: expected_span.to_range(),
-                        label: Some("expected due to this".to_owned()),
-                    });
-                }
-
-                if let Some(recieved_str) = recieved_span {
-                    annotations.push(Annotation {
-                        level: Level::Error,
-                        range: recieved_str.to_range(),
-                        label: Some(format!(
-                            "expected `{:?}`, found `{:?}`",
-                            expected.kind, recieved.kind
-                        )),
-                    });
-                }
-
-                Diag {
-                    title: "type mismatch".to_owned(),
-                    level: Level::Error,
-                    annotations,
-                }
-            }
-            CheckErr::ReturnCount => Diag {
-                title: "wrong number of returns".to_owned(),
-                level: Level::Error,
-                annotations: vec![],
-            },
+            CheckErr::NoSuchVal(no_such_val) => no_such_val.snippetize(source),
+            CheckErr::NoSuchField(no_such_field) => no_such_field.snippetize(source),
+            CheckErr::NoSuchMethod(no_such_method) => no_such_method.snippetize(source),
             CheckErr::NotIterable => Diag {
                 title: "can't iterate over non-iterable".to_owned(),
                 level: Level::Error,
                 annotations: vec![],
             },
-            CheckErr::NoSuchField(field) => Diag {
-                title: "no such field".to_owned(),
+            CheckErr::BadNegate { op_span, ty } => Diag {
+                title: "cannot unary negate non-number type".to_owned(),
                 level: Level::Error,
                 annotations: vec![Annotation {
                     level: Level::Error,
-                    range: field.to_range(),
-                    label: Some("this field".to_owned()),
+                    range: op_span.to_range(),
+                    label: Some(format!("expected `number` for this operator, found `{ty}`")),
                 }],
             },
-            CheckErr::NoSuchMethod(method) => Diag {
-                title: format!("no method named `{}`", method.to_str(source)),
+            CheckErr::BadNot { op_span, ty } => Diag {
+                title: "cannot unary not non-boolean type".to_owned(),
                 level: Level::Error,
                 annotations: vec![Annotation {
                     level: Level::Error,
-                    range: method.to_range(),
-                    label: Some("method not found".to_owned()),
+                    range: op_span.to_range(),
+                    label: Some(format!(
+                        "expected `boolean` for this operator, found `{ty}`"
+                    )),
                 }],
             },
-            CheckErr::NoReturn(func_node) => {
-                let return_span = func_node.type_.returns.span;
-
-                let mut annotations = Vec::new();
-
-                if let Some(return_span) = return_span {
-                    annotations.push(Annotation {
-                        level: Level::Error,
-                        range: return_span.to_range(),
-                        label: Some("expected return type".to_owned()),
-                    });
-                }
-
-                Diag {
-                    title: "non-nil function does not return".to_owned(),
-                    level: Level::Error,
-                    annotations,
-                }
-            }
-            CheckErr::CustomError(s) => Diag {
-                title: s,
+            CheckErr::BadIndex { span, ty } => Diag {
+                title: format!("cannot index into value of type `{ty}`"),
                 level: Level::Error,
-                annotations: Vec::new(),
+                annotations: vec![Annotation {
+                    level: Level::Error,
+                    range: span.to_range(),
+                    label: Some(format!("cannot index into value of type `{ty}`")),
+                }],
             },
+            CheckErr::BadAccess { span, ty } => Diag {
+                title: format!("cannot perform access on value of type `{ty}`"),
+                level: Level::Error,
+                annotations: vec![Annotation {
+                    level: Level::Error,
+                    range: span.to_range(),
+                    label: Some(format!("cannot perform access on value of type `{ty}`")),
+                }],
+            },
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct MismatchedTypes<'s> {
+    pub expected: Type<'s>,
+    pub recieved: Type<'s>,
+}
+
+impl<'s> Snippetize<'s> for MismatchedTypes<'s> {
+    fn snippetize(&self, _source: &'s str) -> Diag {
+        let expected_span = self.expected.span;
+        let recieved_span = self.recieved.span;
+
+        let mut annotations = Vec::new();
+
+        if let Some(expected_span) = expected_span {
+            annotations.push(Annotation {
+                level: Level::Info,
+                range: expected_span.to_range(),
+                label: Some("expected due to this".to_owned()),
+            });
+        }
+
+        if let Some(recieved_str) = recieved_span {
+            annotations.push(Annotation {
+                level: Level::Error,
+                range: recieved_str.to_range(),
+                label: Some(format!(
+                    "expected `{}`, found `{}`",
+                    self.expected, self.recieved
+                )),
+            });
+        }
+
+        Diag {
+            title: "type mismatch".to_owned(),
+            level: Level::Error,
+            annotations,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct NoSuchVal<'s> {
+    pub val_name: Span<'s>,
+}
+
+impl<'s> Snippetize<'s> for NoSuchVal<'s> {
+    fn snippetize(&self, source: &'s str) -> Diag {
+        let val_str = self.val_name.to_str(source);
+
+        Diag {
+            title: format!("cannot find value `{val_str}` in this scope"),
+            level: Level::Error,
+            annotations: vec![Annotation {
+                level: Level::Error,
+                range: self.val_name.to_range(),
+                label: Some("not found in this scope".to_owned()),
+            }],
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct NoSuchField<'s> {
+    pub field_name: Span<'s>,
+}
+
+impl<'s> Snippetize<'s> for NoSuchField<'s> {
+    fn snippetize(&self, source: &'s str) -> Diag {
+        let field_str = self.field_name.to_str(source);
+
+        Diag {
+            title: format!("cannot find field `{field_str}` on this type"),
+            level: Level::Error,
+            annotations: vec![Annotation {
+                level: Level::Error,
+                range: self.field_name.to_range(),
+                label: Some("field not found on this type".to_owned()),
+            }],
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct NoSuchMethod<'s> {
+    pub method_name: Span<'s>,
+}
+
+impl<'s> Snippetize<'s> for NoSuchMethod<'s> {
+    fn snippetize(&self, source: &'s str) -> Diag {
+        let method_str = self.method_name.to_str(source);
+
+        Diag {
+            title: format!("cannot find method `{method_str}` on this type"),
+            level: Level::Error,
+            annotations: vec![Annotation {
+                level: Level::Error,
+                range: self.method_name.to_range(),
+                label: Some("method not found on this type".to_owned()),
+            }],
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct NoReturn<'s> {
+    pub func_node: ast::FuncNode<'s>,
+}
+
+impl<'s> Snippetize<'s> for NoReturn<'s> {
+    fn snippetize(&self, _source: &'s str) -> Diag {
+        let return_span = self.func_node.type_.returns.span;
+
+        let mut annotations = Vec::new();
+
+        if let Some(return_span) = return_span {
+            annotations.push(Annotation {
+                level: Level::Error,
+                range: return_span.to_range(),
+                label: Some("expected return type".to_owned()),
+            });
+        }
+
+        Diag {
+            title: "non-nil function does not return".to_owned(),
+            level: Level::Error,
+            annotations,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ReturnCount<'s> {
+    pub return_node: ast::ReturnStmt<'s>,
+    pub expected: usize,
+}
+
+impl<'s> Snippetize<'s> for ReturnCount<'s> {
+    fn snippetize(&self, _source: &'s str) -> Diag {
+        Diag {
+            title: "wrong number of returns".to_owned(),
+            level: Level::Error,
+            annotations: vec![Annotation {
+                level: Level::Error,
+                range: self.return_node.kw_span.to_range(),
+                label: Some(format!(
+                    "expected `{}` return values here, recieved `{}`",
+                    self.expected,
+                    self.return_node.vals.len()
+                )),
+            }],
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct MethodOnWrongType<'s> {
+    pub span: Span<'s>,
+    pub ty: Type<'s>,
+}
+
+impl<'s> Snippetize<'s> for MethodOnWrongType<'s> {
+    fn snippetize(&self, _source: &'s str) -> Diag {
+        Diag {
+            title: format!("tried to declare method on non-struct type `{}`", self.ty),
+            level: Level::Error,
+            annotations: vec![Annotation {
+                level: Level::Error,
+                range: self.span.to_range(),
+                label: Some("method declaration here".to_owned()),
+            }],
         }
     }
 }

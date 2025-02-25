@@ -1,7 +1,11 @@
 use std::rc::Rc;
 
 use crate::{
-    errors::CheckErr,
+    errors::{
+        CheckErr, MethodOnWrongType, MismatchedTypes, NoReturn, NoSuchField, NoSuchMethod,
+        NoSuchVal, ReturnCount,
+    },
+    lexer::Span,
     parser::{
         ast::*,
         pool::{ExprPool, ExprRef},
@@ -37,10 +41,10 @@ impl<'s> TypeChecker<'s, '_> {
                 if lhs_type.can_equal(&rhs_type) {
                     Ok(())
                 } else {
-                    Err(Box::new(CheckErr::MismatchedTypes {
+                    Err(Box::new(CheckErr::MismatchedTypes(MismatchedTypes {
                         expected: lhs_type,
                         recieved: rhs_type,
-                    }))
+                    })))
                 }
             }
             Statement::MultiAssign(multi_assign) => self.check_multi_assign(multi_assign, type_env),
@@ -83,10 +87,10 @@ impl<'s> TypeChecker<'s, '_> {
             }
 
             if !decl.type_.can_equal(&lhs_type) {
-                return Err(Box::new(CheckErr::MismatchedTypes {
+                return Err(Box::new(CheckErr::MismatchedTypes(MismatchedTypes {
                     expected: decl.type_.as_ref().clone(),
                     recieved: lhs_type,
-                }));
+                })));
             }
 
             type_env.push(
@@ -103,15 +107,17 @@ impl<'s> TypeChecker<'s, '_> {
                 return Ok(());
             }
 
-            let mut type_ = type_env.get_mut(decl.lhs.name.to_str(self.source)).unwrap();
+            let mut ty = type_env.get_mut(decl.lhs.name.to_str(self.source)).unwrap();
 
             for suffix in &mut decl.lhs.suffixes.iter().take(decl.lhs.suffixes.len() - 1) {
                 match suffix {
                     Suffix::Access(Access { field_name: name }) => {
-                        if let Some(field) = type_.kind.get_field_mut(name.to_str(self.source)) {
-                            type_ = field;
+                        if let Some(field) = ty.kind.get_field_mut(name.to_str(self.source)) {
+                            ty = field;
                         } else {
-                            return Err(Box::new(CheckErr::NoSuchField(*name)));
+                            return Err(Box::new(CheckErr::NoSuchField(NoSuchField {
+                                field_name: *name,
+                            })));
                         }
                     }
                     _ => unreachable!(),
@@ -121,16 +127,17 @@ impl<'s> TypeChecker<'s, '_> {
             let last = decl.lhs.suffixes.last().unwrap();
 
             if let Suffix::Access(Access { field_name }) = last {
-                match &mut type_.kind {
+                match &mut ty.kind {
                     TypeKind::Table(_) => Ok(()),
                     TypeKind::User(user) => {
                         user.fields
                             .push((field_name.to_str(self.source), *decl.type_.clone()));
                         Ok(())
                     }
-                    _ => Err(Box::new(CheckErr::CustomError(
-                        "tried to define field on wrong type".to_owned(),
-                    ))),
+                    _ => Err(Box::new(CheckErr::BadAccess {
+                        span: *field_name,
+                        ty: ty.clone(),
+                    })),
                 }
             } else {
                 unreachable!()
@@ -143,17 +150,18 @@ impl<'s> TypeChecker<'s, '_> {
         method_decl: &MethodDecl<'s>,
         type_env: &mut TypeEnv<'_, 's>,
     ) -> TResult<'s, ()> {
-        let type_ = type_env
+        let ty = type_env
             .get(method_decl.struct_name.to_str(self.source))
             .unwrap();
 
-        let method_type = if let TypeKind::User(_) = type_.kind {
-            type_env.push("self".to_owned(), type_.clone());
+        let method_type = if let TypeKind::User(_) = ty.kind {
+            type_env.push("self".to_owned(), ty.clone());
             self.check_func(&method_decl.func, type_env)?
         } else {
-            return Err(Box::new(CheckErr::CustomError(
-                "cannot declare method on non-struct type".to_owned(),
-            )));
+            return Err(Box::new(CheckErr::MethodOnWrongType(MethodOnWrongType {
+                span: Span::cover(method_decl.struct_name, method_decl.method_name),
+                ty: ty.clone(),
+            })));
         };
         type_env.pop(); // remove "self"
 
@@ -239,10 +247,10 @@ impl<'s> TypeChecker<'s, '_> {
             };
 
             if !expected.can_equal(recieved) {
-                return Err(Box::new(CheckErr::MismatchedTypes {
+                return Err(Box::new(CheckErr::MismatchedTypes(MismatchedTypes {
                     expected,
                     recieved: recieved.clone(),
-                }));
+                })));
             }
         }
 
@@ -258,7 +266,10 @@ impl<'s> TypeChecker<'s, '_> {
                     if let TypeKind::Number = res.kind {
                         Ok(res)
                     } else {
-                        Err(Box::new(CheckErr::EmptyError))
+                        Err(Box::new(CheckErr::BadNegate {
+                            op_span: unop.op_span,
+                            ty: res,
+                        }))
                     }
                 }
                 UnOpKind::Len => Ok(Type {
@@ -270,7 +281,10 @@ impl<'s> TypeChecker<'s, '_> {
                     if let TypeKind::Boolean = res.kind {
                         Ok(res)
                     } else {
-                        Err(Box::new(CheckErr::EmptyError))
+                        Err(Box::new(CheckErr::BadNot {
+                            op_span: unop.op_span,
+                            ty: res,
+                        }))
                     }
                 }
             },
@@ -278,7 +292,7 @@ impl<'s> TypeChecker<'s, '_> {
             Expr::Simple(simple_expr) => self.check_simple_expr(simple_expr, type_env),
             Expr::Name(span) => match type_env.get(span.to_str(self.source)) {
                 Some(type_) => Ok(type_.clone()),
-                None => Err(Box::new(CheckErr::NoSuchVal(*span))),
+                None => Err(Box::new(CheckErr::NoSuchVal(NoSuchVal { val_name: *span }))),
             },
         }
     }
@@ -407,7 +421,9 @@ impl<'s> TypeChecker<'s, '_> {
             self.check_func_body(&func.body, &mut new_env, func.type_.returns.as_ref())?;
 
         if !has_return {
-            return Err(Box::new(CheckErr::NoReturn(func.clone())));
+            return Err(Box::new(CheckErr::NoReturn(NoReturn {
+                func_node: func.clone(),
+            })));
         }
 
         Ok(TypeKind::Function(*func.type_.clone()).into())
@@ -444,36 +460,58 @@ impl<'s> TypeChecker<'s, '_> {
                         return Ok(true);
                     }
                 }
-                Statement::Return(vals) => {
+                Statement::Return(node @ ReturnStmt { vals, .. }) => {
                     if vals.is_empty() {
-                        return Err(Box::new(CheckErr::ReturnCount));
+                        return match &return_type.kind {
+                            TypeKind::Nil | TypeKind::Variadic => Ok(true),
+                            TypeKind::Multiple(types) => {
+                                if types.is_empty() {
+                                    Ok(true)
+                                } else {
+                                    Err(Box::new(CheckErr::ReturnCount(ReturnCount {
+                                        return_node: node.clone(),
+                                        expected: types.len(),
+                                    })))
+                                }
+                            }
+                            _ => Err(Box::new(CheckErr::ReturnCount(ReturnCount {
+                                return_node: node.clone(),
+                                expected: 1,
+                            }))),
+                        };
                     }
 
                     if let TypeKind::Multiple(types) = &return_type.kind {
                         if types.len() != vals.len() {
-                            return Err(Box::new(CheckErr::ReturnCount));
+                            return Err(Box::new(CheckErr::ReturnCount(ReturnCount {
+                                return_node: node.clone(),
+                                expected: types.len(),
+                            })));
                         }
 
                         for (type_, val) in types.iter().zip(vals.iter()) {
                             if !type_.can_equal(&self.check_expr(*val, type_env)?) {
-                                return Err(Box::new(CheckErr::MismatchedTypes {
+                                return Err(Box::new(CheckErr::MismatchedTypes(MismatchedTypes {
                                     expected: type_.clone(),
                                     recieved: self.check_expr(*val, type_env)?,
-                                }));
+                                })));
                             }
                         }
                     } else {
                         if vals.len() != 1 {
-                            return Err(Box::new(CheckErr::ReturnCount));
+                            return Err(Box::new(CheckErr::ReturnCount(ReturnCount {
+                                return_node: node.clone(),
+                                expected: 1,
+                            })));
                         }
 
                         return if return_type.can_equal(&self.check_expr(vals[0], type_env)?) {
                             Ok(true)
                         } else {
-                            Err(Box::new(CheckErr::MismatchedTypes {
+                            Err(Box::new(CheckErr::MismatchedTypes(MismatchedTypes {
                                 expected: return_type.clone(),
                                 recieved: self.check_expr(vals[0], type_env)?,
-                            }))
+                            })))
                         };
                     }
 
@@ -495,7 +533,9 @@ impl<'s> TypeChecker<'s, '_> {
         type_env: &mut TypeEnv<'_, 's>,
     ) -> TResult<'s, Type<'s>> {
         let Some(mut type_) = type_env.get(suffixed_name.name.to_str(self.source)) else {
-            return Err(Box::new(CheckErr::NoSuchVal(suffixed_name.name)));
+            return Err(Box::new(CheckErr::NoSuchVal(NoSuchVal {
+                val_name: suffixed_name.name,
+            })));
         };
 
         for suffix in &suffixed_name.suffixes {
@@ -526,13 +566,14 @@ impl<'s> TypeChecker<'s, '_> {
         type_env: &TypeEnv<'_, 's>,
     ) -> TResult<'s, &'a Type<'s>> {
         match suffix {
-            Suffix::Index(Index { .. }) => match &base.kind {
+            Suffix::Index(Index { key: _, span }) => match &base.kind {
                 TypeKind::Table(TableType { val_type, .. }) => base = val_type,
                 TypeKind::String | TypeKind::Adaptable | TypeKind::Any => (),
                 _ => {
-                    return Err(Box::new(CheckErr::CustomError(format!(
-                        "you can't index a {base:?}",
-                    ))));
+                    return Err(Box::new(CheckErr::BadIndex {
+                        span: *span,
+                        ty: base.clone(),
+                    }));
                 }
             },
             Suffix::Access(Access { field_name: name }) => match &base.kind {
@@ -540,26 +581,29 @@ impl<'s> TypeChecker<'s, '_> {
                     if let Some(field) = base.kind.get_field(name.to_str(self.source)) {
                         base = field;
                     } else {
-                        return Err(Box::new(CheckErr::NoSuchField(*name)));
+                        return Err(Box::new(CheckErr::NoSuchField(NoSuchField {
+                            field_name: *name,
+                        })));
                     }
                 }
                 TypeKind::Table(TableType { key_type, val_type }) => {
                     if TypeKind::String.can_equal(&key_type.kind) {
                         base = val_type;
                     } else {
-                        return Err(Box::new(CheckErr::MismatchedTypes {
+                        return Err(Box::new(CheckErr::MismatchedTypes(MismatchedTypes {
                             expected: Type {
                                 kind: TypeKind::String,
                                 span: Some(*name),
                             },
                             recieved: (**key_type).clone(),
-                        }));
+                        })));
                     }
                 }
                 _ => {
-                    return Err(Box::new(CheckErr::CustomError(
-                        "cannot perform access on this type".to_owned(),
-                    )))
+                    return Err(Box::new(CheckErr::BadAccess {
+                        span: *name,
+                        ty: base.clone(),
+                    }))
                 }
             },
             Suffix::Call(Call { args }) => {
@@ -572,14 +616,14 @@ impl<'s> TypeChecker<'s, '_> {
                 } else if let TypeKind::Adaptable = base.kind {
                     return Ok(base);
                 } else {
-                    return Err(Box::new(CheckErr::MismatchedTypes {
+                    return Err(Box::new(CheckErr::MismatchedTypes(MismatchedTypes {
                         expected: TypeKind::Function(Function {
                             params: Vec::new(),
                             returns: Box::default(),
                         })
                         .into(),
                         recieved: base.clone(),
-                    }));
+                    })));
                 }
             }
             Suffix::Method(Method {
@@ -590,7 +634,9 @@ impl<'s> TypeChecker<'s, '_> {
                 } else if let Some(method) = base.kind.get_field(name.to_str(self.source)) {
                     base = method;
                 } else {
-                    return Err(Box::new(CheckErr::NoSuchMethod(*name)));
+                    return Err(Box::new(CheckErr::NoSuchMethod(NoSuchMethod {
+                        method_name: *name,
+                    })));
                 }
             }
         }
@@ -615,10 +661,10 @@ impl<'s> TypeChecker<'s, '_> {
                 if lhs_type == rhs_type {
                     Ok(lhs_type)
                 } else {
-                    Err(Box::new(CheckErr::MismatchedTypes {
+                    Err(Box::new(CheckErr::MismatchedTypes(MismatchedTypes {
                         expected: lhs_type,
                         recieved: rhs_type,
-                    }))
+                    })))
                 }
             }
             OpKind::Equ | OpKind::Neq | OpKind::Gre | OpKind::Grq | OpKind::Les | OpKind::Leq => {
@@ -628,10 +674,10 @@ impl<'s> TypeChecker<'s, '_> {
                 if lhs_type == rhs_type {
                     Ok(TypeKind::Boolean.into())
                 } else {
-                    Err(Box::new(CheckErr::MismatchedTypes {
+                    Err(Box::new(CheckErr::MismatchedTypes(MismatchedTypes {
                         expected: lhs_type,
                         recieved: rhs_type,
-                    }))
+                    })))
                 }
             }
             OpKind::Cat => Ok(TypeKind::String.into()),
@@ -641,10 +687,10 @@ impl<'s> TypeChecker<'s, '_> {
     fn check_if_stat(&self, if_stat: &IfStat<'s>, type_env: &TypeEnv<'_, 's>) -> TResult<'s, ()> {
         let condition_type = self.check_expr(if_stat.condition, type_env)?;
         if !condition_type.kind.can_equal(&TypeKind::Boolean) {
-            return Err(Box::new(CheckErr::MismatchedTypes {
+            return Err(Box::new(CheckErr::MismatchedTypes(MismatchedTypes {
                 expected: TypeKind::Boolean.into(),
                 recieved: condition_type,
-            }));
+            })));
         }
 
         let mut new_env = TypeEnv::new_with_parent(type_env);
@@ -676,10 +722,10 @@ impl<'s> TypeChecker<'s, '_> {
     ) -> TResult<'s, ()> {
         let condition_type = self.check_expr(while_stat.condition, type_env)?;
         if !condition_type.kind.can_equal(&TypeKind::Boolean) {
-            return Err(Box::new(CheckErr::MismatchedTypes {
+            return Err(Box::new(CheckErr::MismatchedTypes(MismatchedTypes {
                 expected: TypeKind::Boolean.into(),
                 recieved: condition_type,
-            }));
+            })));
         }
 
         let mut new_env = TypeEnv::new_with_parent(type_env);
@@ -700,17 +746,17 @@ impl<'s> TypeChecker<'s, '_> {
         let rhs_type = self.check_expr(range_for.range.lhs, type_env)?;
 
         if !lhs_type.kind.can_equal(&TypeKind::Number) {
-            return Err(Box::new(CheckErr::MismatchedTypes {
+            return Err(Box::new(CheckErr::MismatchedTypes(MismatchedTypes {
                 expected: TypeKind::Number.into(),
                 recieved: lhs_type,
-            }));
+            })));
         }
 
         if !rhs_type.kind.can_equal(&TypeKind::Number) {
-            return Err(Box::new(CheckErr::MismatchedTypes {
+            return Err(Box::new(CheckErr::MismatchedTypes(MismatchedTypes {
                 expected: TypeKind::Number.into(),
                 recieved: rhs_type,
-            }));
+            })));
         }
 
         let mut new_env = TypeEnv::new_with_parent(type_env);

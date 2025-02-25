@@ -1,0 +1,7 @@
+foo := func(n: number) -> number {
+	if n == 0 {
+		return
+	}
+
+	return n * foo(n - 1)
+}

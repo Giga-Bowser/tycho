@@ -196,7 +196,7 @@ impl<'s> LJCompiler<'s, '_> {
                 }
             } // self.compile_suffixed_expr(suffixed_expr),
             Statement::Block(block) => self.compile_block(block),
-            Statement::Return(return_exprs) => self.compile_return(return_exprs),
+            Statement::Return(ReturnStmt { vals, .. }) => self.compile_return(vals),
             Statement::Break => {
                 self.func_state.scope.flags |= ScopeFlags::BREAK;
                 let pc = self.func_state.bcemit_jmp();
@@ -791,7 +791,7 @@ impl<'s> LJCompiler<'s, '_> {
         e1
     }
 
-    fn compile_unop(&mut self, unop: &UnOp) -> ExprDesc<'s> {
+    fn compile_unop(&mut self, unop: &UnOp<'s>) -> ExprDesc<'s> {
         let mut val = self.compile_expr(unop.val);
 
         if matches!(unop.op, UnOpKind::Neg) && !val.has_jump() {
@@ -1320,7 +1320,7 @@ impl<'s> LJCompiler<'s, '_> {
                 let mut key = ExprDesc::new(ExprKind::KString(field_name.to_str(self.source)));
                 self.compile_index(&mut base, &mut key);
             }
-            Suffix::Index(Index { key }) => {
+            Suffix::Index(Index { key, .. }) => {
                 self.func_state.expr_toanyreg(&mut base);
                 let mut key = self.compile_expr(*key);
                 self.func_state.expr_toval(&mut key);

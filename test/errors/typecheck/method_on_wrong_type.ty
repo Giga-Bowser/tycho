@@ -1,0 +1,5 @@
+foo := func(s: string) -> string {
+	return "hello, world"
+}
+
+foo:bar := func() {}

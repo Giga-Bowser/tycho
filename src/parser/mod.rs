@@ -40,8 +40,11 @@ impl<'s> Parser<'s, '_> {
             While => Ok(Statement::WhileStat(self.while_stat(typelist)?)),
             For => self.for_stat(typelist),
             Return => {
-                self.tokens.pop_front();
-                Ok(Statement::Return(self.parse_expr_list(typelist)?))
+                let kw_span = self.tokens.pop_front().text;
+                Ok(Statement::Return(ReturnStmt {
+                    vals: self.parse_expr_list(typelist)?,
+                    kw_span,
+                }))
             }
             Break => {
                 self.tokens.pop_front();
@@ -377,16 +380,17 @@ impl<'s> Parser<'s, '_> {
         }
     }
 
-    fn parse_index(&mut self, typelist: &TypeList<'s>) -> PResult<'s, Index> {
-        self.tokens.pop_front();
+    fn parse_index(&mut self, typelist: &TypeList<'s>) -> PResult<'s, Index<'s>> {
+        let start = self.tokens.pop_front().text.start;
 
-        let result = Index {
-            key: self.parse_expr(typelist)?,
-        };
+        let key = self.parse_expr(typelist)?;
 
-        self.tokens.expect(RSquare)?;
+        let end = self.tokens.expect(RSquare)?.text.end;
 
-        Ok(result)
+        Ok(Index {
+            key,
+            span: Span::new(start, end),
+        })
     }
 
     fn parse_expr_list(&mut self, typelist: &TypeList<'s>) -> PResult<'s, Vec<ExprRef>> {
@@ -437,7 +441,7 @@ impl<'s> Parser<'s, '_> {
             }
             _ => Err(Box::new(ParseError::UnexpectedToken(UnexpectedToken {
                 token: self.tokens[0].clone(),
-                expected_kinds: vec![Name, LParen],
+                expected_kinds: vec![Name, Elipsis, LParen],
             }))),
         }
     }
@@ -448,10 +452,10 @@ impl<'s> Parser<'s, '_> {
 
     fn expr_impl(&mut self, typelist: &TypeList<'s>, limit: u8) -> PResult<'s, ExprRef> {
         let mut result = if let Some(op) = get_unop(self.tokens[0].kind) {
-            self.tokens.pop_front();
+            let op_span = self.tokens.pop_front().text;
             let val = self.expr_impl(typelist, 12)?;
 
-            self.pool.add(Expr::UnOp(UnOp { op, val }))
+            self.pool.add(Expr::UnOp(UnOp { op, op_span, val }))
         } else {
             let val = self.simple_expr(typelist)?;
 
@@ -660,7 +664,10 @@ impl<'s> Parser<'s, '_> {
             fields.push(self.member(typelist)?);
         }
 
-        let type_ = Box::new(User { fields, name: name_str });
+        let type_ = Box::new(User {
+            fields,
+            name: name_str,
+        });
         typelist.insert(
             name_str.to_owned(),
             Type {
@@ -888,10 +895,10 @@ impl<'s> Parser<'s, '_> {
 
     fn range_expr_impl(&mut self, typelist: &TypeList<'s>, limit: u8) -> PResult<'s, ExprRef> {
         let mut result = if let Some(op) = get_unop(self.tokens[0].kind) {
-            self.tokens.pop_front();
+            let op_span = self.tokens.pop_front().text;
             let val = self.range_expr_impl(typelist, 12)?;
 
-            self.pool.add(Expr::UnOp(UnOp { op, val }))
+            self.pool.add(Expr::UnOp(UnOp { op, op_span, val }))
         } else {
             let val = self.simple_expr(typelist)?;
 

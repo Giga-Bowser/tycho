@@ -13,7 +13,7 @@ pub enum Statement<'s> {
     MultiAssign(MultiAssign<'s>),
     ExprStat(SuffixedExpr<'s>),
     Block(Block<'s>),
-    Return(Vec<ExprRef>),
+    Return(ReturnStmt<'s>),
     Break,
     IfStat(IfStat<'s>),
     WhileStat(WhileStat<'s>),
@@ -72,6 +72,14 @@ impl<'s> std::ops::Deref for Block<'s> {
     fn deref(&self) -> &[Statement<'s>] {
         self.stmts.as_ref()
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct ReturnStmt<'s> {
+    pub vals: Vec<ExprRef>,
+
+    // for diagnostics,
+    pub kw_span: Span<'s>,
 }
 
 impl<'a, 's> IntoIterator for &'a Block<'s> {
@@ -133,7 +141,7 @@ pub struct StructDecl<'s> {
 #[derive(Debug, Clone)]
 pub enum Expr<'s> {
     BinOp(BinOp),
-    UnOp(UnOp),
+    UnOp(UnOp<'s>),
     Paren(ParenExpr),
     Simple(SimpleExpr<'s>),
     Name(Span<'s>),
@@ -147,8 +155,10 @@ pub struct BinOp {
 }
 
 #[derive(Debug, Clone)]
-pub struct UnOp {
+pub struct UnOp<'s> {
     pub op: UnOpKind,
+    // for diagnostics
+    pub op_span: Span<'s>,
     pub val: ExprRef,
 }
 
@@ -194,15 +204,17 @@ pub struct SuffixedExpr<'s> {
 
 #[derive(Debug, Clone)]
 pub enum Suffix<'s> {
-    Index(Index),
+    Index(Index<'s>),
     Access(Access<'s>),
     Call(Call),
     Method(Method<'s>),
 }
 
 #[derive(Debug, Clone)]
-pub struct Index {
+pub struct Index<'s> {
     pub key: ExprRef,
+    // for diagnostics
+    pub span: Span<'s>,
 }
 
 #[derive(Debug, Clone)]

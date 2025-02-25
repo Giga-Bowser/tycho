@@ -45,12 +45,12 @@ impl<'s, 'pool> Transpiler<'s, 'pool> {
                 self.result += &self.newline();
                 self.result += "end";
             }
-            Statement::Return(return_exprs) => {
+            Statement::Return(ReturnStmt { vals, .. }) => {
                 self.result += "return";
-                if !return_exprs.is_empty() {
+                if !vals.is_empty() {
                     self.result.push(' ');
 
-                    self.expr_list(return_exprs, ", ");
+                    self.expr_list(vals, ", ");
                 }
             }
             Statement::Break => self.result += "break",
@@ -210,7 +210,7 @@ impl<'s, 'pool> Transpiler<'s, 'pool> {
                 self.transpile_expr(binop.rhs);
                 self.result.push(')');
             }
-            Expr::UnOp(UnOp { op, val }) => {
+            Expr::UnOp(UnOp { op, val, .. }) => {
                 self.result += op.into();
                 self.transpile_expr(*val);
             }
@@ -369,7 +369,7 @@ impl<'s, 'pool> Transpiler<'s, 'pool> {
             Suffix::Access(Access { field_name }) => {
                 format_to!(self.result, ".{}", field_name.to_str(self.source));
             }
-            Suffix::Index(Index { key }) => {
+            Suffix::Index(Index { key, .. }) => {
                 self.result.push('[');
                 self.transpile_expr(*key);
                 self.result.push(']');
