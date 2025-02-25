@@ -191,7 +191,7 @@ impl std::fmt::Display for Type<'_> {
             TypeKind::String => f.write_str("string"),
             TypeKind::Boolean => f.write_str("boolean"),
             TypeKind::Function(function) => {
-                write!(f, "func")?;
+                f.write_str("func")?;
 
                 // params
                 let inner = function
@@ -207,10 +207,16 @@ impl std::fmt::Display for Type<'_> {
                     .collect::<Vec<String>>()
                     .join(", ");
 
-                write!(f, "({inner})")
+                write!(f, "({inner})")?;
+
+                match &function.returns.kind {
+                    TypeKind::Nil => Ok(()),
+                    TypeKind::Multiple(types) if types.is_empty() => Ok(()),
+                    _ => write!(f, " -> {}", function.returns),
+                }
             }
             TypeKind::Table(TableType { key_type, val_type }) => {
-                write!(f, "[{}]{}", key_type, val_type)
+                write!(f, "[{key_type}]{val_type}",)
             }
             TypeKind::User(user) => f.write_str(user.name),
             TypeKind::Adaptable => f.write_str("<adaptable>"),
@@ -224,7 +230,7 @@ impl std::fmt::Display for Type<'_> {
 
                 write!(f, "({inner})")
             }
-            TypeKind::Optional(inner) => write!(f, "{}?", inner),
+            TypeKind::Optional(inner) => write!(f, "{inner}?"),
         }
     }
 }
