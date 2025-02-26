@@ -1067,7 +1067,7 @@ fn is_hexdigit(byte: u8) -> bool {
 #[inline]
 fn is_trivia(byte: u8) -> bool {
     // const LUT: u64 = 4294972928u64;
-    const LUT: u64 = 1 << b'\t' | 1 << b'\n' | 1 << b' ';
+    const LUT: u64 = (1 << b'\t') | (1 << b'\n') | (1 << b' ');
     match 1u64.checked_shl(byte as u32) {
         Some(shift) => LUT & shift != 0,
         None => false,

@@ -73,7 +73,7 @@ fn benchmark_typechecker(c: &mut Criterion) {
     ];
     let include_sources = define_sources(includes);
     for (_, source) in &include_sources {
-        add_defines(source, &mut type_env_orig);
+        add_defines(source, &mut type_env_orig).unwrap();
     }
 
     let contents = std::fs::read_to_string("test/test.ty").unwrap_or_else(|e| panic!("{e}"));
@@ -199,7 +199,7 @@ fn benchmark_all_compile(c: &mut Criterion) {
     ];
     let include_sources = define_sources(includes);
     for (_, source) in &include_sources {
-        add_defines(source, &mut type_env_orig);
+        add_defines(source, &mut type_env_orig).unwrap();
     }
     let source = std::fs::read_to_string("test/test.ty").unwrap_or_else(|e| panic!("{e}"));
 
@@ -257,7 +257,7 @@ fn benchmark_all_transpile(c: &mut Criterion) {
     ];
     let include_sources = define_sources(includes);
     for (_, source) in &include_sources {
-        add_defines(source, &mut type_env_orig);
+        add_defines(source, &mut type_env_orig).unwrap();
     }
     let contents = std::fs::read_to_string("test/test.ty").unwrap_or_else(|e| panic!("{e}"));
 

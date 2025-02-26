@@ -41,12 +41,14 @@ impl Level {
     }
 }
 
+#[derive(Debug)]
 pub struct Diag {
     pub title: String,
     pub level: Level,
     pub annotations: Vec<Annotation>,
 }
 
+#[derive(Debug)]
 pub struct Annotation {
     pub level: Level,
     pub range: Range<usize>,

@@ -190,7 +190,7 @@ pub mod numlit {
                 d += 9;
             }
 
-            mantissa = mantissa << 4 | (d & 0xF) as u64;
+            mantissa = (mantissa << 4) | (d & 0xF) as u64;
             idx += 1;
         }
 
