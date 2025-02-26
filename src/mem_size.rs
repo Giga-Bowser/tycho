@@ -1,3 +1,5 @@
+use rustc_hash::FxHashMap;
+
 use crate::{lexer::Span, parser::pool::ExprRef};
 
 pub trait DeepSize {
@@ -8,21 +10,25 @@ pub trait DeepSize {
     fn deep_size_of_children(&self) -> usize;
 }
 
-impl<T: DeepSize> DeepSize for Vec<T> {
+impl<T: DeepSize> DeepSize for [T] {
     fn deep_size_of_children(&self) -> usize {
         self.iter().map(DeepSize::deep_size_of).sum()
+    }
+}
+
+impl<T: DeepSize> DeepSize for Vec<T> {
+    fn deep_size_of_children(&self) -> usize {
+        self.capacity() * size_of::<T>()
+            + self
+                .iter()
+                .map(DeepSize::deep_size_of_children)
+                .sum::<usize>()
     }
 }
 
 impl<T: DeepSize> DeepSize for Box<T> {
     fn deep_size_of_children(&self) -> usize {
         self.as_ref().deep_size_of()
-    }
-}
-
-impl<T: DeepSize> DeepSize for Box<[T]> {
-    fn deep_size_of_children(&self) -> usize {
-        self.iter().map(DeepSize::deep_size_of).sum()
     }
 }
 
@@ -49,6 +55,14 @@ impl<A: DeepSize> DeepSize for (A,) {
 impl<A: DeepSize, B: DeepSize> DeepSize for (A, B) {
     fn deep_size_of_children(&self) -> usize {
         self.0.deep_size_of_children() + self.1.deep_size_of_children()
+    }
+}
+
+impl<K: DeepSize, V: DeepSize> DeepSize for FxHashMap<K, V> {
+    fn deep_size_of_children(&self) -> usize {
+        self.iter()
+            .map(|(k, v)| k.deep_size_of() + v.deep_size_of())
+            .sum()
     }
 }
 
