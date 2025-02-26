@@ -7,7 +7,7 @@ use crate::{
     },
     lexer::Span,
     parser::{
-        ast::*,
+        ast,
         pool::{ExprPool, ExprRef},
     },
     type_env::TypeEnv,
@@ -32,16 +32,16 @@ impl TypeChecker<'_, '_> {
 }
 
 impl<'s> TypeChecker<'_, 's> {
-    pub fn check_statement(&mut self, stmt: &Statement<'s>) -> TResult<'s, ()> {
+    pub fn check_statement(&mut self, stmt: &ast::Statement<'s>) -> TResult<'s, ()> {
         match stmt {
-            Statement::Declare(decl) => self.check_decl(decl),
-            Statement::MethodDecl(method_decl) => self.check_method_decl(method_decl),
-            Statement::MultiDecl(multi_decl) => self.check_multi_decl(multi_decl),
-            Statement::IfStat(if_stat) => self.check_if_stat(if_stat),
-            Statement::WhileStat(while_stat) => self.check_while_stat(while_stat),
-            Statement::RangeFor(range_for) => self.check_range_for(range_for),
-            Statement::KeyValFor(keyval_for) => self.check_keyval_for(keyval_for),
-            Statement::Assign(Assign { lhs, rhs }) => {
+            ast::Statement::Declare(decl) => self.check_decl(decl),
+            ast::Statement::MethodDecl(method_decl) => self.check_method_decl(method_decl),
+            ast::Statement::MultiDecl(multi_decl) => self.check_multi_decl(multi_decl),
+            ast::Statement::IfStat(if_stat) => self.check_if_stat(if_stat),
+            ast::Statement::WhileStat(while_stat) => self.check_while_stat(while_stat),
+            ast::Statement::RangeFor(range_for) => self.check_range_for(range_for),
+            ast::Statement::KeyValFor(keyval_for) => self.check_keyval_for(keyval_for),
+            ast::Statement::Assign(ast::Assign { lhs, rhs }) => {
                 let lhs_type = self.check_suffixed_name(lhs)?;
                 let rhs_type = self.check_expr(*rhs)?;
                 if lhs_type.can_equal(&rhs_type) {
@@ -53,16 +53,18 @@ impl<'s> TypeChecker<'_, 's> {
                     })))
                 }
             }
-            Statement::MultiAssign(multi_assign) => self.check_multi_assign(multi_assign),
+            ast::Statement::MultiAssign(multi_assign) => self.check_multi_assign(multi_assign),
             // TODO: investigate if making a more expression-statement specific checking function is worth it
-            Statement::ExprStat(suffixed_expr) => self.check_suffixed_expr(suffixed_expr).map(drop),
-            Statement::Block(block) => self.with_scope(|this| {
+            ast::Statement::ExprStat(suffixed_expr) => {
+                self.check_suffixed_expr(suffixed_expr).map(drop)
+            }
+            ast::Statement::Block(block) => self.with_scope(|this| {
                 for stmt in block {
                     this.check_statement(stmt)?;
                 }
                 Ok(())
             }),
-            Statement::StructDecl(StructDecl {
+            ast::Statement::StructDecl(ast::StructDecl {
                 name,
                 type_,
                 constructor: _,
@@ -80,7 +82,7 @@ impl<'s> TypeChecker<'_, 's> {
         }
     }
 
-    fn check_decl(&mut self, decl: &Declare<'s>) -> TResult<'s, ()> {
+    fn check_decl(&mut self, decl: &ast::Declare<'s>) -> TResult<'s, ()> {
         if let Some(val) = decl.val {
             let lhs_type = self.check_expr(val)?;
 
@@ -114,7 +116,7 @@ impl<'s> TypeChecker<'_, 's> {
 
             for suffix in &mut decl.lhs.suffixes.iter().take(decl.lhs.suffixes.len() - 1) {
                 match suffix {
-                    Suffix::Access(Access { field_name: name }) => {
+                    ast::Suffix::Access(ast::Access { field_name: name }) => {
                         if let Some(field) = ty.kind.get_field_mut(name.to_str(self.source)) {
                             ty = field;
                         } else {
@@ -129,7 +131,7 @@ impl<'s> TypeChecker<'_, 's> {
 
             let last = decl.lhs.suffixes.last().unwrap();
 
-            if let Suffix::Access(Access { field_name }) = last {
+            if let ast::Suffix::Access(ast::Access { field_name }) = last {
                 match &mut ty.kind {
                     TypeKind::Table(_) => Ok(()),
                     TypeKind::User(user) => {
@@ -148,7 +150,7 @@ impl<'s> TypeChecker<'_, 's> {
         }
     }
 
-    fn check_method_decl(&mut self, method_decl: &MethodDecl<'s>) -> TResult<'s, ()> {
+    fn check_method_decl(&mut self, method_decl: &ast::MethodDecl<'s>) -> TResult<'s, ()> {
         let ty = self
             .type_env
             .get(method_decl.struct_name.to_str(self.source))
@@ -162,7 +164,7 @@ impl<'s> TypeChecker<'_, 's> {
             })));
         };
 
-        let func: &FuncNode<'s> = &method_decl.func;
+        let func: &ast::FuncNode<'s> = &method_decl.func;
         let method_type = self.with_scope(|this| {
             this.type_env.insert("self", ty);
             for (name, type_) in &func.type_.params {
@@ -199,7 +201,7 @@ impl<'s> TypeChecker<'_, 's> {
         Ok(())
     }
 
-    fn check_multi_decl(&mut self, multi_decl: &MultiDecl<'s>) -> TResult<'s, ()> {
+    fn check_multi_decl(&mut self, multi_decl: &ast::MultiDecl<'s>) -> TResult<'s, ()> {
         // ok so we need to basically flatten the types. so for example
         // a, b, c := twoReturnFunction(), oneReturnFunction()
         // a, b, c := (type1, type2), type3
@@ -233,7 +235,7 @@ impl<'s> TypeChecker<'_, 's> {
         Ok(())
     }
 
-    fn check_multi_assign(&mut self, multi_assign: &MultiAssign<'s>) -> TResult<'s, ()> {
+    fn check_multi_assign(&mut self, multi_assign: &ast::MultiAssign<'s>) -> TResult<'s, ()> {
         // ok so we need to basically flatten the types. so for example
         // a, b, c := twoReturnFunction(), oneReturnFunction()
         // a, b, c := (type1, type2), type3
@@ -273,9 +275,9 @@ impl<'s> TypeChecker<'_, 's> {
 
     fn check_expr(&mut self, expr: ExprRef) -> TResult<'s, Type<'s>> {
         match &self.pool[expr] {
-            Expr::BinOp(binop) => self.check_binop(binop),
-            Expr::UnOp(unop) => match unop.op {
-                UnOpKind::Neg => {
+            ast::Expr::BinOp(binop) => self.check_binop(binop),
+            ast::Expr::UnOp(unop) => match unop.op {
+                ast::UnOpKind::Neg => {
                     let res = self.check_expr(unop.val)?;
                     if let TypeKind::Number = res.kind {
                         Ok(res)
@@ -286,11 +288,11 @@ impl<'s> TypeChecker<'_, 's> {
                         }))
                     }
                 }
-                UnOpKind::Len => Ok(Type {
+                ast::UnOpKind::Len => Ok(Type {
                     kind: TypeKind::Number,
                     span: None,
                 }),
-                UnOpKind::Not => {
+                ast::UnOpKind::Not => {
                     let res = self.check_expr(unop.val)?;
                     if let TypeKind::Boolean = res.kind {
                         Ok(res)
@@ -302,45 +304,45 @@ impl<'s> TypeChecker<'_, 's> {
                     }
                 }
             },
-            Expr::Paren(paren_expr) => self.check_expr(paren_expr.val),
-            Expr::Simple(simple_expr) => self.check_simple_expr(simple_expr),
-            Expr::Name(span) => match self.type_env.get(span.to_str(self.source)) {
+            ast::Expr::Paren(paren_expr) => self.check_expr(paren_expr.val),
+            ast::Expr::Simple(simple_expr) => self.check_simple_expr(simple_expr),
+            ast::Expr::Name(span) => match self.type_env.get(span.to_str(self.source)) {
                 Some(type_) => Ok(type_.clone()),
                 None => Err(Box::new(CheckErr::NoSuchVal(NoSuchVal { val_name: *span }))),
             },
         }
     }
 
-    fn check_field(&mut self, field_node: &FieldNode<'s>) -> TResult<'s, TableType<'s>> {
+    fn check_field(&mut self, field_node: &ast::FieldNode<'s>) -> TResult<'s, TableType<'s>> {
         Ok(TableType {
             key_type: Rc::new(self.check_field_key(field_node)?),
             val_type: Rc::new(self.check_field_val(field_node)?),
         })
     }
 
-    fn check_field_key(&mut self, field_node: &FieldNode<'s>) -> TResult<'s, Type<'s>> {
+    fn check_field_key(&mut self, field_node: &ast::FieldNode<'s>) -> TResult<'s, Type<'s>> {
         match field_node {
-            FieldNode::Field { key, .. } => Ok(Type {
+            ast::FieldNode::Field { key, .. } => Ok(Type {
                 kind: TypeKind::String,
                 span: Some(*key),
             }),
-            FieldNode::ExprField { key, .. } => self.check_expr(*key),
-            FieldNode::ValField { .. } => Ok(Type {
+            ast::FieldNode::ExprField { key, .. } => self.check_expr(*key),
+            ast::FieldNode::ValField { .. } => Ok(Type {
                 kind: TypeKind::Number,
                 span: None,
             }),
         }
     }
 
-    fn check_field_val(&mut self, field_node: &FieldNode<'s>) -> TResult<'s, Type<'s>> {
+    fn check_field_val(&mut self, field_node: &ast::FieldNode<'s>) -> TResult<'s, Type<'s>> {
         match field_node {
-            FieldNode::Field { val, .. }
-            | FieldNode::ExprField { val, .. }
-            | FieldNode::ValField { val } => self.check_expr(*val),
+            ast::FieldNode::Field { val, .. }
+            | ast::FieldNode::ExprField { val, .. }
+            | ast::FieldNode::ValField { val } => self.check_expr(*val),
         }
     }
 
-    fn check_table(&mut self, table_node: &TableNode<'s>) -> TResult<'s, TableType<'s>> {
+    fn check_table(&mut self, table_node: &ast::TableNode<'s>) -> TResult<'s, TableType<'s>> {
         if table_node.fields.is_empty() {
             return Ok(TableType {
                 key_type: Rc::new(TypeKind::Adaptable.into()),
@@ -367,33 +369,33 @@ impl<'s> TypeChecker<'_, 's> {
         Ok(result)
     }
 
-    fn check_simple_expr(&mut self, simple_expr: &SimpleExpr<'s>) -> TResult<'s, Type<'s>> {
+    fn check_simple_expr(&mut self, simple_expr: &ast::SimpleExpr<'s>) -> TResult<'s, Type<'s>> {
         match simple_expr {
-            SimpleExpr::Num(s) => Ok(Type {
+            ast::SimpleExpr::Num(s) => Ok(Type {
                 kind: TypeKind::Number,
                 span: Some(*s),
             }),
-            SimpleExpr::Str(s) => Ok(Type {
+            ast::SimpleExpr::Str(s) => Ok(Type {
                 kind: TypeKind::String,
                 span: Some(*s),
             }),
-            SimpleExpr::Bool(s) => Ok(Type {
+            ast::SimpleExpr::Bool(s) => Ok(Type {
                 kind: TypeKind::Boolean,
                 span: Some(*s),
             }),
-            SimpleExpr::Nil(s) => Ok(Type {
+            ast::SimpleExpr::Nil(s) => Ok(Type {
                 kind: TypeKind::Nil,
                 span: Some(*s),
             }),
-            SimpleExpr::FuncNode(func) => self.check_func(func),
-            SimpleExpr::TableNode(table_node) => {
+            ast::SimpleExpr::FuncNode(func) => self.check_func(func),
+            ast::SimpleExpr::TableNode(table_node) => {
                 Ok(TypeKind::Table(self.check_table(table_node)?).into())
             }
-            SimpleExpr::SuffixedExpr(suffixed_expr) => self.check_suffixed_expr(suffixed_expr),
+            ast::SimpleExpr::SuffixedExpr(suffixed_expr) => self.check_suffixed_expr(suffixed_expr),
         }
     }
 
-    fn check_func(&mut self, func: &FuncNode<'s>) -> TResult<'s, Type<'s>> {
+    fn check_func(&mut self, func: &ast::FuncNode<'s>) -> TResult<'s, Type<'s>> {
         self.with_scope(|this| {
             for (name, type_) in &func.type_.params {
                 this.type_env.insert(name, type_.clone());
@@ -418,35 +420,35 @@ impl<'s> TypeChecker<'_, 's> {
 
     fn check_func_body(
         &mut self,
-        body: &[Statement<'s>],
+        body: &[ast::Statement<'s>],
         return_type: &Type<'s>,
     ) -> TResult<'s, bool> {
         self.with_scope(|this| {
             for stmt in body {
                 match stmt {
-                    Statement::IfStat(IfStat { body: if_body, .. }) => {
+                    ast::Statement::IfStat(ast::IfStat { body: if_body, .. }) => {
                         if this.check_func_body(if_body, return_type)? {
                             return Ok(true);
                         }
                     }
-                    Statement::WhileStat(WhileStat {
+                    ast::Statement::WhileStat(ast::WhileStat {
                         body: while_body, ..
                     }) => {
                         if this.check_func_body(while_body, return_type)? {
                             return Ok(true);
                         }
                     }
-                    Statement::RangeFor(RangeFor { body, .. }) => {
+                    ast::Statement::RangeFor(ast::RangeFor { body, .. }) => {
                         if this.check_func_body(body, return_type)? {
                             return Ok(true);
                         }
                     }
-                    Statement::KeyValFor(KeyValFor { body, .. }) => {
+                    ast::Statement::KeyValFor(ast::KeyValFor { body, .. }) => {
                         if this.check_func_body(body, return_type)? {
                             return Ok(true);
                         }
                     }
-                    Statement::Return(node @ ReturnStmt { vals, .. }) => {
+                    ast::Statement::Return(node @ ast::ReturnStmt { vals, .. }) => {
                         if vals.is_empty() {
                             return match &return_type.kind {
                                 TypeKind::Nil | TypeKind::Variadic => Ok(true),
@@ -514,7 +516,10 @@ impl<'s> TypeChecker<'_, 's> {
         })
     }
 
-    fn check_suffixed_name(&mut self, suffixed_name: &SuffixedName<'s>) -> TResult<'s, Type<'s>> {
+    fn check_suffixed_name(
+        &mut self,
+        suffixed_name: &ast::SuffixedName<'s>,
+    ) -> TResult<'s, Type<'s>> {
         let ty = self
             .type_env
             .get(suffixed_name.name.to_str(self.source))
@@ -534,7 +539,10 @@ impl<'s> TypeChecker<'_, 's> {
         Ok(ty.clone())
     }
 
-    fn check_suffixed_expr(&mut self, suffixed_expr: &SuffixedExpr<'s>) -> TResult<'s, Type<'s>> {
+    fn check_suffixed_expr(
+        &mut self,
+        suffixed_expr: &ast::SuffixedExpr<'s>,
+    ) -> TResult<'s, Type<'s>> {
         let mut ty = &self.check_expr(suffixed_expr.val)?;
 
         for suffix in &suffixed_expr.suffixes {
@@ -547,10 +555,10 @@ impl<'s> TypeChecker<'_, 's> {
     fn check_suffix<'a>(
         &mut self,
         mut base: &'a Type<'s>,
-        suffix: &Suffix<'s>,
+        suffix: &ast::Suffix<'s>,
     ) -> TResult<'s, &'a Type<'s>> {
         match suffix {
-            Suffix::Index(Index { key: _, span }) => match &base.kind {
+            ast::Suffix::Index(ast::Index { key: _, span }) => match &base.kind {
                 TypeKind::Table(TableType { val_type, .. }) => base = val_type,
                 TypeKind::String | TypeKind::Adaptable | TypeKind::Any => (),
                 _ => {
@@ -560,7 +568,7 @@ impl<'s> TypeChecker<'_, 's> {
                     }));
                 }
             },
-            Suffix::Access(Access { field_name: name }) => match &base.kind {
+            ast::Suffix::Access(ast::Access { field_name: name }) => match &base.kind {
                 TypeKind::User(_) => {
                     if let Some(field) = base.kind.get_field(name.to_str(self.source)) {
                         base = field;
@@ -590,7 +598,7 @@ impl<'s> TypeChecker<'_, 's> {
                     }))
                 }
             },
-            Suffix::Call(Call { args }) => {
+            ast::Suffix::Call(ast::Call { args }) => {
                 for arg in args {
                     self.check_expr(*arg)?;
                 }
@@ -610,7 +618,7 @@ impl<'s> TypeChecker<'_, 's> {
                     })));
                 }
             }
-            Suffix::Method(Method {
+            ast::Suffix::Method(ast::Method {
                 method_name: name, ..
             }) => {
                 if name.to_str(self.source) == "new" {
@@ -628,9 +636,14 @@ impl<'s> TypeChecker<'_, 's> {
         Ok(base)
     }
 
-    fn check_binop(&mut self, binop: &BinOp) -> TResult<'s, Type<'s>> {
+    fn check_binop(&mut self, binop: &ast::BinOp) -> TResult<'s, Type<'s>> {
         match binop.op {
-            OpKind::Add | OpKind::Sub | OpKind::Mul | OpKind::Div | OpKind::Mod | OpKind::Pow => {
+            ast::OpKind::Add
+            | ast::OpKind::Sub
+            | ast::OpKind::Mul
+            | ast::OpKind::Div
+            | ast::OpKind::Mod
+            | ast::OpKind::Pow => {
                 let lhs_type = self.check_expr(binop.lhs)?;
                 if lhs_type == self.check_expr(binop.rhs)? {
                     Ok(lhs_type)
@@ -638,7 +651,7 @@ impl<'s> TypeChecker<'_, 's> {
                     Ok(TypeKind::Adaptable.into())
                 }
             }
-            OpKind::And | OpKind::Or => {
+            ast::OpKind::And | ast::OpKind::Or => {
                 let lhs_type = self.check_expr(binop.lhs)?;
                 let rhs_type = self.check_expr(binop.rhs)?;
 
@@ -651,7 +664,12 @@ impl<'s> TypeChecker<'_, 's> {
                     })))
                 }
             }
-            OpKind::Equ | OpKind::Neq | OpKind::Gre | OpKind::Grq | OpKind::Les | OpKind::Leq => {
+            ast::OpKind::Equ
+            | ast::OpKind::Neq
+            | ast::OpKind::Gre
+            | ast::OpKind::Grq
+            | ast::OpKind::Les
+            | ast::OpKind::Leq => {
                 let lhs_type = self.check_expr(binop.lhs)?;
                 let rhs_type = self.check_expr(binop.rhs)?;
 
@@ -664,11 +682,11 @@ impl<'s> TypeChecker<'_, 's> {
                     })))
                 }
             }
-            OpKind::Cat => Ok(TypeKind::String.into()),
+            ast::OpKind::Cat => Ok(TypeKind::String.into()),
         }
     }
 
-    fn check_if_stat(&mut self, if_stat: &IfStat<'s>) -> TResult<'s, ()> {
+    fn check_if_stat(&mut self, if_stat: &ast::IfStat<'s>) -> TResult<'s, ()> {
         let condition_type = self.check_expr(if_stat.condition)?;
         if !condition_type.kind.can_equal(&TypeKind::Boolean) {
             return Err(Box::new(CheckErr::MismatchedTypes(MismatchedTypes {
@@ -687,20 +705,20 @@ impl<'s> TypeChecker<'_, 's> {
 
         match &if_stat.else_ {
             Some(else_) => match else_.as_ref() {
-                ElseBranch::Else(body) => self.with_scope(|this| {
+                ast::ElseBranch::Else(body) => self.with_scope(|this| {
                     for stmt in body {
                         this.check_statement(stmt)?;
                     }
 
                     Ok(())
                 }),
-                ElseBranch::ElseIf(else_if_stat) => self.check_if_stat(else_if_stat),
+                ast::ElseBranch::ElseIf(else_if_stat) => self.check_if_stat(else_if_stat),
             },
             None => Ok(()),
         }
     }
 
-    fn check_while_stat(&mut self, while_stat: &WhileStat<'s>) -> TResult<'s, ()> {
+    fn check_while_stat(&mut self, while_stat: &ast::WhileStat<'s>) -> TResult<'s, ()> {
         let condition_type = self.check_expr(while_stat.condition)?;
         if !condition_type.kind.can_equal(&TypeKind::Boolean) {
             return Err(Box::new(CheckErr::MismatchedTypes(MismatchedTypes {
@@ -718,7 +736,7 @@ impl<'s> TypeChecker<'_, 's> {
         })
     }
 
-    fn check_range_for(&mut self, range_for: &RangeFor<'s>) -> TResult<'s, ()> {
+    fn check_range_for(&mut self, range_for: &ast::RangeFor<'s>) -> TResult<'s, ()> {
         let lhs_type = self.check_expr(range_for.range.lhs)?;
         let rhs_type = self.check_expr(range_for.range.lhs)?;
 
@@ -748,7 +766,7 @@ impl<'s> TypeChecker<'_, 's> {
         })
     }
 
-    fn check_keyval_for(&mut self, keyval_for: &KeyValFor<'s>) -> TResult<'s, ()> {
+    fn check_keyval_for(&mut self, keyval_for: &ast::KeyValFor<'s>) -> TResult<'s, ()> {
         // now because i'm evil, we have to retokenize the `key, val` string_view
         // but who cares.
         let names = keyval_for.names.to_str(self.source).as_bytes();
