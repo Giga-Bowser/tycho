@@ -89,12 +89,13 @@ fn build(args: &BuildOpt) {
 
     let check_timer = Instant::now();
 
-    let typechecker = TypeChecker {
-        pool: &pool,
+    let mut typechecker = TypeChecker {
+        type_env: &mut type_env,
         source: &contents,
+        pool: &pool,
     };
     for stmt in &stmts {
-        match typechecker.check_statement(stmt, &mut type_env) {
+        match typechecker.check_statement(stmt) {
             Ok(()) => (),
             Err(e) => panic!("{}", report_err(*e, &contents, &args.file)),
         }
@@ -198,12 +199,13 @@ pub fn print_main(args: &PrintOpt) {
 
     let check_timer = Instant::now();
 
-    let typechecker = TypeChecker {
-        pool: &pool,
+    let mut typechecker = TypeChecker {
+        type_env: &mut type_env,
         source: &contents,
+        pool: &pool,
     };
     for stmt in &stmts {
-        match typechecker.check_statement(stmt, &mut type_env) {
+        match typechecker.check_statement(stmt) {
             Ok(()) => (),
             Err(e) => panic!("{}", report_err(*e, &contents, &args.file)),
         }
@@ -252,7 +254,7 @@ fn compile<'pool>(
     dump_bc(&Header::default(), &compiler.protos)
 }
 
-pub fn add_defines<'s>(source: &'s str, type_env: &mut TypeEnv<'_, 's>) -> Result<(), Diag> {
+pub fn add_defines<'s>(source: &'s str, type_env: &mut TypeEnv<'s>) -> Result<(), Diag> {
     let tokens = Lexer::lex_all_span(source);
 
     let mut typelist = TypeList::with_core();
@@ -272,14 +274,15 @@ pub fn add_defines<'s>(source: &'s str, type_env: &mut TypeEnv<'_, 's>) -> Resul
         stmts.push(stmt);
     }
 
-    let typechecker = TypeChecker {
-        pool: &pool,
+    let mut typechecker = TypeChecker {
+        type_env,
         source,
+        pool: &pool,
     };
 
     for stmt in stmts {
         typechecker
-            .check_statement(&stmt, type_env)
+            .check_statement(&stmt)
             .map_err(|e| e.snippetize(source))?;
     }
 

@@ -264,13 +264,9 @@ mod type_env {
     use super::*;
     use crate::type_env::TypeEnv;
 
-    impl DeepSize for TypeEnv<'_, '_> {
+    impl DeepSize for TypeEnv<'_> {
         fn deep_size_of_children(&self) -> usize {
-            self.current_scope.deep_size_of_children()
-                + self
-                    .parent_scopes
-                    .map(DeepSize::deep_size_of_children)
-                    .unwrap_or_default()
+            self.scopes().deep_size_of_children()
         }
     }
 }

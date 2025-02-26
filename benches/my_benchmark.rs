@@ -93,20 +93,21 @@ fn benchmark_typechecker(c: &mut Criterion) {
         statements.push(parser.parse_statement(&mut typelist).unwrap());
     }
 
-    let typechecker = TypeChecker {
-        pool: &pool,
-        source: &contents,
-    };
-
     c.bench_function("typecheck", |b| {
         b.iter_custom(|iters| {
             let mut elapsed = Duration::ZERO;
             for _i in 0..iters {
                 let mut type_env = type_env_orig.clone();
 
+                let mut typechecker = TypeChecker {
+                    type_env: &mut type_env,
+                    pool: &pool,
+                    source: &contents,
+                };
+
                 let start = Instant::now();
                 for stmt in &statements {
-                    match typechecker.check_statement(black_box(stmt), &mut type_env) {
+                    match typechecker.check_statement(black_box(stmt)) {
                         Ok(()) => (),
                         Err(_) => {
                             panic!()
@@ -227,13 +228,14 @@ fn benchmark_all_compile(c: &mut Criterion) {
                     statements.push(parser.parse_statement(&mut typelist).unwrap());
                 }
 
-                let typechecker = TypeChecker {
+                let mut typechecker = TypeChecker {
+                    type_env: &mut type_env,
                     pool: &pool,
                     source,
                 };
                 let mut compiler = LJCompiler::new(&pool, source);
                 for stmt in &statements {
-                    typechecker.check_statement(stmt, &mut type_env).unwrap();
+                    typechecker.check_statement(stmt).unwrap();
                     compiler.compile_statement(black_box(stmt));
                     compiler.func_state.free_reg = compiler.func_state.nactvar;
                 }
@@ -284,13 +286,14 @@ fn benchmark_all_transpile(c: &mut Criterion) {
                     statements.push(parser.parse_statement(&mut typelist).unwrap());
                 }
 
-                let typechecker = TypeChecker {
+                let mut typechecker = TypeChecker {
+                    type_env: &mut type_env,
                     pool: &pool,
                     source,
                 };
                 let mut transpiler = Transpiler::new(&pool, source);
                 for stmt in &statements {
-                    typechecker.check_statement(stmt, &mut type_env).unwrap();
+                    typechecker.check_statement(stmt).unwrap();
                     transpiler.transpile_statement(black_box(stmt));
                 }
 
