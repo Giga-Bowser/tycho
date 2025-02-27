@@ -1,8 +1,8 @@
 use rustc_hash::FxHashMap;
 
-use crate::types::Type;
+use crate::types::pool::TypeRef;
 
-pub type Scope<'s> = FxHashMap<&'s str, Type<'s>>;
+pub type Scope<'s> = FxHashMap<&'s str, TypeRef<'s>>;
 
 #[derive(Debug, Clone)]
 pub struct TypeEnv<'s> {
@@ -20,23 +20,31 @@ impl<'s> TypeEnv<'s> {
         &self.scopes
     }
 
-    pub fn get(&self, key: &str) -> Option<&Type<'s>> {
-        self.scopes.iter().rev().find_map(|map| map.get(key))
+    pub fn get(&self, key: &str) -> Option<TypeRef<'s>> {
+        self.scopes
+            .iter()
+            .rev()
+            .find_map(|map| map.get(key))
+            .copied()
     }
 
-    pub fn get_mut(&mut self, key: &str) -> Option<&mut Type<'s>> {
+    pub fn get_mut(&mut self, key: &str) -> Option<&mut TypeRef<'s>> {
         self.top_mut().get_mut(key)
+    }
+
+    pub fn get_top(&mut self, key: &str) -> Option<TypeRef<'s>> {
+        self.top_mut().get(key).copied()
     }
 
     fn top_mut(&mut self) -> &mut Scope<'s> {
         unsafe { self.scopes.last_mut().unwrap_unchecked() }
     }
 
-    pub fn insert(&mut self, key: &'s str, val: Type<'s>) {
+    pub fn insert(&mut self, key: &'s str, val: TypeRef<'s>) {
         self.top_mut().insert(key, val);
     }
 
-    pub fn remove(&mut self, key: &str) -> Option<Type<'s>> {
+    pub fn remove(&mut self, key: &str) -> Option<TypeRef<'s>> {
         self.top_mut().remove(key)
     }
 

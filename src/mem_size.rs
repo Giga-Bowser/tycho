@@ -1,6 +1,6 @@
 use rustc_hash::FxHashMap;
 
-use crate::{lexer::Span, parser::pool::ExprRef};
+use crate::{lexer::Span, parser::pool::ExprRef, types::pool::TypeRef};
 
 pub trait DeepSize {
     fn deep_size_of(&self) -> usize {
@@ -72,6 +72,12 @@ impl DeepSize for ExprRef {
     }
 }
 
+impl DeepSize for TypeRef<'_> {
+    fn deep_size_of_children(&self) -> usize {
+        0
+    }
+}
+
 impl DeepSize for &str {
     fn deep_size_of_children(&self) -> usize {
         0
@@ -116,7 +122,7 @@ mod parser {
 
     impl DeepSize for Declare<'_> {
         fn deep_size_of_children(&self) -> usize {
-            self.lhs.deep_size_of_children() + self.ty.deep_size_of_children()
+            self.lhs.deep_size_of_children()
         }
     }
 

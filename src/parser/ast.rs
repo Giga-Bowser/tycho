@@ -1,7 +1,7 @@
 use crate::{
     lexer::Span,
     parser::ExprRef,
-    types::{Function, Type, User},
+    types::{pool::TypeRef, Function, User},
 };
 
 #[derive(Debug, Clone)]
@@ -25,7 +25,7 @@ pub enum Statement<'s> {
 #[derive(Debug, Clone)]
 pub struct Declare<'s> {
     pub lhs: Box<SuffixedName<'s>>,
-    pub ty: Box<Type<'s>>,
+    pub ty: TypeRef<'s>,
     pub val: Option<ExprRef>,
 }
 

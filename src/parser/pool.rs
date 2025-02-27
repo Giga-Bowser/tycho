@@ -1,8 +1,8 @@
-use crate::parser::ast::Expr;
+use crate::{mem_size::DeepSize, parser::ast::Expr};
 
 #[derive(Debug, Clone, Default)]
 pub struct ExprPool<'s> {
-    pub vec: Vec<Expr<'s>>,
+    vec: Vec<Expr<'s>>,
 }
 
 impl<'s> ExprPool<'s> {
@@ -24,7 +24,7 @@ type ExprRefInner = usize;
 pub struct ExprRef(ExprRefInner);
 
 impl From<ExprRef> for usize {
-    #[inline(always)]
+    #[inline]
     #[allow(clippy::unnecessary_cast)]
     fn from(value: ExprRef) -> Self {
         value.0 as usize
@@ -32,7 +32,7 @@ impl From<ExprRef> for usize {
 }
 
 impl From<usize> for ExprRef {
-    #[inline(always)]
+    #[inline]
     fn from(value: usize) -> Self {
         ExprRef(value as ExprRefInner)
     }
@@ -49,5 +49,11 @@ impl<'s> std::ops::Index<ExprRef> for ExprPool<'s> {
 impl<'s> std::ops::IndexMut<ExprRef> for ExprPool<'s> {
     fn index_mut(&mut self, index: ExprRef) -> &mut Expr<'s> {
         &mut self.vec[usize::from(index)]
+    }
+}
+
+impl DeepSize for ExprPool<'_> {
+    fn deep_size_of_children(&self) -> usize {
+        self.vec.deep_size_of_children()
     }
 }

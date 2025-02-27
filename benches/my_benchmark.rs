@@ -16,6 +16,7 @@ use tycho::{
     transpiler::Transpiler,
     type_env::TypeEnv,
     typecheck::TypeChecker,
+    types::pool::TypePool,
 };
 
 #[global_allocator]
@@ -38,18 +39,21 @@ fn benchmark_lexer(c: &mut Criterion) {
 fn benchmark_parser(c: &mut Criterion) {
     let contents = std::fs::read_to_string("test/test.ty").unwrap_or_else(|e| panic!("{e}"));
     let tokens = Lexer::lex_all_span(&contents);
-    let mut pool = ExprPool::new();
+    let mut expr_pool = ExprPool::new();
+    let mut type_pool = TypePool::new();
     c.bench_function("parse", |b| {
         b.iter_custom(|iters| {
             let mut typelist = TypeList::with_core();
             let mut parser = Parser {
                 tokens: tokens.clone(),
-                pool: &mut pool,
+                expr_pool: &mut expr_pool,
+                type_pool: &mut type_pool,
             };
 
             let mut elapsed = Duration::ZERO;
             for _ in 0..iters {
-                *parser.pool = ExprPool::new();
+                *parser.expr_pool = ExprPool::new();
+                *parser.type_pool = TypePool::new();
                 parser.tokens = tokens.clone();
                 let mut statements = Vec::new();
                 let start = Instant::now();
@@ -67,13 +71,14 @@ fn benchmark_parser(c: &mut Criterion) {
 
 fn benchmark_typechecker(c: &mut Criterion) {
     let mut type_env_orig = TypeEnv::default();
+    let mut type_pool = TypePool::new();
     let includes = vec![
         PathBuf::from("includes/basic.ty"),
         PathBuf::from("includes/math.ty"),
     ];
     let include_sources = define_sources(includes);
     for (_, source) in &include_sources {
-        add_defines(source, &mut type_env_orig).unwrap();
+        add_defines(source, &mut type_env_orig, &mut type_pool).unwrap();
     }
 
     let contents = std::fs::read_to_string("test/test.ty").unwrap_or_else(|e| panic!("{e}"));
@@ -81,10 +86,11 @@ fn benchmark_typechecker(c: &mut Criterion) {
 
     let mut typelist = TypeList::with_core();
 
-    let mut pool = ExprPool::new();
+    let mut expr_pool = ExprPool::new();
     let mut parser = Parser {
         tokens: tokens.clone(),
-        pool: &mut pool,
+        expr_pool: &mut expr_pool,
+        type_pool: &mut type_pool,
     };
 
     let mut statements = Vec::new();
@@ -98,11 +104,13 @@ fn benchmark_typechecker(c: &mut Criterion) {
             let mut elapsed = Duration::ZERO;
             for _i in 0..iters {
                 let mut type_env = type_env_orig.clone();
+                let mut type_pool = type_pool.clone();
 
                 let mut typechecker = TypeChecker {
                     type_env: &mut type_env,
-                    pool: &pool,
+                    expr_pool: &expr_pool,
                     source: &contents,
+                    type_pool: &mut type_pool,
                 };
 
                 let start = Instant::now();
@@ -128,10 +136,12 @@ fn benchmark_compiler(c: &mut Criterion) {
 
     let mut typelist = TypeList::with_core();
 
-    let mut pool = ExprPool::new();
+    let mut expr_pool = ExprPool::new();
+    let mut type_pool = TypePool::new();
     let mut parser = Parser {
         tokens: tokens.clone(),
-        pool: &mut pool,
+        expr_pool: &mut expr_pool,
+        type_pool: &mut type_pool,
     };
 
     let mut statements = Vec::new();
@@ -144,7 +154,7 @@ fn benchmark_compiler(c: &mut Criterion) {
         b.iter_custom(|iters| {
             let mut elapsed = Duration::ZERO;
             for _i in 0..iters {
-                let mut compiler = LJCompiler::new(&pool, &contents);
+                let mut compiler = LJCompiler::new(&expr_pool, &contents);
                 let start = Instant::now();
                 compiler.compile_chunk(&statements);
                 compiler.fs_finish();
@@ -162,10 +172,12 @@ fn benchmark_transpiler(c: &mut Criterion) {
 
     let mut typelist = TypeList::with_core();
 
-    let mut pool = ExprPool::new();
+    let mut expr_pool = ExprPool::new();
+    let mut type_pool = TypePool::new();
     let mut parser = Parser {
         tokens: tokens.clone(),
-        pool: &mut pool,
+        expr_pool: &mut expr_pool,
+        type_pool: &mut type_pool,
     };
 
     let mut statements = Vec::new();
@@ -178,7 +190,7 @@ fn benchmark_transpiler(c: &mut Criterion) {
         b.iter_custom(|iters| {
             let mut elapsed = Duration::ZERO;
             for _i in 0..iters {
-                let mut compiler = Transpiler::new(&pool, &contents);
+                let mut compiler = Transpiler::new(&expr_pool, &contents);
                 let start = Instant::now();
                 for stmt in &statements {
                     compiler.transpile_statement(black_box(stmt));
@@ -193,13 +205,14 @@ fn benchmark_transpiler(c: &mut Criterion) {
 
 fn benchmark_all_compile(c: &mut Criterion) {
     let mut type_env_orig = TypeEnv::default();
+    let mut type_pool = TypePool::new();
     let includes = vec![
         PathBuf::from("includes/basic.ty"),
         PathBuf::from("includes/math.ty"),
     ];
     let include_sources = define_sources(includes);
     for (_, source) in &include_sources {
-        add_defines(source, &mut type_env_orig).unwrap();
+        add_defines(source, &mut type_env_orig, &mut type_pool).unwrap();
     }
     let source = std::fs::read_to_string("test/test.ty").unwrap_or_else(|e| panic!("{e}"));
 
@@ -208,6 +221,7 @@ fn benchmark_all_compile(c: &mut Criterion) {
             let mut elapsed = Duration::ZERO;
             for _i in 0..iters {
                 let mut type_env = type_env_orig.clone();
+                let mut type_pool = type_pool.clone();
                 let source = black_box(&source);
 
                 let start = Instant::now();
@@ -216,10 +230,11 @@ fn benchmark_all_compile(c: &mut Criterion) {
 
                 let mut typelist = TypeList::with_core();
 
-                let mut pool = ExprPool::new();
+                let mut expr_pool = ExprPool::new();
                 let mut parser = Parser {
                     tokens: tokens.clone(),
-                    pool: &mut pool,
+                    expr_pool: &mut expr_pool,
+                    type_pool: &mut type_pool,
                 };
 
                 let mut statements = Vec::new();
@@ -230,10 +245,11 @@ fn benchmark_all_compile(c: &mut Criterion) {
 
                 let mut typechecker = TypeChecker {
                     type_env: &mut type_env,
-                    pool: &pool,
+                    expr_pool: &expr_pool,
                     source,
+                    type_pool: &mut type_pool,
                 };
-                let mut compiler = LJCompiler::new(&pool, source);
+                let mut compiler = LJCompiler::new(&expr_pool, source);
                 for stmt in &statements {
                     typechecker.check_statement(stmt).unwrap();
                     compiler.compile_statement(black_box(stmt));
@@ -251,13 +267,14 @@ fn benchmark_all_compile(c: &mut Criterion) {
 
 fn benchmark_all_transpile(c: &mut Criterion) {
     let mut type_env_orig = TypeEnv::default();
+    let mut type_pool = TypePool::new();
     let includes = vec![
         PathBuf::from("includes/basic.ty"),
         PathBuf::from("includes/math.ty"),
     ];
     let include_sources = define_sources(includes);
     for (_, source) in &include_sources {
-        add_defines(source, &mut type_env_orig).unwrap();
+        add_defines(source, &mut type_env_orig, &mut type_pool).unwrap();
     }
     let contents = std::fs::read_to_string("test/test.ty").unwrap_or_else(|e| panic!("{e}"));
 
@@ -266,6 +283,7 @@ fn benchmark_all_transpile(c: &mut Criterion) {
             let mut elapsed = Duration::ZERO;
             for _i in 0..iters {
                 let mut type_env = type_env_orig.clone();
+                let mut type_pool = type_pool.clone();
                 let source = black_box(&contents);
 
                 let start = Instant::now();
@@ -274,10 +292,11 @@ fn benchmark_all_transpile(c: &mut Criterion) {
 
                 let mut typelist = TypeList::with_core();
 
-                let mut pool = ExprPool::new();
+                let mut expr_pool = ExprPool::new();
                 let mut parser = Parser {
                     tokens: tokens.clone(),
-                    pool: &mut pool,
+                    expr_pool: &mut expr_pool,
+                    type_pool: &mut type_pool,
                 };
 
                 let mut statements = Vec::new();
@@ -288,10 +307,11 @@ fn benchmark_all_transpile(c: &mut Criterion) {
 
                 let mut typechecker = TypeChecker {
                     type_env: &mut type_env,
-                    pool: &pool,
+                    expr_pool: &expr_pool,
                     source,
+                    type_pool: &mut type_pool,
                 };
-                let mut transpiler = Transpiler::new(&pool, source);
+                let mut transpiler = Transpiler::new(&expr_pool, source);
                 for stmt in &statements {
                     typechecker.check_statement(stmt).unwrap();
                     transpiler.transpile_statement(black_box(stmt));

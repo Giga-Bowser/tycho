@@ -12,7 +12,7 @@ use crate::{
         ast::*,
         pool::{ExprPool, ExprRef},
     },
-    types,
+    types::pool::TypeRef,
 };
 
 const LJ_FR2: bool = true;
@@ -873,7 +873,7 @@ impl<'s> LJCompiler<'s, '_> {
         e
     }
 
-    fn compile_params<const METHOD: bool>(&mut self, params: &[(&'s str, types::Type<'s>)]) -> u8 {
+    fn compile_params<const METHOD: bool>(&mut self, params: &[(&'s str, TypeRef<'s>)]) -> u8 {
         let mut num_params = if METHOD {
             self.var_new(0, "self");
             1

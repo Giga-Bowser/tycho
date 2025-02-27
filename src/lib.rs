@@ -4,7 +4,6 @@ use structopt::StructOpt;
 
 mod errors;
 mod mem_size;
-mod types;
 mod utils;
 
 pub mod driver;
@@ -14,6 +13,7 @@ pub mod parser;
 pub mod transpiler;
 pub mod type_env;
 pub mod typecheck;
+pub mod types;
 
 #[derive(StructOpt)]
 pub enum TychoOpt {

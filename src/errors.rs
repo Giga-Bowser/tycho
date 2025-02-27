@@ -4,8 +4,8 @@ use ariadne::{Color, ReportKind};
 
 use crate::{
     lexer::{Span, SpanToken, TokenKind},
-    parser::ast,
-    types::Type,
+    parser::{ast, pool::ExprPool},
+    types::pool::{TypePool, TypeRef},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -55,8 +55,14 @@ pub struct Annotation {
     pub label: Option<String>,
 }
 
+pub struct DiagCtx<'a, 's> {
+    pub expr_pool: &'a ExprPool<'s>,
+    pub type_pool: &'a TypePool<'s>,
+    pub source: &'s str,
+}
+
 pub trait Snippetize<'s> {
-    fn snippetize(&self, source: &'s str) -> Diag;
+    fn snippetize(&self, ctx: &DiagCtx<'_, 's>) -> Diag;
 }
 
 #[derive(Default, Debug)]
@@ -81,7 +87,7 @@ impl<'s> From<UnexpectedToken<'s>> for ParseError<'s> {
 }
 
 impl<'s> Snippetize<'s> for ParseError<'s> {
-    fn snippetize(&self, source: &'s str) -> Diag {
+    fn snippetize(&self, ctx: &DiagCtx<'_, 's>) -> Diag {
         match self {
             ParseError::EmptyError => Diag {
                 title: "oh no, empty error".to_owned(),
@@ -94,7 +100,7 @@ impl<'s> Snippetize<'s> for ParseError<'s> {
                 Diag {
                     title: format!(
                         "cannot find type `{}` in this scope",
-                        val_name.to_str(source)
+                        val_name.to_str(ctx.source)
                     ),
                     level: Level::Error,
                     annotations: vec![Annotation {
@@ -104,7 +110,7 @@ impl<'s> Snippetize<'s> for ParseError<'s> {
                     }],
                 }
             }
-            ParseError::UnexpectedToken(unexpected_token) => unexpected_token.snippetize(source),
+            ParseError::UnexpectedToken(unexpected_token) => unexpected_token.snippetize(ctx),
             ParseError::BadExprStat(expr) => {
                 let mut annotations = Vec::new();
                 if let ast::Expr::Name(name) = &expr {
@@ -113,7 +119,7 @@ impl<'s> Snippetize<'s> for ParseError<'s> {
                         range: name.to_range(),
                         label: Some("expression statement here".to_owned()),
                     });
-                    let name_str = name.to_str(source);
+                    let name_str = name.to_str(ctx.source);
                     if let "local" | "let" = name_str {
                         annotations.push(Annotation {
                             level: Level::Help,
@@ -133,7 +139,7 @@ impl<'s> Snippetize<'s> for ParseError<'s> {
 }
 
 impl<'s> Snippetize<'s> for UnexpectedToken<'s> {
-    fn snippetize(&self, source: &'s str) -> Diag {
+    fn snippetize(&self, ctx: &DiagCtx<'_, 's>) -> Diag {
         let mut annotations = vec![Annotation {
             level: Level::Error,
             range: self.token.text.to_range(),
@@ -156,7 +162,7 @@ impl<'s> Snippetize<'s> for UnexpectedToken<'s> {
         }
 
         Diag {
-            title: format!("unexpected token: `{}`", self.token.text.to_str(source)),
+            title: format!("unexpected token: `{}`", self.token.text.to_str(ctx.source)),
             level: Level::Error,
             annotations,
         }
@@ -173,24 +179,24 @@ pub enum CheckErr<'s> {
     NoSuchField(NoSuchField<'s>),
     NoSuchMethod(NoSuchMethod<'s>),
     NotIterable,
-    BadAccess { span: Span<'s>, ty: Type<'s> },
-    BadIndex { span: Span<'s>, ty: Type<'s> },
-    BadNegate { op_span: Span<'s>, ty: Type<'s> },
-    BadNot { op_span: Span<'s>, ty: Type<'s> },
+    BadAccess { span: Span<'s>, ty: TypeRef<'s> },
+    BadIndex { span: Span<'s>, ty: TypeRef<'s> },
+    BadNegate { op_span: Span<'s>, ty: TypeRef<'s> },
+    BadNot { op_span: Span<'s>, ty: TypeRef<'s> },
 }
 
 impl<'s> Snippetize<'s> for CheckErr<'s> {
-    fn snippetize(&self, source: &'s str) -> Diag {
+    fn snippetize(&self, ctx: &DiagCtx<'_, 's>) -> Diag {
         match self {
-            CheckErr::MismatchedTypes(mismatched_types) => mismatched_types.snippetize(source),
-            CheckErr::NoReturn(no_return) => no_return.snippetize(source),
-            CheckErr::ReturnCount(return_count) => return_count.snippetize(source),
+            CheckErr::MismatchedTypes(mismatched_types) => mismatched_types.snippetize(ctx),
+            CheckErr::NoReturn(no_return) => no_return.snippetize(ctx),
+            CheckErr::ReturnCount(return_count) => return_count.snippetize(ctx),
             CheckErr::MethodOnWrongType(method_on_wrong_type) => {
-                method_on_wrong_type.snippetize(source)
+                method_on_wrong_type.snippetize(ctx)
             }
-            CheckErr::NoSuchVal(no_such_val) => no_such_val.snippetize(source),
-            CheckErr::NoSuchField(no_such_field) => no_such_field.snippetize(source),
-            CheckErr::NoSuchMethod(no_such_method) => no_such_method.snippetize(source),
+            CheckErr::NoSuchVal(no_such_val) => no_such_val.snippetize(ctx),
+            CheckErr::NoSuchField(no_such_field) => no_such_field.snippetize(ctx),
+            CheckErr::NoSuchMethod(no_such_method) => no_such_method.snippetize(ctx),
             CheckErr::NotIterable => Diag {
                 title: "can't iterate over non-iterable".to_owned(),
                 level: Level::Error,
@@ -202,7 +208,10 @@ impl<'s> Snippetize<'s> for CheckErr<'s> {
                 annotations: vec![Annotation {
                     level: Level::Error,
                     range: op_span.to_range(),
-                    label: Some(format!("expected `number` for this operator, found `{ty}`")),
+                    label: Some(format!(
+                        "expected `number` for this operator, found `{}`",
+                        ty.pooled(ctx.type_pool)
+                    )),
                 }],
             },
             CheckErr::BadNot { op_span, ty } => Diag {
@@ -212,26 +221,39 @@ impl<'s> Snippetize<'s> for CheckErr<'s> {
                     level: Level::Error,
                     range: op_span.to_range(),
                     label: Some(format!(
-                        "expected `boolean` for this operator, found `{ty}`"
+                        "expected `boolean` for this operator, found `{}`",
+                        ty.pooled(ctx.type_pool)
                     )),
                 }],
             },
             CheckErr::BadIndex { span, ty } => Diag {
-                title: format!("cannot index into value of type `{ty}`"),
+                title: format!(
+                    "cannot index into value of type `{}`",
+                    ty.pooled(ctx.type_pool)
+                ),
                 level: Level::Error,
                 annotations: vec![Annotation {
                     level: Level::Error,
                     range: span.to_range(),
-                    label: Some(format!("cannot index into value of type `{ty}`")),
+                    label: Some(format!(
+                        "cannot index into value of type `{}`",
+                        ty.pooled(ctx.type_pool)
+                    )),
                 }],
             },
             CheckErr::BadAccess { span, ty } => Diag {
-                title: format!("cannot perform access on value of type `{ty}`"),
+                title: format!(
+                    "cannot perform access on value of type `{}`",
+                    ty.pooled(ctx.type_pool)
+                ),
                 level: Level::Error,
                 annotations: vec![Annotation {
                     level: Level::Error,
                     range: span.to_range(),
-                    label: Some(format!("cannot perform access on value of type `{ty}`")),
+                    label: Some(format!(
+                        "cannot perform access on value of type `{}`",
+                        ty.pooled(ctx.type_pool)
+                    )),
                 }],
             },
         }
@@ -240,14 +262,16 @@ impl<'s> Snippetize<'s> for CheckErr<'s> {
 
 #[derive(Debug, Clone)]
 pub struct MismatchedTypes<'s> {
-    pub expected: Type<'s>,
-    pub recieved: Type<'s>,
+    pub expected: TypeRef<'s>,
+    pub recieved: TypeRef<'s>,
 }
 
 impl<'s> Snippetize<'s> for MismatchedTypes<'s> {
-    fn snippetize(&self, _source: &'s str) -> Diag {
-        let expected_span = self.expected.span;
-        let recieved_span = self.recieved.span;
+    fn snippetize(&self, ctx: &DiagCtx<'_, 's>) -> Diag {
+        let expected = &ctx.type_pool[self.expected];
+        let recieved = &ctx.type_pool[self.recieved];
+        let expected_span = expected.span;
+        let recieved_span = recieved.span;
 
         let mut annotations = Vec::new();
 
@@ -265,7 +289,8 @@ impl<'s> Snippetize<'s> for MismatchedTypes<'s> {
                 range: recieved_str.to_range(),
                 label: Some(format!(
                     "expected `{}`, found `{}`",
-                    self.expected, self.recieved
+                    self.expected.pooled(ctx.type_pool),
+                    self.recieved.pooled(ctx.type_pool)
                 )),
             });
         }
@@ -284,8 +309,8 @@ pub struct NoSuchVal<'s> {
 }
 
 impl<'s> Snippetize<'s> for NoSuchVal<'s> {
-    fn snippetize(&self, source: &'s str) -> Diag {
-        let val_str = self.val_name.to_str(source);
+    fn snippetize(&self, ctx: &DiagCtx<'_, 's>) -> Diag {
+        let val_str = self.val_name.to_str(ctx.source);
 
         Diag {
             title: format!("cannot find value `{val_str}` in this scope"),
@@ -305,8 +330,8 @@ pub struct NoSuchField<'s> {
 }
 
 impl<'s> Snippetize<'s> for NoSuchField<'s> {
-    fn snippetize(&self, source: &'s str) -> Diag {
-        let field_str = self.field_name.to_str(source);
+    fn snippetize(&self, ctx: &DiagCtx<'_, 's>) -> Diag {
+        let field_str = self.field_name.to_str(ctx.source);
 
         Diag {
             title: format!("cannot find field `{field_str}` on this type"),
@@ -326,8 +351,8 @@ pub struct NoSuchMethod<'s> {
 }
 
 impl<'s> Snippetize<'s> for NoSuchMethod<'s> {
-    fn snippetize(&self, source: &'s str) -> Diag {
-        let method_str = self.method_name.to_str(source);
+    fn snippetize(&self, ctx: &DiagCtx<'_, 's>) -> Diag {
+        let method_str = self.method_name.to_str(ctx.source);
 
         Diag {
             title: format!("cannot find method `{method_str}` on this type"),
@@ -347,8 +372,8 @@ pub struct NoReturn<'s> {
 }
 
 impl<'s> Snippetize<'s> for NoReturn<'s> {
-    fn snippetize(&self, _source: &'s str) -> Diag {
-        let return_span = self.func_node.ty.returns.span;
+    fn snippetize(&self, _ctx: &DiagCtx<'_, 's>) -> Diag {
+        let return_span: Option<Span<'s>> = None;
 
         let mut annotations = Vec::new();
 
@@ -375,7 +400,7 @@ pub struct ReturnCount<'s> {
 }
 
 impl<'s> Snippetize<'s> for ReturnCount<'s> {
-    fn snippetize(&self, _source: &'s str) -> Diag {
+    fn snippetize(&self, _ctx: &DiagCtx<'_, 's>) -> Diag {
         Diag {
             title: "wrong number of returns".to_owned(),
             level: Level::Error,
@@ -395,13 +420,16 @@ impl<'s> Snippetize<'s> for ReturnCount<'s> {
 #[derive(Debug, Clone)]
 pub struct MethodOnWrongType<'s> {
     pub span: Span<'s>,
-    pub ty: Type<'s>,
+    pub ty: TypeRef<'s>,
 }
 
 impl<'s> Snippetize<'s> for MethodOnWrongType<'s> {
-    fn snippetize(&self, _source: &'s str) -> Diag {
+    fn snippetize(&self, ctx: &DiagCtx<'_, 's>) -> Diag {
         Diag {
-            title: format!("tried to declare method on non-struct type `{}`", self.ty),
+            title: format!(
+                "tried to declare method on non-struct type `{}`",
+                self.ty.pooled(ctx.type_pool)
+            ),
             level: Level::Error,
             annotations: vec![Annotation {
                 level: Level::Error,

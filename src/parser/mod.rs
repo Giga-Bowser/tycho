@@ -1,11 +1,12 @@
 pub mod ast;
 pub mod pool;
 
-use std::rc::Rc;
-
 use rustc_hash::FxHashMap;
 
-use self::{ast::*, pool::*};
+use self::{
+    ast::*,
+    pool::{ExprPool, ExprRef},
+};
 
 use crate::{
     errors::{ParseError, UnexpectedToken},
@@ -13,14 +14,18 @@ use crate::{
         Span, SpanTokens, SrcLoc,
         TokenKind::{self, *},
     },
-    types::{Function, TableType, Type, TypeKind, User},
+    types::{
+        pool::{TypePool, TypeRef},
+        Function, TableType, Type, TypeKind, User,
+    },
 };
 
 type PResult<'s, T> = Result<T, Box<ParseError<'s>>>;
 
 pub struct Parser<'s, 'pool> {
     pub tokens: SpanTokens<'s>,
-    pub pool: &'pool mut ExprPool<'s>,
+    pub expr_pool: &'pool mut ExprPool<'s>,
+    pub type_pool: &'pool mut TypePool<'s>,
 }
 
 impl<'s> Parser<'s, '_> {
@@ -104,7 +109,7 @@ impl<'s> Parser<'s, '_> {
 
             return Ok(Declare {
                 lhs: Box::new(lhs),
-                ty: Box::new(Type {
+                ty: self.type_pool.add(Type {
                     kind: TypeKind::Adaptable,
                     span: None,
                 }),
@@ -112,7 +117,7 @@ impl<'s> Parser<'s, '_> {
             });
         }
 
-        let ty = Box::new(self.parse_type(typelist)?);
+        let ty = self.parse_type(typelist)?;
 
         if self.tokens[0].kind != Equal {
             return Ok(Declare {
@@ -242,7 +247,7 @@ impl<'s> Parser<'s, '_> {
     fn parse_expr_stat(&mut self, typelist: &mut TypeList<'s>) -> PResult<'s, Statement<'s>> {
         let sufexpr = self.parse_suffixed_expr(typelist)?;
 
-        if let Expr::Name(name) = self.pool[sufexpr.val] {
+        if let Expr::Name(name) = self.expr_pool[sufexpr.val] {
             if self.tokens[0].kind == Colon {
                 return Ok(Statement::Declare(self.parse_decl(
                     typelist,
@@ -266,7 +271,7 @@ impl<'s> Parser<'s, '_> {
             if self.tokens[0].kind != Comma {
                 if sufexpr.suffixes.is_empty() {
                     return Err(Box::new(ParseError::BadExprStat(
-                        self.pool[sufexpr.val].clone(),
+                        self.expr_pool[sufexpr.val].clone(),
                     )));
                 }
                 return Ok(Statement::ExprStat(sufexpr));
@@ -277,7 +282,7 @@ impl<'s> Parser<'s, '_> {
             while self.tokens[0].kind == Comma {
                 self.tokens.pop_front();
                 let temp = self.parse_suffixed_expr(typelist)?;
-                match self.pool[temp.val] {
+                match self.expr_pool[temp.val] {
                     Expr::Name(..) => {
                         lhs_arr.push(temp);
                     }
@@ -295,7 +300,7 @@ impl<'s> Parser<'s, '_> {
                     let mut new_lhs_arr = Vec::new();
 
                     for SuffixedExpr { val, suffixes } in lhs_arr {
-                        if let Expr::Name(name) = self.pool[val] {
+                        if let Expr::Name(name) = self.expr_pool[val] {
                             assert!(suffixes.is_empty());
 
                             new_lhs_arr.push(name);
@@ -324,7 +329,7 @@ impl<'s> Parser<'s, '_> {
 
         if sufexpr.suffixes.is_empty() {
             return Err(Box::new(ParseError::BadExprStat(
-                self.pool[sufexpr.val].clone(),
+                self.expr_pool[sufexpr.val].clone(),
             )));
         }
 
@@ -430,14 +435,14 @@ impl<'s> Parser<'s, '_> {
             Name | Elipsis => {
                 let name = self.tokens[0].text;
                 self.tokens.pop_front();
-                Ok(self.pool.add(Expr::Name(name)))
+                Ok(self.expr_pool.add(Expr::Name(name)))
             }
             LParen => {
                 self.tokens.pop_front();
                 let val = self.parse_expr(typelist)?;
                 self.tokens.expect(RParen)?;
 
-                Ok(self.pool.add(Expr::Paren(ParenExpr { val })))
+                Ok(self.expr_pool.add(Expr::Paren(ParenExpr { val })))
             }
             _ => Err(Box::new(ParseError::UnexpectedToken(UnexpectedToken {
                 token: self.tokens[0].clone(),
@@ -455,11 +460,11 @@ impl<'s> Parser<'s, '_> {
             let op_span = self.tokens.pop_front().text;
             let val = self.expr_impl(typelist, 12)?;
 
-            self.pool.add(Expr::UnOp(UnOp { op, op_span, val }))
+            self.expr_pool.add(Expr::UnOp(UnOp { op, op_span, val }))
         } else {
             let val = self.simple_expr(typelist)?;
 
-            self.pool.add(Expr::Simple(val))
+            self.expr_pool.add(Expr::Simple(val))
         };
 
         while let Some((op, prec)) = get_op(self.tokens[0].kind) {
@@ -471,7 +476,7 @@ impl<'s> Parser<'s, '_> {
 
             let rhs = self.expr_impl(typelist, prec.right)?;
 
-            result = self.pool.add(Expr::BinOp(BinOp {
+            result = self.expr_pool.add(Expr::BinOp(BinOp {
                 op,
                 lhs: result,
                 rhs,
@@ -568,7 +573,7 @@ impl<'s> Parser<'s, '_> {
         Ok(TableNode { fields })
     }
 
-    fn member(&mut self, typelist: &TypeList<'s>) -> PResult<'s, (&'s str, Type<'s>)> {
+    fn member(&mut self, typelist: &TypeList<'s>) -> PResult<'s, (&'s str, TypeRef<'s>)> {
         let name = self.tokens.pop_name()?;
         self.tokens.expect(Colon)?;
 
@@ -581,8 +586,8 @@ impl<'s> Parser<'s, '_> {
 
         let mut params = Vec::new();
 
-        if self.tokens[0].kind == RParen {
-            self.tokens.pop_front();
+        let end = if self.tokens[0].kind == RParen {
+            self.tokens.pop_front().text.end
         } else {
             loop {
                 if self.tokens[0].kind == Name && self.tokens[1].kind == Colon {
@@ -603,20 +608,22 @@ impl<'s> Parser<'s, '_> {
                 }
 
                 if self.tokens[0].kind == RParen {
-                    self.tokens.pop_front();
-                    break;
+                    break self.tokens.pop_front().text.end;
                 }
 
                 self.tokens.expect(Comma)?;
             }
-        }
+        };
 
         let body = self.parse_block(typelist)?;
 
         Ok(FuncNode {
             ty: Box::new(Function {
                 params,
-                returns: Box::default(),
+                returns: self.type_pool.add(Type {
+                    kind: TypeKind::Nil,
+                    span: Some(Span::empty(end)),
+                }),
             }),
             body,
         })
@@ -715,10 +722,10 @@ impl<'s> Parser<'s, '_> {
                     let span = self.tokens.pop_front().text;
                     params.push((
                         span.to_str(self.tokens.source),
-                        Type {
+                        self.type_pool.add(Type {
                             kind: TypeKind::Variadic,
                             span: Some(span),
-                        },
+                        }),
                     ));
                     self.tokens.expect(RParen)?;
                     break;
@@ -747,7 +754,7 @@ impl<'s> Parser<'s, '_> {
             }
         }
 
-        let returns = Box::new(self.parse_return_type(typelist)?);
+        let returns = self.parse_return_type(typelist)?;
 
         Ok(Function { params, returns })
     }
@@ -763,12 +770,12 @@ impl<'s> Parser<'s, '_> {
         })
     }
 
-    fn parse_return_type(&mut self, typelist: &TypeList<'s>) -> PResult<'s, Type<'s>> {
+    fn parse_return_type(&mut self, typelist: &TypeList<'s>) -> PResult<'s, TypeRef<'s>> {
         if self.tokens[0].kind != Arrow {
-            return Ok(Type {
+            return Ok(self.type_pool.add(Type {
                 kind: TypeKind::Nil,
                 span: Some(Span::empty(self.tokens[0].text.start)),
-            });
+            }));
         }
 
         self.tokens.pop_front(); // pop '->'
@@ -785,10 +792,10 @@ impl<'s> Parser<'s, '_> {
 
             let ty_end = self.tokens.expect(RParen)?.text.end;
 
-            Ok(Type {
+            Ok(self.type_pool.add(Type {
                 kind: TypeKind::Multiple(result),
                 span: Some(Span::new(ty_start, ty_end)),
-            })
+            }))
         } else {
             Ok(self.parse_type(typelist)?)
         }
@@ -821,13 +828,14 @@ impl<'s> Parser<'s, '_> {
                 if self.tokens[0].kind == RSquare {
                     self.tokens.pop_front();
 
+                    let val_type = self.parse_type(typelist)?;
                     return Ok(Type {
                         kind: TypeKind::Table(TableType {
-                            key_type: Rc::new(Type {
+                            key_type: self.type_pool.add(Type {
                                 kind: TypeKind::Number,
                                 span: None,
                             }),
-                            val_type: Rc::new(self.parse_type(typelist)?),
+                            val_type,
                         }),
                         span: None,
                     });
@@ -840,10 +848,7 @@ impl<'s> Parser<'s, '_> {
                 let val_type = self.parse_type(typelist)?;
 
                 Ok(Type {
-                    kind: TypeKind::Table(TableType {
-                        key_type: Rc::new(key_type),
-                        val_type: Rc::new(val_type),
-                    }),
+                    kind: TypeKind::Table(TableType { key_type, val_type }),
                     span: None,
                 })
             }
@@ -868,7 +873,7 @@ impl<'s> Parser<'s, '_> {
         }
     }
 
-    fn parse_type(&mut self, typelist: &TypeList<'s>) -> PResult<'s, Type<'s>> {
+    fn parse_type(&mut self, typelist: &TypeList<'s>) -> PResult<'s, TypeRef<'s>> {
         let mut result = self.parse_basic_type(typelist)?;
 
         if self.tokens[0].kind == Question {
@@ -880,12 +885,12 @@ impl<'s> Parser<'s, '_> {
             };
 
             result = Type {
-                kind: TypeKind::Optional(Box::new(result)),
+                kind: TypeKind::Optional(self.type_pool.add(result)),
                 span: Some(span),
             };
         }
 
-        Ok(result)
+        Ok(self.type_pool.add(result))
     }
 
     /// expr without concat operator
@@ -898,11 +903,11 @@ impl<'s> Parser<'s, '_> {
             let op_span = self.tokens.pop_front().text;
             let val = self.range_expr_impl(typelist, 12)?;
 
-            self.pool.add(Expr::UnOp(UnOp { op, op_span, val }))
+            self.expr_pool.add(Expr::UnOp(UnOp { op, op_span, val }))
         } else {
             let val = self.simple_expr(typelist)?;
 
-            self.pool.add(Expr::Simple(val))
+            self.expr_pool.add(Expr::Simple(val))
         };
 
         while let Some((op, prec)) = get_op(self.tokens[0].kind) {
@@ -918,7 +923,7 @@ impl<'s> Parser<'s, '_> {
 
             let rhs = self.range_expr_impl(typelist, prec.right)?;
 
-            result = self.pool.add(Expr::BinOp(BinOp {
+            result = self.expr_pool.add(Expr::BinOp(BinOp {
                 op,
                 lhs: result,
                 rhs,
