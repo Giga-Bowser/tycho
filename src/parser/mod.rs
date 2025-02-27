@@ -16,7 +16,7 @@ use crate::{
     },
     types::{
         pool::{TypePool, TypeRef},
-        Function, TableType, Type, TypeKind, Struct,
+        Function, Struct, TableType, Type, TypeKind,
     },
 };
 

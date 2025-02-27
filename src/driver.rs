@@ -130,7 +130,7 @@ fn build(args: &BuildOpt) {
     if args.verbose {
         eprintln!("checking done: {}", duration_fmt(check_timer.elapsed()));
         eprintln!("type env memory: {}", ByteFmt(type_env.deep_size_of()));
-        eprintln!("type pool memory: {}", ByteFmt(type_pool.deep_size_of()))
+        eprintln!("type pool memory: {}", ByteFmt(type_pool.deep_size_of()));
     }
 
     let compile_timer = Instant::now();

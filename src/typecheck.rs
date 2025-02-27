@@ -267,7 +267,9 @@ impl<'s> TypeChecker<'_, 's> {
                 match &mut self.type_pool[ty].kind {
                     TypeKind::Table(_) => Ok(()),
                     TypeKind::Struct(strukt) => {
-                        strukt.fields.push((field_name.to_str(self.source), decl.ty));
+                        strukt
+                            .fields
+                            .push((field_name.to_str(self.source), decl.ty));
                         Ok(())
                     }
                     _ => Err(Box::new(CheckErr::BadAccess {
