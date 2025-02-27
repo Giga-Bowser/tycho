@@ -852,7 +852,7 @@ impl<'s> LJCompiler<'s, '_> {
     fn compile_func<const METHOD: bool>(&mut self, func_node: &FuncNode<'s>) -> ExprDesc<'s> {
         self.fs_init();
         self.fscope_begin(ScopeFlags::empty());
-        self.func_state.num_params = self.compile_params::<METHOD>(&func_node.type_.params);
+        self.func_state.num_params = self.compile_params::<METHOD>(&func_node.ty.params);
 
         self.compile_chunk(&func_node.body);
         self.fs_finish();
@@ -987,7 +987,7 @@ impl<'s> LJCompiler<'s, '_> {
             self.func_state.num_params = {
                 self.var_new(0, "_self");
                 let mut num_params = 1;
-                for (name, _) in &constructor.type_.params {
+                for (name, _) in &constructor.ty.params {
                     self.var_new(num_params, name);
                     num_params += 1;
                 }

@@ -66,13 +66,13 @@ impl<'s> TypeChecker<'_, 's> {
             }),
             ast::Statement::StructDecl(ast::StructDecl {
                 name,
-                type_,
+                ty,
                 constructor: _,
             }) => {
                 self.type_env.insert(
                     (*name).to_str(self.source),
                     Type {
-                        kind: TypeKind::User(*type_.clone()),
+                        kind: TypeKind::User(*ty.clone()),
                         span: None,
                     },
                 );
@@ -86,26 +86,26 @@ impl<'s> TypeChecker<'_, 's> {
         if let Some(val) = decl.val {
             let lhs_type = self.check_expr(val)?;
 
-            if let TypeKind::Adaptable = decl.type_.kind {
+            if let TypeKind::Adaptable = decl.ty.kind {
                 self.type_env
                     .insert(decl.lhs.name.to_str(self.source), lhs_type);
                 return Ok(());
             }
 
-            if !decl.type_.can_equal(&lhs_type) {
+            if !decl.ty.can_equal(&lhs_type) {
                 return Err(Box::new(CheckErr::MismatchedTypes(MismatchedTypes {
-                    expected: decl.type_.as_ref().clone(),
+                    expected: decl.ty.as_ref().clone(),
                     recieved: lhs_type,
                 })));
             }
 
             self.type_env
-                .insert(decl.lhs.name.to_str(self.source), *decl.type_.clone());
+                .insert(decl.lhs.name.to_str(self.source), *decl.ty.clone());
             Ok(())
         } else {
             if decl.lhs.suffixes.is_empty() {
                 self.type_env
-                    .insert(decl.lhs.name.to_str(self.source), *decl.type_.clone());
+                    .insert(decl.lhs.name.to_str(self.source), *decl.ty.clone());
                 return Ok(());
             }
 
@@ -136,7 +136,7 @@ impl<'s> TypeChecker<'_, 's> {
                     TypeKind::Table(_) => Ok(()),
                     TypeKind::User(user) => {
                         user.fields
-                            .push((field_name.to_str(self.source), *decl.type_.clone()));
+                            .push((field_name.to_str(self.source), *decl.ty.clone()));
                         Ok(())
                     }
                     _ => Err(Box::new(CheckErr::BadAccess {
@@ -167,16 +167,16 @@ impl<'s> TypeChecker<'_, 's> {
         let func: &ast::FuncNode<'s> = &method_decl.func;
         let method_type = self.with_scope(|this| {
             this.type_env.insert("self", ty);
-            for (name, type_) in &func.type_.params {
-                this.type_env.insert(name, type_.clone());
+            for (name, ty) in &func.ty.params {
+                this.type_env.insert(name, ty.clone());
             }
 
-            if let TypeKind::Nil = func.type_.returns.kind {
+            if let TypeKind::Nil = func.ty.returns.kind {
                 // TODO: this is obviously bad
-                return Ok(TypeKind::Function(*func.type_.clone()).into());
+                return Ok(TypeKind::Function(*func.ty.clone()).into());
             }
 
-            let has_return = this.check_func_body(&func.body, func.type_.returns.as_ref())?;
+            let has_return = this.check_func_body(&func.body, func.ty.returns.as_ref())?;
 
             if !has_return {
                 return Err(Box::new(CheckErr::NoReturn(NoReturn {
@@ -184,7 +184,7 @@ impl<'s> TypeChecker<'_, 's> {
                 })));
             }
 
-            Ok(TypeKind::Function(*func.type_.clone()).into())
+            Ok(TypeKind::Function(*func.ty.clone()).into())
         })?;
 
         let TypeKind::User(User { fields, name: _ }) = &mut self
@@ -307,7 +307,7 @@ impl<'s> TypeChecker<'_, 's> {
             ast::Expr::Paren(paren_expr) => self.check_expr(paren_expr.val),
             ast::Expr::Simple(simple_expr) => self.check_simple_expr(simple_expr),
             ast::Expr::Name(span) => match self.type_env.get(span.to_str(self.source)) {
-                Some(type_) => Ok(type_.clone()),
+                Some(ty) => Ok(ty.clone()),
                 None => Err(Box::new(CheckErr::NoSuchVal(NoSuchVal { val_name: *span }))),
             },
         }
@@ -397,16 +397,16 @@ impl<'s> TypeChecker<'_, 's> {
 
     fn check_func(&mut self, func: &ast::FuncNode<'s>) -> TResult<'s, Type<'s>> {
         self.with_scope(|this| {
-            for (name, type_) in &func.type_.params {
-                this.type_env.insert(name, type_.clone());
+            for (name, ty) in &func.ty.params {
+                this.type_env.insert(name, ty.clone());
             }
 
-            if let TypeKind::Nil = func.type_.returns.kind {
+            if let TypeKind::Nil = func.ty.returns.kind {
                 // TODO: this is obviously bad
-                return Ok(TypeKind::Function(*func.type_.clone()).into());
+                return Ok(TypeKind::Function(*func.ty.clone()).into());
             }
 
-            let has_return = this.check_func_body(&func.body, func.type_.returns.as_ref())?;
+            let has_return = this.check_func_body(&func.body, func.ty.returns.as_ref())?;
 
             if !has_return {
                 return Err(Box::new(CheckErr::NoReturn(NoReturn {
@@ -414,7 +414,7 @@ impl<'s> TypeChecker<'_, 's> {
                 })));
             }
 
-            Ok(TypeKind::Function(*func.type_.clone()).into())
+            Ok(TypeKind::Function(*func.ty.clone()).into())
         })
     }
 
@@ -477,11 +477,11 @@ impl<'s> TypeChecker<'_, 's> {
                                 })));
                             }
 
-                            for (type_, val) in types.iter().zip(vals.iter()) {
-                                if !type_.can_equal(&this.check_expr(*val)?) {
+                            for (ty, val) in types.iter().zip(vals.iter()) {
+                                if !ty.can_equal(&this.check_expr(*val)?) {
                                     return Err(Box::new(CheckErr::MismatchedTypes(
                                         MismatchedTypes {
-                                            expected: type_.clone(),
+                                            expected: ty.clone(),
                                             recieved: this.check_expr(*val)?,
                                         },
                                     )));

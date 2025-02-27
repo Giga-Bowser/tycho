@@ -107,7 +107,7 @@ mod parser {
                 Statement::KeyValFor(key_val_for) => key_val_for.body.deep_size_of_children(),
                 Statement::StructDecl(struct_decl) => {
                     struct_decl.constructor.deep_size_of_children()
-                        + struct_decl.type_.deep_size_of_children()
+                        + struct_decl.ty.deep_size_of_children()
                 }
                 Statement::Break => 0,
             }
@@ -116,7 +116,7 @@ mod parser {
 
     impl DeepSize for Declare<'_> {
         fn deep_size_of_children(&self) -> usize {
-            self.lhs.deep_size_of_children() + self.type_.deep_size_of_children()
+            self.lhs.deep_size_of_children() + self.ty.deep_size_of_children()
         }
     }
 
@@ -157,7 +157,7 @@ mod parser {
 
     impl DeepSize for FuncNode<'_> {
         fn deep_size_of_children(&self) -> usize {
-            self.body.deep_size_of_children() + self.type_.deep_size_of_children()
+            self.body.deep_size_of_children() + self.ty.deep_size_of_children()
         }
     }
 

@@ -104,7 +104,7 @@ impl<'s> Parser<'s, '_> {
 
             return Ok(Declare {
                 lhs: Box::new(lhs),
-                type_: Box::new(Type {
+                ty: Box::new(Type {
                     kind: TypeKind::Adaptable,
                     span: None,
                 }),
@@ -112,12 +112,12 @@ impl<'s> Parser<'s, '_> {
             });
         }
 
-        let type_ = Box::new(self.parse_type(typelist)?);
+        let ty = Box::new(self.parse_type(typelist)?);
 
         if self.tokens[0].kind != Equal {
             return Ok(Declare {
                 lhs: Box::new(lhs),
-                type_,
+                ty,
                 val: None,
             });
         }
@@ -128,7 +128,7 @@ impl<'s> Parser<'s, '_> {
 
         Ok(Declare {
             lhs: Box::new(lhs),
-            type_,
+            ty,
             val: Some(val),
         })
     }
@@ -614,7 +614,7 @@ impl<'s> Parser<'s, '_> {
         let body = self.parse_block(typelist)?;
 
         Ok(FuncNode {
-            type_: Box::new(Function {
+            ty: Box::new(Function {
                 params,
                 returns: Box::default(),
             }),
@@ -635,19 +635,19 @@ impl<'s> Parser<'s, '_> {
         if self.tokens[0].kind == RCurly {
             let end_str = self.tokens.pop_front().text.end;
 
-            let type_ = Box::new(User {
+            let ty = Box::new(User {
                 fields,
                 name: name_str,
             });
             typelist.insert(
                 name_str.to_owned(),
                 Type {
-                    kind: TypeKind::User(*type_.clone()),
+                    kind: TypeKind::User(*ty.clone()),
                     span: Some(Span::new(start, end_str)),
                 },
             );
             return Ok(StructDecl {
-                type_,
+                ty,
                 constructor: None,
                 name: name_span,
             });
@@ -664,14 +664,14 @@ impl<'s> Parser<'s, '_> {
             fields.push(self.member(typelist)?);
         }
 
-        let type_ = Box::new(User {
+        let ty = Box::new(User {
             fields,
             name: name_str,
         });
         typelist.insert(
             name_str.to_owned(),
             Type {
-                kind: TypeKind::User(*type_.clone()),
+                kind: TypeKind::User(*ty.clone()),
                 span: Some(Span::new(start, self.tokens[0].text.start)),
             },
         );
@@ -680,7 +680,7 @@ impl<'s> Parser<'s, '_> {
             RCurly => {
                 self.tokens.pop_front();
                 Ok(StructDecl {
-                    type_,
+                    ty,
                     constructor: None,
                     name: name_span,
                 })
@@ -690,7 +690,7 @@ impl<'s> Parser<'s, '_> {
                 self.tokens.expect(RCurly)?;
                 Ok(StructDecl {
                     name: name_span,
-                    type_,
+                    ty,
                     constructor,
                 })
             }
@@ -758,7 +758,7 @@ impl<'s> Parser<'s, '_> {
         let body = self.parse_block(typelist)?;
 
         Ok(FuncNode {
-            type_: Box::new(ty),
+            ty: Box::new(ty),
             body,
         })
     }

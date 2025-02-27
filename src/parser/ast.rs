@@ -25,7 +25,7 @@ pub enum Statement<'s> {
 #[derive(Debug, Clone)]
 pub struct Declare<'s> {
     pub lhs: Box<SuffixedName<'s>>,
-    pub type_: Box<Type<'s>>,
+    pub ty: Box<Type<'s>>,
     pub val: Option<ExprRef>,
 }
 
@@ -134,7 +134,7 @@ pub struct KeyValFor<'s> {
 #[derive(Debug, Clone)]
 pub struct StructDecl<'s> {
     pub name: Span<'s>,
-    pub type_: Box<User<'s>>,
+    pub ty: Box<User<'s>>,
     pub constructor: Option<FuncNode<'s>>,
 }
 
@@ -180,7 +180,7 @@ pub enum SimpleExpr<'s> {
 
 #[derive(Debug, Clone)]
 pub struct FuncNode<'s> {
-    pub type_: Box<Function<'s>>,
+    pub ty: Box<Function<'s>>,
     pub body: Block<'s>,
 }
 

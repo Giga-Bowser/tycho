@@ -348,7 +348,7 @@ pub struct NoReturn<'s> {
 
 impl<'s> Snippetize<'s> for NoReturn<'s> {
     fn snippetize(&self, _source: &'s str) -> Diag {
-        let return_span = self.func_node.type_.returns.span;
+        let return_span = self.func_node.ty.returns.span;
 
         let mut annotations = Vec::new();
 

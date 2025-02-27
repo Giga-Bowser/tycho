@@ -120,7 +120,7 @@ impl<'s, 'pool> Transpiler<'s, 'pool> {
             method_decl.method_name.to_str(self.source)
         );
 
-        for (param_name, _) in &method_decl.func.type_.params {
+        for (param_name, _) in &method_decl.func.ty.params {
             self.result += ", ";
             self.result += param_name;
         }
@@ -238,7 +238,7 @@ impl<'s, 'pool> Transpiler<'s, 'pool> {
 
     fn transpile_func(&mut self, func_node: &FuncNode<'s>) {
         self.result += "function(";
-        let params = &func_node.type_.params;
+        let params = &func_node.ty.params;
 
         if !params.is_empty() {
             self.result += params[0].0;
@@ -256,7 +256,7 @@ impl<'s, 'pool> Transpiler<'s, 'pool> {
 
     fn transpile_local_func(&mut self, func_node: &FuncNode<'s>, name: &str) {
         format_to!(self.result, "local function {name}(");
-        let params = &func_node.type_.params;
+        let params = &func_node.ty.params;
 
         if !params.is_empty() {
             self.result += params[0].0;
@@ -293,7 +293,7 @@ impl<'s, 'pool> Transpiler<'s, 'pool> {
         if let Some(constructor) = &struct_decl.constructor {
             self.result += &newline;
             format_to!(self.result, "{name}.new = function(_self");
-            for (param_name, _) in &constructor.type_.params {
+            for (param_name, _) in &constructor.ty.params {
                 self.result.push_str(", ");
                 self.result += param_name;
             }
