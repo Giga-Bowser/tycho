@@ -238,14 +238,14 @@ mod parser {
 
 mod types {
     use super::*;
-    use crate::types::{Function, Type, TypeKind, User};
+    use crate::types::{Function, Struct, Type, TypeKind};
 
     impl DeepSize for Type<'_> {
         fn deep_size_of_children(&self) -> usize {
             match &self.kind {
                 TypeKind::Function(function) => function.deep_size_of_children(),
                 TypeKind::Table(_) => 0, // Rc<>
-                TypeKind::User(user) => user.deep_size_of_children(),
+                TypeKind::Struct(strukt) => strukt.deep_size_of_children(),
                 TypeKind::Multiple(vec) => vec.deep_size_of_children(),
                 TypeKind::Optional(opt) => opt.deep_size_of_children(),
                 _ => 0,
@@ -259,7 +259,7 @@ mod types {
         }
     }
 
-    impl DeepSize for User<'_> {
+    impl DeepSize for Struct<'_> {
         fn deep_size_of_children(&self) -> usize {
             self.fields.deep_size_of_children()
         }

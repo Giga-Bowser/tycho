@@ -202,7 +202,7 @@ impl<'s> TypeChecker<'_, 's> {
                 self.type_env.insert(
                     (*name).to_str(self.source),
                     self.type_pool.add(Type {
-                        kind: TypeKind::User(*ty.clone()),
+                        kind: TypeKind::Struct(*ty.clone()),
                         span: None,
                     }),
                 );
@@ -266,8 +266,8 @@ impl<'s> TypeChecker<'_, 's> {
             if let ast::Suffix::Access(ast::Access { field_name }) = last {
                 match &mut self.type_pool[ty].kind {
                     TypeKind::Table(_) => Ok(()),
-                    TypeKind::User(user) => {
-                        user.fields.push((field_name.to_str(self.source), decl.ty));
+                    TypeKind::Struct(strukt) => {
+                        strukt.fields.push((field_name.to_str(self.source), decl.ty));
                         Ok(())
                     }
                     _ => Err(Box::new(CheckErr::BadAccess {
@@ -287,7 +287,7 @@ impl<'s> TypeChecker<'_, 's> {
             .get(method_decl.struct_name.to_str(self.source))
             .unwrap();
 
-        let TypeKind::User(_) = self.type_pool[ty].kind else {
+        let TypeKind::Struct(_) = self.type_pool[ty].kind else {
             return Err(Box::new(CheckErr::MethodOnWrongType(MethodOnWrongType {
                 span: Span::cover(method_decl.struct_name, method_decl.method_name),
                 ty,
@@ -321,7 +321,7 @@ impl<'s> TypeChecker<'_, 's> {
                 .add(TypeKind::Function(*func.ty.clone()).into()))
         })?;
 
-        let TypeKind::User(User { fields, name: _ }) = &mut self.type_pool[self
+        let TypeKind::Struct(Struct { fields, name: _ }) = &mut self.type_pool[self
             .type_env
             .get(method_decl.struct_name.to_str(self.source))
             .unwrap()]
@@ -710,8 +710,8 @@ impl<'s> TypeChecker<'_, 's> {
                 }
             },
             ast::Suffix::Access(ast::Access { field_name }) => match self.type_pool[base].kind {
-                TypeKind::User(ref user) => {
-                    if let Some(field) = user.get_field(field_name.to_str(self.source)) {
+                TypeKind::Struct(ref strukt) => {
+                    if let Some(field) = strukt.get_field(field_name.to_str(self.source)) {
                         base = field;
                     } else {
                         return Err(Box::new(CheckErr::NoSuchField(NoSuchField {

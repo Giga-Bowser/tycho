@@ -16,7 +16,7 @@ use crate::{
     },
     types::{
         pool::{TypePool, TypeRef},
-        Function, TableType, Type, TypeKind, User,
+        Function, TableType, Type, TypeKind, Struct,
     },
 };
 
@@ -642,14 +642,14 @@ impl<'s> Parser<'s, '_> {
         if self.tokens[0].kind == RCurly {
             let end_str = self.tokens.pop_front().text.end;
 
-            let ty = Box::new(User {
+            let ty = Box::new(Struct {
                 fields,
                 name: name_str,
             });
             typelist.insert(
                 name_str.to_owned(),
                 Type {
-                    kind: TypeKind::User(*ty.clone()),
+                    kind: TypeKind::Struct(*ty.clone()),
                     span: Some(Span::new(start, end_str)),
                 },
             );
@@ -671,14 +671,14 @@ impl<'s> Parser<'s, '_> {
             fields.push(self.member(typelist)?);
         }
 
-        let ty = Box::new(User {
+        let ty = Box::new(Struct {
             fields,
             name: name_str,
         });
         typelist.insert(
             name_str.to_owned(),
             Type {
-                kind: TypeKind::User(*ty.clone()),
+                kind: TypeKind::Struct(*ty.clone()),
                 span: Some(Span::new(start, self.tokens[0].text.start)),
             },
         );

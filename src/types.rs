@@ -18,12 +18,12 @@ pub struct TableType<'s> {
 }
 
 #[derive(Debug, Clone)]
-pub struct User<'s> {
+pub struct Struct<'s> {
     pub name: &'s str,
     pub fields: Vec<(&'s str, TypeRef<'s>)>,
 }
 
-impl<'s> User<'s> {
+impl<'s> Struct<'s> {
     pub fn get_field(&self, key: &str) -> Option<TypeRef<'s>> {
         for field in &self.fields {
             if field.0 == key {
@@ -44,7 +44,7 @@ pub enum TypeKind<'s> {
     Boolean,
     Function(Function<'s>),
     Table(TableType<'s>),
-    User(User<'s>),
+    Struct(Struct<'s>),
     Adaptable,
     Variadic,
     Multiple(Vec<TypeRef<'s>>),
@@ -60,7 +60,7 @@ pub struct Type<'s> {
 impl<'s> TypeKind<'s> {
     pub fn get_field(&self, key: &str) -> Option<TypeRef<'s>> {
         match self {
-            Self::User(user) => user.get_field(key),
+            Self::Struct(strukt) => strukt.get_field(key),
             _ => None,
         }
     }
@@ -134,7 +134,7 @@ impl std::fmt::Display for PooledType<'_, '_> {
                 let val_type = val_type.pooled(self.pool);
                 write!(f, "[{key_type}]{val_type}",)
             }
-            TypeKind::User(user) => f.write_str(user.name),
+            TypeKind::Struct(strukt) => f.write_str(strukt.name),
             TypeKind::Adaptable => f.write_str("<adaptable>"),
             TypeKind::Variadic => f.write_str("..."),
             TypeKind::Multiple(items) => {

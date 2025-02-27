@@ -1,7 +1,7 @@
 use crate::{
     lexer::Span,
     parser::ExprRef,
-    types::{pool::TypeRef, Function, User},
+    types::{pool::TypeRef, Function, Struct},
 };
 
 #[derive(Debug, Clone)]
@@ -134,7 +134,7 @@ pub struct KeyValFor<'s> {
 #[derive(Debug, Clone)]
 pub struct StructDecl<'s> {
     pub name: Span<'s>,
-    pub ty: Box<User<'s>>,
+    pub ty: Box<Struct<'s>>,
     pub constructor: Option<FuncNode<'s>>,
 }
 
