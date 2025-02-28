@@ -5,7 +5,8 @@ use ariadne::{Color, ReportKind};
 use crate::{
     lexer::{Span, SpanToken, TokenKind},
     parser::{ast, pool::ExprPool},
-    types::pool::{TypePool, TypeRef},
+    typecheck::ctx::TypeContext,
+    typecheck::pool::TypeRef,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -56,8 +57,8 @@ pub struct Annotation {
 }
 
 pub struct DiagCtx<'a, 's> {
+    pub tcx: &'a TypeContext<'s>,
     pub expr_pool: &'a ExprPool<'s>,
-    pub type_pool: &'a TypePool<'s>,
     pub source: &'s str,
 }
 
@@ -210,7 +211,7 @@ impl<'s> Snippetize<'s> for CheckErr<'s> {
                     range: op_span.to_range(),
                     label: Some(format!(
                         "expected `number` for this operator, found `{}`",
-                        ty.pooled(ctx.type_pool)
+                        ty.pooled(&ctx.tcx.pool)
                     )),
                 }],
             },
@@ -222,14 +223,14 @@ impl<'s> Snippetize<'s> for CheckErr<'s> {
                     range: op_span.to_range(),
                     label: Some(format!(
                         "expected `boolean` for this operator, found `{}`",
-                        ty.pooled(ctx.type_pool)
+                        ty.pooled(&ctx.tcx.pool)
                     )),
                 }],
             },
             CheckErr::BadIndex { span, ty } => Diag {
                 title: format!(
                     "cannot index into value of type `{}`",
-                    ty.pooled(ctx.type_pool)
+                    ty.pooled(&ctx.tcx.pool)
                 ),
                 level: Level::Error,
                 annotations: vec![Annotation {
@@ -237,14 +238,14 @@ impl<'s> Snippetize<'s> for CheckErr<'s> {
                     range: span.to_range(),
                     label: Some(format!(
                         "cannot index into value of type `{}`",
-                        ty.pooled(ctx.type_pool)
+                        ty.pooled(&ctx.tcx.pool)
                     )),
                 }],
             },
             CheckErr::BadAccess { span, ty } => Diag {
                 title: format!(
                     "cannot perform access on value of type `{}`",
-                    ty.pooled(ctx.type_pool)
+                    ty.pooled(&ctx.tcx.pool)
                 ),
                 level: Level::Error,
                 annotations: vec![Annotation {
@@ -252,7 +253,7 @@ impl<'s> Snippetize<'s> for CheckErr<'s> {
                     range: span.to_range(),
                     label: Some(format!(
                         "cannot perform access on value of type `{}`",
-                        ty.pooled(ctx.type_pool)
+                        ty.pooled(&ctx.tcx.pool)
                     )),
                 }],
             },
@@ -268,8 +269,8 @@ pub struct MismatchedTypes<'s> {
 
 impl<'s> Snippetize<'s> for MismatchedTypes<'s> {
     fn snippetize(&self, ctx: &DiagCtx<'_, 's>) -> Diag {
-        let expected = &ctx.type_pool[self.expected];
-        let recieved = &ctx.type_pool[self.recieved];
+        let expected = &ctx.tcx.pool[self.expected];
+        let recieved = &ctx.tcx.pool[self.recieved];
         let expected_span = expected.span;
         let recieved_span = recieved.span;
 
@@ -289,8 +290,8 @@ impl<'s> Snippetize<'s> for MismatchedTypes<'s> {
                 range: recieved_str.to_range(),
                 label: Some(format!(
                     "expected `{}`, found `{}`",
-                    self.expected.pooled(ctx.type_pool),
-                    self.recieved.pooled(ctx.type_pool)
+                    self.expected.pooled(&ctx.tcx.pool),
+                    self.recieved.pooled(&ctx.tcx.pool)
                 )),
             });
         }
@@ -428,7 +429,7 @@ impl<'s> Snippetize<'s> for MethodOnWrongType<'s> {
         Diag {
             title: format!(
                 "tried to declare method on non-struct type `{}`",
-                self.ty.pooled(ctx.type_pool)
+                self.ty.pooled(&ctx.tcx.pool)
             ),
             level: Level::Error,
             annotations: vec![Annotation {

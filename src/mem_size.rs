@@ -1,6 +1,6 @@
 use rustc_hash::FxHashMap;
 
-use crate::{lexer::Span, parser::pool::ExprRef, types::pool::TypeRef};
+use crate::{lexer::Span, parser::pool::ExprRef, typecheck::pool::TypeRef};
 
 pub trait DeepSize {
     fn deep_size_of(&self) -> usize {
@@ -113,7 +113,7 @@ mod parser {
                 Statement::KeyValFor(key_val_for) => key_val_for.body.deep_size_of_children(),
                 Statement::StructDecl(struct_decl) => {
                     struct_decl.constructor.deep_size_of_children()
-                        + struct_decl.ty.deep_size_of_children()
+                        + struct_decl.members.deep_size_of_children()
                 }
                 Statement::Break => 0,
             }
@@ -164,6 +164,12 @@ mod parser {
     impl DeepSize for FuncNode<'_> {
         fn deep_size_of_children(&self) -> usize {
             self.body.deep_size_of_children() + self.ty.deep_size_of_children()
+        }
+    }
+
+    impl DeepSize for Member<'_> {
+        fn deep_size_of_children(&self) -> usize {
+            self.ty.deep_size_of_children()
         }
     }
 
@@ -234,45 +240,82 @@ mod parser {
             0
         }
     }
-}
 
-mod types {
-    use super::*;
-    use crate::types::{Function, Struct, Type, TypeKind};
-
-    impl DeepSize for Type<'_> {
+    impl DeepSize for TypeNode<'_> {
         fn deep_size_of_children(&self) -> usize {
-            match &self.kind {
-                TypeKind::Function(function) => function.deep_size_of_children(),
-                TypeKind::Table(_) => 0, // Rc<>
-                TypeKind::Struct(strukt) => strukt.deep_size_of_children(),
-                TypeKind::Multiple(vec) => vec.deep_size_of_children(),
-                TypeKind::Optional(opt) => opt.deep_size_of_children(),
-                _ => 0,
+            match self {
+                TypeNode::Name(_) | TypeNode::Nil(_) | TypeNode::VariadicType(_) => 0,
+                TypeNode::FunctionType(function_type) => function_type.deep_size_of_children(),
+                TypeNode::TableType(table_type) => {
+                    table_type.key_type.deep_size_of_children()
+                        + table_type.val_type.deep_size_of_children()
+                }
+                TypeNode::OptionalType(optional_type) => {
+                    optional_type.inner.deep_size_of_children()
+                }
             }
         }
     }
 
-    impl DeepSize for Function<'_> {
+    impl DeepSize for FunctionType<'_> {
         fn deep_size_of_children(&self) -> usize {
-            self.params.deep_size_of_children() + self.returns.deep_size_of_children()
+            self.params.deep_size_of_children()
         }
     }
 
-    impl DeepSize for Struct<'_> {
+    impl DeepSize for Param<'_> {
         fn deep_size_of_children(&self) -> usize {
-            self.fields.deep_size_of_children()
+            self.ty.deep_size_of_children()
         }
     }
 }
 
-mod type_env {
+mod typecheck {
     use super::*;
-    use crate::type_env::TypeEnv;
 
-    impl DeepSize for TypeEnv<'_> {
-        fn deep_size_of_children(&self) -> usize {
-            self.scopes().deep_size_of_children()
+    mod types {
+        use super::*;
+        use crate::typecheck::types::{Function, Struct, Type, TypeKind};
+
+        impl DeepSize for Type<'_> {
+            fn deep_size_of_children(&self) -> usize {
+                match &self.kind {
+                    TypeKind::Function(function) => function.deep_size_of_children(),
+                    TypeKind::Struct(strukt) => strukt.deep_size_of_children(),
+                    TypeKind::Multiple(vec) => vec.deep_size_of_children(),
+                    TypeKind::Optional(opt) => opt.deep_size_of_children(),
+                    _ => 0,
+                }
+            }
+        }
+
+        impl DeepSize for Function<'_> {
+            fn deep_size_of_children(&self) -> usize {
+                self.params.deep_size_of_children() + self.returns.deep_size_of_children()
+            }
+        }
+
+        impl DeepSize for Struct<'_> {
+            fn deep_size_of_children(&self) -> usize {
+                self.fields.deep_size_of_children()
+            }
+        }
+    }
+
+    mod type_env {
+        use super::*;
+        use crate::typecheck::type_env::{Resolved, TypeEnv};
+
+        impl DeepSize for TypeEnv<'_> {
+            fn deep_size_of_children(&self) -> usize {
+                self.scopes().deep_size_of_children()
+            }
+        }
+
+        impl DeepSize for Resolved<'_> {
+            fn deep_size_of_children(&self) -> usize {
+                0
+            }
         }
     }
 }

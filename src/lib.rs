@@ -11,9 +11,7 @@ pub mod lexer;
 pub mod luajit;
 pub mod parser;
 pub mod transpiler;
-pub mod type_env;
 pub mod typecheck;
-pub mod types;
 
 #[derive(StructOpt)]
 pub enum TychoOpt {

@@ -1,8 +1,6 @@
-pub mod pool;
-
 use crate::{
     lexer::Span,
-    types::pool::{TypePool, TypeRef},
+    typecheck::pool::{TypePool, TypeRef},
 };
 
 #[derive(Debug, Clone)]

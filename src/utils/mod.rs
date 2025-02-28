@@ -1,5 +1,7 @@
 use std::{fmt::Display, time::Duration};
 
+use crate::lexer::Span;
+
 #[macro_export]
 macro_rules! format_to {
     ($buf:expr) => ();
@@ -9,6 +11,10 @@ macro_rules! format_to {
             _ = $buf.write_fmt(format_args!($lit $($arg)*))
         }
     };
+}
+
+pub trait Spanned<'s> {
+    fn span(&self) -> Span<'s>;
 }
 
 pub fn duration_fmt(duration: Duration) -> String {

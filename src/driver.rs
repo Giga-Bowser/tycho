@@ -14,11 +14,9 @@ use crate::{
         compiler::LJCompiler,
     },
     mem_size::DeepSize,
-    parser::{ast, pool::ExprPool, Parser, TypeList},
+    parser::{ast, pool::ExprPool, Parser},
     transpiler::Transpiler,
-    type_env::TypeEnv,
-    typecheck::TypeChecker,
-    types::pool::TypePool,
+    typecheck::{ctx::TypeContext, TypeChecker},
     utils::{duration_fmt, ByteFmt},
     BuildOpt, PrintOpt,
 };
@@ -32,8 +30,7 @@ pub fn main(args: BuildOpt) {
 }
 
 fn build(args: &BuildOpt) {
-    let mut type_env = TypeEnv::default();
-    let mut type_pool = TypePool::new();
+    let mut tcx = TypeContext::default();
 
     let include_timer = Instant::now();
 
@@ -41,7 +38,7 @@ fn build(args: &BuildOpt) {
     let include_sources = define_sources(include_files);
 
     for (path, source) in &include_sources {
-        match add_defines(source, &mut type_env, &mut type_pool) {
+        match add_defines(source, &mut tcx) {
             Ok(()) => (),
             Err(diag) => panic!("{}", report_diag(diag, source, path)),
         }
@@ -51,11 +48,11 @@ fn build(args: &BuildOpt) {
         eprintln!("added includes: {}", duration_fmt(include_timer.elapsed()));
     }
 
-    let contents = std::fs::read_to_string(args.file.clone()).unwrap_or_else(|e| panic!("{e}"));
+    let source = std::fs::read_to_string(args.file.clone()).unwrap_or_else(|e| panic!("{e}"));
 
     let lex_timer = Instant::now();
 
-    let tokens = Lexer::lex_all_span(&contents);
+    let tokens = Lexer::lex_all_span(&source);
 
     if args.verbose {
         eprintln!("lexing done: {}", duration_fmt(lex_timer.elapsed()));
@@ -65,32 +62,18 @@ fn build(args: &BuildOpt) {
         );
     }
 
-    let mut typelist = TypeList::with_core();
-
     let parse_timer = Instant::now();
 
     let mut expr_pool = ExprPool::new();
-    let mut parser = Parser {
-        tokens,
-        expr_pool: &mut expr_pool,
-        type_pool: &mut type_pool,
-    };
+    let mut parser = Parser::new(tokens, &mut expr_pool);
 
     let mut stmts = Vec::new();
     while parser.tokens[0].kind != TokenKind::EndOfFile {
-        match parser.parse_statement(&mut typelist) {
+        match parser.parse_statement() {
             Ok(stmt) => stmts.push(stmt),
             Err(e) => panic!(
                 "{}",
-                report_err(
-                    *e,
-                    &DiagCtx {
-                        expr_pool: &expr_pool,
-                        type_pool: &type_pool,
-                        source: &contents
-                    },
-                    &args.file
-                )
+                report_err(*e, &parser.into_diag_ctx(&tcx), &args.file)
             ),
         }
     }
@@ -103,42 +86,29 @@ fn build(args: &BuildOpt) {
 
     let check_timer = Instant::now();
 
-    let mut typechecker = TypeChecker {
-        type_env: &mut type_env,
-        source: &contents,
-        expr_pool: &expr_pool,
-        type_pool: &mut type_pool,
-    };
+    let mut typechecker = TypeChecker::new(&mut tcx, &expr_pool, &source);
     for stmt in &stmts {
         match typechecker.check_statement(stmt) {
             Ok(()) => (),
             Err(e) => panic!(
                 "{}",
-                report_err(
-                    *e,
-                    &DiagCtx {
-                        expr_pool: &expr_pool,
-                        type_pool: &type_pool,
-                        source: &contents
-                    },
-                    &args.file
-                )
+                report_err(*e, &typechecker.into_diag_ctx(), &args.file)
             ),
         }
     }
 
     if args.verbose {
         eprintln!("checking done: {}", duration_fmt(check_timer.elapsed()));
-        eprintln!("type env memory: {}", ByteFmt(type_env.deep_size_of()));
-        eprintln!("type pool memory: {}", ByteFmt(type_pool.deep_size_of()));
+        eprintln!("type env memory: {}", ByteFmt(tcx.value_map.deep_size_of()));
+        eprintln!("type pool memory: {}", ByteFmt(tcx.pool.deep_size_of()));
     }
 
     let compile_timer = Instant::now();
 
     let result = if args.bc {
-        compile(&expr_pool, &stmts, &contents)
+        compile(&expr_pool, &stmts, &source)
     } else {
-        transpile(&expr_pool, &stmts, &contents)
+        transpile(&expr_pool, &stmts, &source)
     };
 
     if args.verbose {
@@ -154,30 +124,15 @@ fn build(args: &BuildOpt) {
 }
 
 pub fn print_main(args: &PrintOpt) {
-    let mut type_env = TypeEnv::default();
-    let mut type_pool = TypePool::new();
+    let mut tcx = TypeContext::default();
 
     let include_timer = Instant::now();
 
-    let mut include_files = args.includes.clone();
-    let mut include_sources = Vec::new();
+    let include_files = args.includes.clone();
+    let include_sources = define_sources(include_files);
 
-    while let Some(cur) = include_files.pop() {
-        if cur.is_dir() {
-            include_files.extend(
-                std::fs::read_dir(cur)
-                    .unwrap()
-                    .filter_map(|entry| entry.map(|it| it.path()).ok()),
-            );
-        } else {
-            let contents = std::fs::read_to_string(&cur)
-                .unwrap_or_else(|_| panic!("Sould have been able to read file {}", cur.display()));
-            include_sources.push((contents, cur));
-        }
-    }
-
-    for (source, path) in &include_sources {
-        match add_defines(source, &mut type_env, &mut type_pool) {
+    for (path, source) in &include_sources {
+        match add_defines(source, &mut tcx) {
             Ok(()) => (),
             Err(diag) => panic!("{}", report_diag(diag, source, path)),
         }
@@ -187,11 +142,11 @@ pub fn print_main(args: &PrintOpt) {
         eprintln!("added includes: {}", duration_fmt(include_timer.elapsed()));
     }
 
-    let contents = std::fs::read_to_string(args.file.clone()).unwrap_or_else(|e| panic!("{e}"));
+    let source = std::fs::read_to_string(args.file.clone()).unwrap_or_else(|e| panic!("{e}"));
 
     let lex_timer = Instant::now();
 
-    let tokens = Lexer::lex_all_span(&contents);
+    let tokens = Lexer::lex_all_span(&source);
 
     if args.verbose {
         eprintln!("lexing done: {}", duration_fmt(lex_timer.elapsed()));
@@ -201,32 +156,18 @@ pub fn print_main(args: &PrintOpt) {
         );
     }
 
-    let mut typelist = TypeList::with_core();
-
     let parse_timer = Instant::now();
 
     let mut expr_pool = ExprPool::new();
-    let mut parser = Parser {
-        tokens,
-        expr_pool: &mut expr_pool,
-        type_pool: &mut type_pool,
-    };
+    let mut parser = Parser::new(tokens, &mut expr_pool);
 
     let mut stmts = Vec::new();
     while parser.tokens[0].kind != TokenKind::EndOfFile {
-        match parser.parse_statement(&mut typelist) {
+        match parser.parse_statement() {
             Ok(stmt) => stmts.push(stmt),
             Err(e) => panic!(
                 "{}",
-                report_err(
-                    *e,
-                    &DiagCtx {
-                        expr_pool: &expr_pool,
-                        type_pool: &type_pool,
-                        source: &contents
-                    },
-                    &args.file
-                )
+                report_err(*e, &parser.into_diag_ctx(&tcx), &args.file)
             ),
         }
     }
@@ -239,38 +180,25 @@ pub fn print_main(args: &PrintOpt) {
 
     let check_timer = Instant::now();
 
-    let mut typechecker = TypeChecker {
-        type_env: &mut type_env,
-        source: &contents,
-        expr_pool: &expr_pool,
-        type_pool: &mut type_pool,
-    };
+    let mut typechecker = TypeChecker::new(&mut tcx, &expr_pool, &source);
     for stmt in &stmts {
         match typechecker.check_statement(stmt) {
             Ok(()) => (),
             Err(e) => panic!(
                 "{}",
-                report_err(
-                    *e,
-                    &DiagCtx {
-                        expr_pool: &expr_pool,
-                        type_pool: &type_pool,
-                        source: &contents
-                    },
-                    &args.file
-                )
+                report_err(*e, &typechecker.into_diag_ctx(), &args.file)
             ),
         }
     }
 
     if args.verbose {
         eprintln!("checking done: {}", duration_fmt(check_timer.elapsed()));
-        eprintln!("type env memory: {}", ByteFmt(type_env.deep_size_of()));
+        eprintln!("type env memory: {}", ByteFmt(tcx.value_map.deep_size_of()));
     }
 
     let compile_timer = Instant::now();
 
-    let mut compiler = LJCompiler::new(&expr_pool, &contents);
+    let mut compiler = LJCompiler::new(&expr_pool, &source);
     compiler.compile_chunk(&stmts);
     compiler.fs_finish();
 
@@ -306,54 +234,29 @@ fn compile<'pool>(
     dump_bc(&Header::default(), &compiler.protos)
 }
 
-pub fn add_defines<'s>(
-    source: &'s str,
-    type_env: &mut TypeEnv<'s>,
-    type_pool: &mut TypePool<'s>,
-) -> Result<(), Diag> {
+pub fn add_defines<'s>(source: &'s str, tcx: &mut TypeContext<'s>) -> Result<(), Diag> {
     let tokens = Lexer::lex_all_span(source);
 
-    let mut typelist = TypeList::with_core();
-
     let mut expr_pool = ExprPool::new();
-    let mut parser = Parser {
-        tokens,
-        expr_pool: &mut expr_pool,
-        type_pool,
-    };
+    let mut parser = Parser::new(tokens, &mut expr_pool);
 
     let mut stmts = Vec::new();
 
     while parser.tokens[0].kind != TokenKind::EndOfFile {
-        let stmt = match parser.parse_statement(&mut typelist) {
+        let stmt = match parser.parse_statement() {
             Ok(stmt) => stmt,
-            Err(e) => {
-                return Err(e.snippetize(&DiagCtx {
-                    expr_pool: &expr_pool,
-                    type_pool,
-                    source,
-                }))
-            }
+            Err(e) => return Err(e.snippetize(&parser.into_diag_ctx(tcx))),
         };
         stmts.push(stmt);
     }
 
-    let mut typechecker = TypeChecker {
-        type_env,
-        source,
-        expr_pool: &expr_pool,
-        type_pool,
-    };
+    let mut typechecker = TypeChecker::new(tcx, &expr_pool, source);
 
     for stmt in stmts {
         match typechecker.check_statement(&stmt) {
             Ok(()) => (),
             Err(e) => {
-                return Err(e.snippetize(&DiagCtx {
-                    expr_pool: &expr_pool,
-                    type_pool,
-                    source,
-                }))
+                return Err(e.snippetize(&typechecker.into_diag_ctx()));
             }
         }
     }

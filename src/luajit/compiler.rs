@@ -12,7 +12,6 @@ use crate::{
         ast::*,
         pool::{ExprPool, ExprRef},
     },
-    types::pool::TypeRef,
 };
 
 const LJ_FR2: bool = true;
@@ -873,7 +872,7 @@ impl<'s> LJCompiler<'s, '_> {
         e
     }
 
-    fn compile_params<const METHOD: bool>(&mut self, params: &[(&'s str, TypeRef<'s>)]) -> u8 {
+    fn compile_params<const METHOD: bool>(&mut self, params: &[Param<'s>]) -> u8 {
         let mut num_params = if METHOD {
             self.var_new(0, "self");
             1
@@ -881,8 +880,8 @@ impl<'s> LJCompiler<'s, '_> {
             0
         };
 
-        for (name, _) in params {
-            self.var_new(num_params, name);
+        for param in params {
+            self.var_new(num_params, param.name.to_str(self.source));
             num_params += 1;
         }
 
@@ -987,8 +986,8 @@ impl<'s> LJCompiler<'s, '_> {
             self.func_state.num_params = {
                 self.var_new(0, "_self");
                 let mut num_params = 1;
-                for (name, _) in &constructor.ty.params {
-                    self.var_new(num_params, name);
+                for param in &constructor.ty.params {
+                    self.var_new(num_params, param.name.to_str(self.source));
                     num_params += 1;
                 }
 

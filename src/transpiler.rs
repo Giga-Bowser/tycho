@@ -120,9 +120,9 @@ impl<'s, 'pool> Transpiler<'s, 'pool> {
             method_decl.method_name.to_str(self.source)
         );
 
-        for (param_name, _) in &method_decl.func.ty.params {
+        for param in &method_decl.func.ty.params {
             self.result += ", ";
-            self.result += param_name;
+            self.result += param.name.to_str(self.source);
         }
 
         self.result.push(')');
@@ -241,11 +241,11 @@ impl<'s, 'pool> Transpiler<'s, 'pool> {
         let params = &func_node.ty.params;
 
         if !params.is_empty() {
-            self.result += params[0].0;
+            self.result += params[0].name.to_str(self.source);
 
             for param in &params[1..] {
                 self.result += ", ";
-                self.result += param.0;
+                self.result += param.name.to_str(self.source);
             }
         }
 
@@ -259,11 +259,11 @@ impl<'s, 'pool> Transpiler<'s, 'pool> {
         let params = &func_node.ty.params;
 
         if !params.is_empty() {
-            self.result += params[0].0;
+            self.result += params[0].name.to_str(self.source);
 
             for param in &params[1..] {
                 self.result += ", ";
-                self.result += param.0;
+                self.result += param.name.to_str(self.source);
             }
         }
 
@@ -293,9 +293,9 @@ impl<'s, 'pool> Transpiler<'s, 'pool> {
         if let Some(constructor) = &struct_decl.constructor {
             self.result += &newline;
             format_to!(self.result, "{name}.new = function(_self");
-            for (param_name, _) in &constructor.ty.params {
+            for param in &constructor.ty.params {
                 self.result.push_str(", ");
-                self.result += param_name;
+                self.result += param.name.to_str(self.source);
             }
             format_to!(self.result, "){newline}\t");
             self.result += "local self = {}";

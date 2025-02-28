@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use crate::{
     mem_size::DeepSize,
-    types::{Type, TypeKind},
+    typecheck::types::{Type, TypeKind},
 };
 
 #[derive(Debug, Clone)]

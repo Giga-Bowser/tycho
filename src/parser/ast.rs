@@ -1,8 +1,4 @@
-use crate::{
-    lexer::Span,
-    parser::ExprRef,
-    types::{pool::TypeRef, Function, Struct},
-};
+use crate::{lexer::Span, parser::ExprRef, utils::Spanned};
 
 #[derive(Debug, Clone)]
 pub enum Statement<'s> {
@@ -25,7 +21,7 @@ pub enum Statement<'s> {
 #[derive(Debug, Clone)]
 pub struct Declare<'s> {
     pub lhs: Box<SuffixedName<'s>>,
-    pub ty: TypeRef<'s>,
+    pub ty: Option<Box<TypeNode<'s>>>,
     pub val: Option<ExprRef>,
 }
 
@@ -134,8 +130,14 @@ pub struct KeyValFor<'s> {
 #[derive(Debug, Clone)]
 pub struct StructDecl<'s> {
     pub name: Span<'s>,
-    pub ty: Box<Struct<'s>>,
-    pub constructor: Option<FuncNode<'s>>,
+    pub members: Vec<Member<'s>>,
+    pub constructor: Option<Box<FuncNode<'s>>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Member<'s> {
+    pub name: Span<'s>,
+    pub ty: TypeNode<'s>,
 }
 
 #[derive(Debug, Clone)]
@@ -180,7 +182,7 @@ pub enum SimpleExpr<'s> {
 
 #[derive(Debug, Clone)]
 pub struct FuncNode<'s> {
-    pub ty: Box<Function<'s>>,
+    pub ty: Box<FunctionType<'s>>,
     pub body: Block<'s>,
 }
 
@@ -231,6 +233,98 @@ pub struct Call {
 pub struct Method<'s> {
     pub method_name: Span<'s>,
     pub args: Vec<ExprRef>,
+}
+
+#[derive(Debug, Clone)]
+pub enum TypeNode<'s> {
+    Name(Span<'s>),
+    Nil(Span<'s>),
+    FunctionType(FunctionType<'s>),
+    TableType(TableType<'s>),
+    OptionalType(OptionalType<'s>),
+    VariadicType(Span<'s>),
+}
+
+#[derive(Debug, Clone)]
+pub struct FunctionType<'s> {
+    pub params: Vec<Param<'s>>,
+    pub header_span: Span<'s>, // from `func` to end of params
+    pub return_type: Option<Box<ReturnType<'s>>>,
+}
+
+impl<'s> FunctionType<'s> {
+    pub fn span(&self) -> Span<'s> {
+        self.return_type
+            .as_ref()
+            .map_or(self.header_span, |it| it.span())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum ReturnType<'s> {
+    Single(TypeNode<'s>),
+    Multiple(MultipleType<'s>),
+}
+
+impl<'s> ReturnType<'s> {
+    pub fn span(&self) -> Span<'s> {
+        match self {
+            ReturnType::Single(ty) => ty.span(),
+            ReturnType::Multiple(multiple_type) => multiple_type.span,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Param<'s> {
+    pub name: Span<'s>,
+    pub ty: TypeNode<'s>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TableType<'s> {
+    pub key_type: Option<Box<TypeNode<'s>>>,
+    pub key_span: Span<'s>, // covers both brackets
+    pub val_type: Box<TypeNode<'s>>,
+}
+
+impl<'s> Spanned<'s> for TableType<'s> {
+    fn span(&self) -> Span<'s> {
+        Span::cover(self.key_span, self.val_type.span())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct MultipleType<'s> {
+    pub types: Vec<TypeNode<'s>>,
+    pub span: Span<'s>,
+}
+
+#[derive(Debug, Clone)]
+pub struct OptionalType<'s> {
+    pub inner: Box<TypeNode<'s>>,
+    pub question: Span<'s>,
+}
+
+impl<'s> Spanned<'s> for OptionalType<'s> {
+    fn span(&self) -> Span<'s> {
+        Span::cover(self.inner.span(), self.question)
+    }
+}
+
+impl<'s> Spanned<'s> for TypeNode<'s> {
+    fn span(&self) -> Span<'s> {
+        match self {
+            TypeNode::Name(span) | TypeNode::Nil(span) | TypeNode::VariadicType(span) => *span,
+            TypeNode::FunctionType(function_type) => function_type.span(),
+            TypeNode::TableType(table_type) => {
+                Span::cover(table_type.key_span, table_type.val_type.span())
+            }
+            TypeNode::OptionalType(optional_type) => {
+                Span::cover(optional_type.inner.span(), optional_type.question)
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
