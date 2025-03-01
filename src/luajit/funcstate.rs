@@ -8,7 +8,7 @@ use crate::luajit::{
     ExprDesc, ExprKind, TValue, VarFlags, VarInfo,
 };
 
-pub type VarIdx = u16;
+pub(super) type VarIdx = u16;
 
 #[derive(Debug)]
 pub struct FuncState {

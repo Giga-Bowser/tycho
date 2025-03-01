@@ -1,18 +1,18 @@
 use crate::{lexer::Span, parser::ExprRef, utils::Spanned};
 
 #[derive(Debug, Clone)]
-pub enum Statement<'s> {
+pub enum Stmt<'s> {
     Declare(Declare<'s>),
     MultiDecl(MultiDecl<'s>),
     MethodDecl(MethodDecl<'s>),
     Assign(Assign<'s>),
     MultiAssign(MultiAssign<'s>),
-    ExprStat(SuffixedExpr<'s>),
+    ExprStmt(SuffixedExpr<'s>),
     Block(Block<'s>),
     Return(ReturnStmt<'s>),
     Break,
-    IfStat(IfStat<'s>),
-    WhileStat(WhileStat<'s>),
+    IfStmt(IfStmt<'s>),
+    WhileStmt(WhileStmt<'s>),
     RangeFor(RangeFor<'s>),
     KeyValFor(KeyValFor<'s>),
     StructDecl(StructDecl<'s>),
@@ -58,14 +58,14 @@ pub struct SuffixedName<'s> {
 
 #[derive(Debug, Clone)]
 pub struct Block<'s> {
-    pub stmts: Box<[Statement<'s>]>,
+    pub stmts: Box<[Stmt<'s>]>,
 }
 
 impl<'s> std::ops::Deref for Block<'s> {
-    type Target = [Statement<'s>];
+    type Target = [Stmt<'s>];
 
     #[inline]
-    fn deref(&self) -> &[Statement<'s>] {
+    fn deref(&self) -> &[Stmt<'s>] {
         self.stmts.as_ref()
     }
 }
@@ -79,8 +79,8 @@ pub struct ReturnStmt<'s> {
 }
 
 impl<'a, 's> IntoIterator for &'a Block<'s> {
-    type Item = &'a Statement<'s>;
-    type IntoIter = std::slice::Iter<'a, Statement<'s>>;
+    type Item = &'a Stmt<'s>;
+    type IntoIter = std::slice::Iter<'a, Stmt<'s>>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
@@ -88,7 +88,7 @@ impl<'a, 's> IntoIterator for &'a Block<'s> {
 }
 
 #[derive(Debug, Clone)]
-pub struct IfStat<'s> {
+pub struct IfStmt<'s> {
     pub condition: ExprRef,
     pub body: Block<'s>,
     pub else_: Option<Box<ElseBranch<'s>>>,
@@ -97,11 +97,11 @@ pub struct IfStat<'s> {
 #[derive(Debug, Clone)]
 pub enum ElseBranch<'s> {
     Else(Block<'s>),
-    ElseIf(IfStat<'s>),
+    ElseIf(IfStmt<'s>),
 }
 
 #[derive(Debug, Clone)]
-pub struct WhileStat<'s> {
+pub struct WhileStmt<'s> {
     pub condition: ExprRef,
     pub body: Block<'s>,
 }
@@ -400,8 +400,8 @@ pub enum UnOpKind {
     Not,
 }
 
-impl From<&UnOpKind> for &'static str {
-    fn from(val: &UnOpKind) -> Self {
+impl From<UnOpKind> for &'static str {
+    fn from(val: UnOpKind) -> Self {
         match val {
             UnOpKind::Neg => "-",
             UnOpKind::Len => "#",

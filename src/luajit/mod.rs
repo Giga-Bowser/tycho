@@ -1,14 +1,19 @@
-pub mod bytecode;
-pub mod compiler;
 mod funcstate;
 mod utils;
 
+pub mod bytecode;
+pub mod compiler;
+
 use bitflags::bitflags;
 
-use bytecode::{read_dump, BCPos, BCReg};
-use funcstate::VarIdx;
-
 use crate::cli;
+
+use self::{
+    bytecode::{read_dump, BCPos, BCReg},
+    funcstate::VarIdx,
+};
+
+
 
 pub fn read_main(args: &cli::Read) {
     let dump = std::fs::read(&args.file).unwrap();

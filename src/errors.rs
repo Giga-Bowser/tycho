@@ -5,8 +5,7 @@ use ariadne::{Color, ReportKind};
 use crate::{
     lexer::{Span, SpanToken, TokenKind},
     parser::{ast, pool::ExprPool},
-    typecheck::ctx::TypeContext,
-    typecheck::pool::TypeRef,
+    typecheck::{ctx::TypeContext, pool::TypeRef},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -62,7 +61,7 @@ pub struct DiagCtx<'a, 's> {
     pub source: &'s str,
 }
 
-pub trait Snippetize<'s> {
+pub(crate) trait Snippetize<'s> {
     fn snippetize(&self, ctx: &DiagCtx<'_, 's>) -> Diag;
 }
 
@@ -72,7 +71,7 @@ pub enum ParseError<'s> {
     EmptyError,
     NoSuchType(Span<'s>),
     UnexpectedToken(UnexpectedToken<'s>),
-    BadExprStat(ast::Expr<'s>),
+    BadExprStmt(ast::Expr<'s>),
 }
 
 #[derive(Debug)]
@@ -112,13 +111,13 @@ impl<'s> Snippetize<'s> for ParseError<'s> {
                 }
             }
             ParseError::UnexpectedToken(unexpected_token) => unexpected_token.snippetize(ctx),
-            ParseError::BadExprStat(expr) => {
+            ParseError::BadExprStmt(expr) => {
                 let mut annotations = Vec::new();
                 if let ast::Expr::Name(name) = &expr {
                     annotations.push(Annotation {
                         level: Level::Error,
                         range: name.to_range(),
-                        label: Some("expression statement here".to_owned()),
+                        label: Some("expression statements here".to_owned()),
                     });
                     let name_str = name.to_str(ctx.source);
                     if let "local" | "let" = name_str {
@@ -130,7 +129,7 @@ impl<'s> Snippetize<'s> for ParseError<'s> {
                     }
                 }
                 Diag {
-                    title: format!("bad expression statement: `{expr:?}`"),
+                    title: format!("bad expression statements: `{expr:?}`"),
                     level: Level::Error,
                     annotations,
                 }

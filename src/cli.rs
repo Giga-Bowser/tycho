@@ -13,12 +13,6 @@ pub enum CLI {
     Read(Read),
     Print(Print),
 }
-static VERBOSITY: AtomicBool = AtomicBool::new(false);
-
-#[inline]
-pub fn verbose() -> bool {
-    VERBOSITY.load(Ordering::Relaxed)
-}
 
 pub struct Build {
     pub file: PathBuf,
@@ -34,6 +28,13 @@ pub struct Read {
 pub struct Print {
     pub file: PathBuf,
     pub includes: Vec<PathBuf>,
+}
+
+static VERBOSITY: AtomicBool = AtomicBool::new(false);
+
+#[inline]
+pub fn verbose() -> bool {
+    VERBOSITY.load(Ordering::Relaxed)
 }
 
 const STYLES: Styles = Styles::styled()

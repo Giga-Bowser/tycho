@@ -1,7 +1,7 @@
-pub mod uleb128 {
+pub(super) mod uleb128 {
     use std::collections::VecDeque;
 
-    pub fn read_usize(vec: &mut VecDeque<u8>) -> usize {
+    pub(crate) fn read_usize(vec: &mut VecDeque<u8>) -> usize {
         let mut result = 0;
         let mut shift = 0;
 
@@ -18,7 +18,7 @@ pub mod uleb128 {
         }
     }
 
-    pub fn read_u32(vec: &mut VecDeque<u8>) -> u32 {
+    pub(crate) fn read_u32(vec: &mut VecDeque<u8>) -> u32 {
         let mut result = 0;
         let mut shift = 0;
 
@@ -35,7 +35,7 @@ pub mod uleb128 {
         }
     }
 
-    pub fn write_usize(vec: &mut Vec<u8>, mut val: usize) {
+    pub(crate) fn write_usize(vec: &mut Vec<u8>, mut val: usize) {
         loop {
             let mut byte = (val & 0x7F) as u8;
             val >>= 7;
@@ -50,7 +50,7 @@ pub mod uleb128 {
         }
     }
 
-    pub fn write_u32(vec: &mut Vec<u8>, mut val: u32) {
+    pub(crate) fn write_u32(vec: &mut Vec<u8>, mut val: u32) {
         loop {
             let mut byte = (val & 0x7F) as u8;
             val >>= 7;
@@ -66,7 +66,7 @@ pub mod uleb128 {
     }
 }
 
-pub mod unescape {
+pub(super) mod unescape {
     use std::borrow::Cow;
 
     fn to_digit_hex(c: char) -> u8 {
@@ -78,7 +78,7 @@ pub mod unescape {
         }
     }
 
-    pub fn unescape(string: &str) -> Cow<'_, str> {
+    pub(crate) fn unescape(string: &str) -> Cow<'_, str> {
         if !string.as_bytes().contains(&b'\\') {
             return Cow::Borrowed(string);
         }
@@ -160,8 +160,8 @@ pub mod unescape {
     }
 }
 
-pub mod numlit {
-    pub fn parse(s: &str) -> f64 {
+pub(super) mod numlit {
+    pub(crate) fn parse(s: &str) -> f64 {
         let b = s.as_bytes();
         if b.starts_with(b"0x") | b.starts_with(b"0X") {
             let (sig, exp) = parse_hex_inner(b);
@@ -262,26 +262,26 @@ pub mod numlit {
         (mantissa, exponent)
     }
 
+    const BITS: u32 = 64;
+    const SIG_BITS: u32 = f64::MANTISSA_DIGITS - 1;
+    const SIG_MASK: u64 = (1 << SIG_BITS) - 1;
+    const EXP_BITS: u32 = BITS - f64::MANTISSA_DIGITS;
+    const EXP_MASK: u32 = (1 << EXP_BITS) - 1;
+    const EXP_BIAS: u32 = EXP_MASK >> 1;
+
+    // Maximum and minimum values when biased
+    const EXP_MAX: i32 = f64::MAX_EXP - 1;
+    const EXP_MIN: i32 = f64::MIN_EXP - 1;
+
+    // Minimum and maximum positive normals with null significand (0x1p1023 for f64)
+    const F_EXP_MAX: f64 = f64_from_parts(EXP_BIAS << 1, 0);
+    const F_EXP_MIN: f64 = f64::MIN_POSITIVE;
+
+    // 2 ^ sig_total_bits, moltiplier to normalize subnormals (0x1p53 for f64)
+    const F_POW_SUBNORM: f64 = f64_from_parts(f64::MANTISSA_DIGITS + EXP_BIAS, 0);
+
     // stolen from rust libm
     fn scalbn(mantissa: u64, mut exponent: i32) -> f64 {
-        const BITS: u32 = 64;
-        const SIG_BITS: u32 = f64::MANTISSA_DIGITS - 1;
-        const SIG_MASK: u64 = (1 << SIG_BITS) - 1;
-        const EXP_BITS: u32 = BITS - f64::MANTISSA_DIGITS;
-        const EXP_MASK: u32 = (1 << EXP_BITS) - 1;
-        const EXP_BIAS: u32 = EXP_MASK >> 1;
-
-        // Maximum and minimum values when biased
-        const EXP_MAX: i32 = f64::MAX_EXP - 1;
-        const EXP_MIN: i32 = f64::MIN_EXP - 1;
-
-        // Minimum and maximum positive normals with null significand (0x1p1023 for f64)
-        const F_EXP_MAX: f64 = f64_from_parts(EXP_BIAS << 1, 0);
-        const F_EXP_MIN: f64 = f64::MIN_POSITIVE;
-
-        // 2 ^ sig_total_bits, moltiplier to normalize subnormals (0x1p53 for f64)
-        const F_POW_SUBNORM: f64 = f64_from_parts(f64::MANTISSA_DIGITS + EXP_BIAS, 0);
-
         let mut sig = mantissa as f64;
 
         /*
@@ -330,11 +330,11 @@ pub mod numlit {
         }
 
         let scale = f64_from_parts((EXP_BIAS as i32 + exponent) as u32, 0);
-        return sig * scale;
+        sig * scale
+    }
 
-        const fn f64_from_parts(exponent: u32, significand: u64) -> f64 {
-            f64::from_bits((((exponent & EXP_MASK) as u64) << SIG_BITS) | (significand & SIG_MASK))
-        }
+    const fn f64_from_parts(exponent: u32, significand: u64) -> f64 {
+        f64::from_bits((((exponent & EXP_MASK) as u64) << SIG_BITS) | (significand & SIG_MASK))
     }
 
     #[cfg(test)]

@@ -1,11 +1,6 @@
 pub mod ast;
 pub mod pool;
 
-use self::{
-    ast::*,
-    pool::{ExprPool, ExprRef},
-};
-
 use crate::{
     errors::{DiagCtx, ParseError, UnexpectedToken},
     lexer::{
@@ -13,6 +8,11 @@ use crate::{
         TokenKind::{self, *},
     },
     typecheck::ctx::TypeContext,
+};
+
+use self::{
+    ast::*,
+    pool::{ExprPool, ExprRef},
 };
 
 type PResult<'s, T> = Result<T, Box<ParseError<'s>>>;
@@ -37,35 +37,35 @@ impl<'a, 's> Parser<'a, 's> {
 }
 
 impl<'s> Parser<'_, 's> {
-    pub fn parse_statement(&mut self) -> PResult<'s, Statement<'s>> {
+    pub fn parse_stmt(&mut self) -> PResult<'s, Stmt<'s>> {
         match self.tokens[0].kind {
             Name => {
                 if self.tokens[1].kind == Colon
                     && self.tokens[2].kind == Name
                     && self.tokens[3].kind == Colon
                 {
-                    Ok(Statement::MethodDecl(self.parse_method_decl()?))
+                    Ok(Stmt::MethodDecl(self.parse_method_decl()?))
                 } else {
-                    self.parse_expr_stat()
+                    self.parse_expr_stmt()
                 }
             }
-            If => Ok(Statement::IfStat(self.if_stat()?)),
-            While => Ok(Statement::WhileStat(self.while_stat()?)),
-            For => self.for_stat(),
+            If => Ok(Stmt::IfStmt(self.if_stmt()?)),
+            While => Ok(Stmt::WhileStmt(self.while_stmt()?)),
+            For => self.for_stmt(),
             Return => {
                 let kw_span = self.tokens.pop_front().text;
-                Ok(Statement::Return(ReturnStmt {
+                Ok(Stmt::Return(ReturnStmt {
                     vals: self.parse_expr_list()?,
                     kw_span,
                 }))
             }
             Break => {
                 self.tokens.pop_front();
-                Ok(Statement::Break)
+                Ok(Stmt::Break)
             }
-            Struct => Ok(Statement::StructDecl(self.parse_struct_decl()?)),
-            LCurly => Ok(Statement::Block(self.parse_block()?)),
-            _ => self.parse_expr_stat(),
+            Struct => Ok(Stmt::StructDecl(self.parse_struct_decl()?)),
+            LCurly => Ok(Stmt::Block(self.parse_block()?)),
+            _ => self.parse_expr_stmt(),
         }
     }
 
@@ -75,7 +75,7 @@ impl<'s> Parser<'_, 's> {
 
         let mut stmts = Vec::new();
         while self.tokens[0].kind != RCurly {
-            stmts.push(self.parse_statement()?);
+            stmts.push(self.parse_stmt()?);
         }
 
         self.tokens.pop_front(); // `}`
@@ -149,14 +149,14 @@ impl<'s> Parser<'_, 's> {
         })
     }
 
-    fn if_stat(&mut self) -> PResult<'s, IfStat<'s>> {
+    fn if_stmt(&mut self) -> PResult<'s, IfStmt<'s>> {
         self.tokens.pop_front(); // pop 'if'
 
         let condition = self.parse_expr()?;
         let body = self.parse_block()?;
 
         if self.tokens[0].kind != Else {
-            return Ok(IfStat {
+            return Ok(IfStmt {
                 condition,
                 body,
                 else_: None,
@@ -166,9 +166,9 @@ impl<'s> Parser<'_, 's> {
         self.tokens.pop_front(); // pop 'else'
 
         if self.tokens[0].kind == If {
-            let else_ = Some(Box::new(ElseBranch::ElseIf(self.if_stat()?)));
+            let else_ = Some(Box::new(ElseBranch::ElseIf(self.if_stmt()?)));
 
-            return Ok(IfStat {
+            return Ok(IfStmt {
                 condition,
                 body,
                 else_,
@@ -178,23 +178,23 @@ impl<'s> Parser<'_, 's> {
         let else_body = self.parse_block()?;
         let else_ = Some(Box::new(ElseBranch::Else(else_body)));
 
-        Ok(IfStat {
+        Ok(IfStmt {
             condition,
             body,
             else_,
         })
     }
 
-    fn while_stat(&mut self) -> PResult<'s, WhileStat<'s>> {
+    fn while_stmt(&mut self) -> PResult<'s, WhileStmt<'s>> {
         self.tokens.pop_front(); // pop 'while'
 
         let condition = self.parse_expr()?;
         let body = self.parse_block()?;
 
-        Ok(WhileStat { condition, body })
+        Ok(WhileStmt { condition, body })
     }
 
-    fn for_stat(&mut self) -> PResult<'s, Statement<'s>> {
+    fn for_stmt(&mut self) -> PResult<'s, Stmt<'s>> {
         self.tokens.pop_front(); // pop 'for'
 
         let first_name = self.tokens.pop_name()?;
@@ -214,7 +214,7 @@ impl<'s> Parser<'_, 's> {
 
                 let body = self.parse_block()?;
 
-                Ok(Statement::KeyValFor(KeyValFor { names, iter, body }))
+                Ok(Stmt::KeyValFor(KeyValFor { names, iter, body }))
             }
             In => {
                 self.tokens.pop_front();
@@ -227,7 +227,7 @@ impl<'s> Parser<'_, 's> {
 
                 let body = self.parse_block()?;
 
-                Ok(Statement::RangeFor(RangeFor {
+                Ok(Stmt::RangeFor(RangeFor {
                     var: first_name,
                     range: Box::new(RangeExpr { lhs, rhs }),
                     body,
@@ -240,19 +240,19 @@ impl<'s> Parser<'_, 's> {
         }
     }
 
-    fn parse_expr_stat(&mut self) -> PResult<'s, Statement<'s>> {
+    fn parse_expr_stmt(&mut self) -> PResult<'s, Stmt<'s>> {
         let sufexpr = self.parse_suffixed_expr()?;
 
         if let Expr::Name(name) = self.expr_pool[sufexpr.val] {
             if self.tokens[0].kind == Colon {
-                return Ok(Statement::Declare(self.parse_decl(SuffixedName {
+                return Ok(Stmt::Declare(self.parse_decl(SuffixedName {
                     name,
                     suffixes: sufexpr.suffixes,
                 })?));
             }
 
             if self.tokens[0].kind == Equal {
-                return Ok(Statement::Assign(self.parse_assignment(SuffixedName {
+                return Ok(Stmt::Assign(self.parse_assignment(SuffixedName {
                     name,
                     suffixes: sufexpr.suffixes,
                 })?));
@@ -260,11 +260,11 @@ impl<'s> Parser<'_, 's> {
 
             if self.tokens[0].kind != Comma {
                 if sufexpr.suffixes.is_empty() {
-                    return Err(Box::new(ParseError::BadExprStat(
+                    return Err(Box::new(ParseError::BadExprStmt(
                         self.expr_pool[sufexpr.val].clone(),
                     )));
                 }
-                return Ok(Statement::ExprStat(sufexpr));
+                return Ok(Stmt::ExprStmt(sufexpr));
             }
 
             let mut lhs_arr = vec![sufexpr];
@@ -299,7 +299,7 @@ impl<'s> Parser<'_, 's> {
                         }
                     }
 
-                    Ok(Statement::MultiDecl(MultiDecl {
+                    Ok(Stmt::MultiDecl(MultiDecl {
                         lhs_arr: new_lhs_arr,
                         rhs_arr,
                     }))
@@ -308,7 +308,7 @@ impl<'s> Parser<'_, 's> {
                     self.tokens.pop_front();
                     let rhs_arr = self.parse_expr_list()?;
 
-                    Ok(Statement::MultiAssign(MultiAssign { lhs_arr, rhs_arr }))
+                    Ok(Stmt::MultiAssign(MultiAssign { lhs_arr, rhs_arr }))
                 }
                 _ => Err(Box::new(ParseError::UnexpectedToken(UnexpectedToken {
                     token: self.tokens[0].clone(),
@@ -318,12 +318,12 @@ impl<'s> Parser<'_, 's> {
         }
 
         if sufexpr.suffixes.is_empty() {
-            return Err(Box::new(ParseError::BadExprStat(
+            return Err(Box::new(ParseError::BadExprStmt(
                 self.expr_pool[sufexpr.val].clone(),
             )));
         }
 
-        Ok(Statement::ExprStat(sufexpr))
+        Ok(Stmt::ExprStmt(sufexpr))
     }
 
     fn parse_suffixed_expr(&mut self) -> PResult<'s, SuffixedExpr<'s>> {

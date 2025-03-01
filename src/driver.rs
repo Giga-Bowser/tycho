@@ -69,7 +69,7 @@ fn build(args: &cli::Build) {
 
     let mut stmts = Vec::new();
     while parser.tokens[0].kind != TokenKind::EndOfFile {
-        match parser.parse_statement() {
+        match parser.parse_stmt() {
             Ok(stmt) => stmts.push(stmt),
             Err(e) => panic!(
                 "{}",
@@ -88,7 +88,7 @@ fn build(args: &cli::Build) {
 
     let mut typechecker = TypeChecker::new(&mut tcx, &expr_pool, &source);
     for stmt in &stmts {
-        match typechecker.check_statement(stmt) {
+        match typechecker.check_stmt(stmt) {
             Ok(()) => (),
             Err(e) => panic!(
                 "{}",
@@ -163,7 +163,7 @@ pub fn print_main(args: &cli::Print) {
 
     let mut stmts = Vec::new();
     while parser.tokens[0].kind != TokenKind::EndOfFile {
-        match parser.parse_statement() {
+        match parser.parse_stmt() {
             Ok(stmt) => stmts.push(stmt),
             Err(e) => panic!(
                 "{}",
@@ -182,7 +182,7 @@ pub fn print_main(args: &cli::Print) {
 
     let mut typechecker = TypeChecker::new(&mut tcx, &expr_pool, &source);
     for stmt in &stmts {
-        match typechecker.check_statement(stmt) {
+        match typechecker.check_stmt(stmt) {
             Ok(()) => (),
             Err(e) => panic!(
                 "{}",
@@ -211,22 +211,18 @@ pub fn print_main(args: &cli::Print) {
 
 fn transpile<'pool>(
     pool: &'pool ExprPool<'pool>,
-    stmts: &[ast::Statement<'_>],
+    stmts: &[ast::Stmt<'_>],
     source: &str,
 ) -> Vec<u8> {
     let mut compiler = Transpiler::new(pool, source);
     for stmt in stmts {
-        compiler.transpile_statement(stmt);
+        compiler.transpile_stmt(stmt);
         compiler.result.push('\n');
     }
     compiler.result.into_bytes()
 }
 
-fn compile<'pool>(
-    pool: &'pool ExprPool<'pool>,
-    stmts: &[ast::Statement<'_>],
-    source: &str,
-) -> Vec<u8> {
+fn compile<'pool>(pool: &'pool ExprPool<'pool>, stmts: &[ast::Stmt<'_>], source: &str) -> Vec<u8> {
     let mut compiler = LJCompiler::new(pool, source);
     compiler.compile_chunk(stmts);
 
@@ -243,7 +239,7 @@ pub fn add_defines<'s>(source: &'s str, tcx: &mut TypeContext<'s>) -> Result<(),
     let mut stmts = Vec::new();
 
     while parser.tokens[0].kind != TokenKind::EndOfFile {
-        let stmt = match parser.parse_statement() {
+        let stmt = match parser.parse_stmt() {
             Ok(stmt) => stmt,
             Err(e) => return Err(e.snippetize(&parser.into_diag_ctx(tcx))),
         };
@@ -253,7 +249,7 @@ pub fn add_defines<'s>(source: &'s str, tcx: &mut TypeContext<'s>) -> Result<(),
     let mut typechecker = TypeChecker::new(tcx, &expr_pool, source);
 
     for stmt in stmts {
-        match typechecker.check_statement(&stmt) {
+        match typechecker.check_stmt(&stmt) {
             Ok(()) => (),
             Err(e) => {
                 return Err(e.snippetize(&typechecker.into_diag_ctx()));

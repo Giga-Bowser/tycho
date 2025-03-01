@@ -5,6 +5,7 @@ use std::{
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use mimalloc::MiMalloc;
+
 use tycho::{
     driver::{add_defines, define_sources},
     lexer::{Lexer, TokenKind},
@@ -46,12 +47,12 @@ fn benchmark_parser(c: &mut Criterion) {
             for _ in 0..iters {
                 *parser.expr_pool = ExprPool::new();
                 parser.tokens = tokens.clone();
-                let mut statements = Vec::new();
+                let mut stmts = Vec::new();
                 let start = Instant::now();
                 while parser.tokens[0].kind != TokenKind::EndOfFile {
-                    statements.push(parser.parse_statement().unwrap());
+                    stmts.push(parser.parse_stmt().unwrap());
                 }
-                black_box(statements);
+                black_box(stmts);
                 elapsed += start.elapsed();
             }
 
@@ -77,10 +78,10 @@ fn benchmark_typechecker(c: &mut Criterion) {
     let mut expr_pool = ExprPool::new();
     let mut parser = Parser::new(tokens, &mut expr_pool);
 
-    let mut statements = Vec::new();
+    let mut stmts = Vec::new();
 
     while parser.tokens[0].kind != TokenKind::EndOfFile {
-        statements.push(parser.parse_statement().unwrap());
+        stmts.push(parser.parse_stmt().unwrap());
     }
 
     c.bench_function("typecheck", |b| {
@@ -92,8 +93,8 @@ fn benchmark_typechecker(c: &mut Criterion) {
                 let mut typechecker = TypeChecker::new(&mut tcx, &expr_pool, &contents);
 
                 let start = Instant::now();
-                for stmt in &statements {
-                    match typechecker.check_statement(black_box(stmt)) {
+                for stmt in &stmts {
+                    match typechecker.check_stmt(black_box(stmt)) {
                         Ok(()) => (),
                         Err(_) => {
                             panic!()
@@ -114,10 +115,10 @@ fn benchmark_compiler(c: &mut Criterion) {
     let mut expr_pool = ExprPool::new();
     let mut parser = Parser::new(tokens, &mut expr_pool);
 
-    let mut statements = Vec::new();
+    let mut stmts = Vec::new();
 
     while parser.tokens[0].kind != TokenKind::EndOfFile {
-        statements.push(parser.parse_statement().unwrap());
+        stmts.push(parser.parse_stmt().unwrap());
     }
 
     c.bench_function("compile", |b| {
@@ -126,7 +127,7 @@ fn benchmark_compiler(c: &mut Criterion) {
             for _i in 0..iters {
                 let mut compiler = LJCompiler::new(&expr_pool, &contents);
                 let start = Instant::now();
-                compiler.compile_chunk(&statements);
+                compiler.compile_chunk(&stmts);
                 compiler.fs_finish();
                 black_box(dump_bc(&Header::default(), &compiler.protos));
                 elapsed += start.elapsed();
@@ -143,10 +144,10 @@ fn benchmark_transpiler(c: &mut Criterion) {
     let mut expr_pool = ExprPool::new();
     let mut parser = Parser::new(tokens, &mut expr_pool);
 
-    let mut statements = Vec::new();
+    let mut stmts = Vec::new();
 
     while parser.tokens[0].kind != TokenKind::EndOfFile {
-        statements.push(parser.parse_statement().unwrap());
+        stmts.push(parser.parse_stmt().unwrap());
     }
 
     c.bench_function("transpile", |b| {
@@ -155,8 +156,8 @@ fn benchmark_transpiler(c: &mut Criterion) {
             for _i in 0..iters {
                 let mut compiler = Transpiler::new(&expr_pool, &contents);
                 let start = Instant::now();
-                for stmt in &statements {
-                    compiler.transpile_statement(black_box(stmt));
+                for stmt in &stmts {
+                    compiler.transpile_stmt(black_box(stmt));
                 }
                 elapsed += start.elapsed();
                 black_box(compiler.result);
@@ -192,17 +193,17 @@ fn benchmark_all_compile(c: &mut Criterion) {
                 let mut expr_pool = ExprPool::new();
                 let mut parser = Parser::new(tokens, &mut expr_pool);
 
-                let mut statements = Vec::new();
+                let mut stmts = Vec::new();
 
                 while parser.tokens[0].kind != TokenKind::EndOfFile {
-                    statements.push(parser.parse_statement().unwrap());
+                    stmts.push(parser.parse_stmt().unwrap());
                 }
 
                 let mut typechecker = TypeChecker::new(&mut tcx, &expr_pool, source);
                 let mut compiler = LJCompiler::new(&expr_pool, source);
-                for stmt in &statements {
-                    typechecker.check_statement(stmt).unwrap();
-                    compiler.compile_statement(black_box(stmt));
+                for stmt in &stmts {
+                    typechecker.check_stmt(stmt).unwrap();
+                    compiler.compile_stmt(black_box(stmt));
                     compiler.func_state.free_reg = compiler.func_state.nactvar;
                 }
 
@@ -240,17 +241,17 @@ fn benchmark_all_transpile(c: &mut Criterion) {
                 let mut expr_pool = ExprPool::new();
                 let mut parser = Parser::new(tokens, &mut expr_pool);
 
-                let mut statements = Vec::new();
+                let mut stmts = Vec::new();
 
                 while parser.tokens[0].kind != TokenKind::EndOfFile {
-                    statements.push(parser.parse_statement().unwrap());
+                    stmts.push(parser.parse_stmt().unwrap());
                 }
 
                 let mut typechecker = TypeChecker::new(&mut tcx, &expr_pool, source);
                 let mut transpiler = Transpiler::new(&expr_pool, source);
-                for stmt in &statements {
-                    typechecker.check_statement(stmt).unwrap();
-                    transpiler.transpile_statement(black_box(stmt));
+                for stmt in &stmts {
+                    typechecker.check_stmt(stmt).unwrap();
+                    transpiler.transpile_stmt(black_box(stmt));
                 }
 
                 elapsed += start.elapsed();

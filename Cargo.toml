@@ -36,7 +36,7 @@ explicit_outlives_requirements = "warn"
 unsafe_op_in_unsafe_fn = "warn"
 unused_extern_crates = "warn"
 unused_lifetimes = "warn"
-# unreachable_pub = "warn"
+unreachable_pub = "warn"
 
 [lints.clippy]
 ## lint groups

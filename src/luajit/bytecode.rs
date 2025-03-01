@@ -41,7 +41,7 @@ pub fn dump_bc(header: &Header, protos: &[Proto]) -> Vec<u8> {
 }
 
 pub fn read_dump(vec: &[u8]) -> (Header, Vec<Proto>) {
-    let mut vec = VecDeque::from_iter(vec.iter().copied());
+    let mut vec: VecDeque<u8> = vec.iter().copied().collect();
     let magic = vec.drain(..3);
     assert!(
         magic.into_iter().eq(BC_MAGIC.into_iter()),

@@ -13,13 +13,14 @@ use crate::{
         ast,
         pool::{ExprPool, ExprRef},
     },
-    typecheck::{
-        ctx::TypeContext,
-        pool::TypeRef,
-        type_env::Resolved,
-        types::{Function, Struct, TableType, Type, TypeKind},
-    },
     utils::Spanned,
+};
+
+use self::{
+    ctx::TypeContext,
+    pool::TypeRef,
+    type_env::Resolved,
+    types::{Function, Struct, TableType, Type, TypeKind},
 };
 
 type TResult<'s, T> = Result<T, Box<CheckErr<'s>>>;
@@ -190,16 +191,16 @@ impl<'s> TypeChecker<'_, 's> {
 }
 
 impl<'s> TypeChecker<'_, 's> {
-    pub fn check_statement(&mut self, stmt: &ast::Statement<'s>) -> TResult<'s, ()> {
+    pub fn check_stmt(&mut self, stmt: &ast::Stmt<'s>) -> TResult<'s, ()> {
         match stmt {
-            ast::Statement::Declare(decl) => self.check_decl(decl),
-            ast::Statement::MethodDecl(method_decl) => self.check_method_decl(method_decl),
-            ast::Statement::MultiDecl(multi_decl) => self.check_multi_decl(multi_decl),
-            ast::Statement::IfStat(if_stat) => self.check_if_stat(if_stat),
-            ast::Statement::WhileStat(while_stat) => self.check_while_stat(while_stat),
-            ast::Statement::RangeFor(range_for) => self.check_range_for(range_for),
-            ast::Statement::KeyValFor(keyval_for) => self.check_keyval_for(keyval_for),
-            ast::Statement::Assign(ast::Assign { lhs, rhs }) => {
+            ast::Stmt::Declare(decl) => self.check_decl(decl),
+            ast::Stmt::MethodDecl(method_decl) => self.check_method_decl(method_decl),
+            ast::Stmt::MultiDecl(multi_decl) => self.check_multi_decl(multi_decl),
+            ast::Stmt::IfStmt(if_stmt) => self.check_if_stmt(if_stmt),
+            ast::Stmt::WhileStmt(while_stmt) => self.check_while_stmt(while_stmt),
+            ast::Stmt::RangeFor(range_for) => self.check_range_for(range_for),
+            ast::Stmt::KeyValFor(keyval_for) => self.check_keyval_for(keyval_for),
+            ast::Stmt::Assign(ast::Assign { lhs, rhs }) => {
                 let lhs_type = self.check_suffixed_name(lhs)?;
                 let rhs_type = self.check_expr(*rhs)?;
                 if self.can_equal(lhs_type, rhs_type) {
@@ -211,18 +212,16 @@ impl<'s> TypeChecker<'_, 's> {
                     })))
                 }
             }
-            ast::Statement::MultiAssign(multi_assign) => self.check_multi_assign(multi_assign),
+            ast::Stmt::MultiAssign(multi_assign) => self.check_multi_assign(multi_assign),
             // TODO: investigate if making a more expression-statement specific checking function is worth it
-            ast::Statement::ExprStat(suffixed_expr) => {
-                self.check_suffixed_expr(suffixed_expr).map(drop)
-            }
-            ast::Statement::Block(block) => self.with_scope(|this| {
+            ast::Stmt::ExprStmt(suffixed_expr) => self.check_suffixed_expr(suffixed_expr).map(drop),
+            ast::Stmt::Block(block) => self.with_scope(|this| {
                 for stmt in block {
-                    this.check_statement(stmt)?;
+                    this.check_stmt(stmt)?;
                 }
                 Ok(())
             }),
-            ast::Statement::StructDecl(struct_decl) => self.check_struct_decl(struct_decl),
+            ast::Stmt::StructDecl(struct_decl) => self.check_struct_decl(struct_decl),
             _ => Ok(()),
         }
     }
@@ -606,35 +605,35 @@ impl<'s> TypeChecker<'_, 's> {
 
     fn check_func_body(
         &mut self,
-        body: &[ast::Statement<'s>],
+        body: &[ast::Stmt<'s>],
         return_type: TypeRef<'s>,
     ) -> TResult<'s, bool> {
         self.with_scope(|this| {
             for stmt in body {
                 match stmt {
-                    ast::Statement::IfStat(ast::IfStat { body: if_body, .. }) => {
+                    ast::Stmt::IfStmt(ast::IfStmt { body: if_body, .. }) => {
                         if this.check_func_body(if_body, return_type)? {
                             return Ok(true);
                         }
                     }
-                    ast::Statement::WhileStat(ast::WhileStat {
+                    ast::Stmt::WhileStmt(ast::WhileStmt {
                         body: while_body, ..
                     }) => {
                         if this.check_func_body(while_body, return_type)? {
                             return Ok(true);
                         }
                     }
-                    ast::Statement::RangeFor(ast::RangeFor { body, .. }) => {
+                    ast::Stmt::RangeFor(ast::RangeFor { body, .. }) => {
                         if this.check_func_body(body, return_type)? {
                             return Ok(true);
                         }
                     }
-                    ast::Statement::KeyValFor(ast::KeyValFor { body, .. }) => {
+                    ast::Stmt::KeyValFor(ast::KeyValFor { body, .. }) => {
                         if this.check_func_body(body, return_type)? {
                             return Ok(true);
                         }
                     }
-                    ast::Statement::Return(node @ ast::ReturnStmt { vals, .. }) => {
+                    ast::Stmt::Return(node @ ast::ReturnStmt { vals, .. }) => {
                         if vals.is_empty() {
                             return match &this.tcx.pool[return_type].kind {
                                 TypeKind::Nil | TypeKind::Variadic => Ok(true),
@@ -701,7 +700,7 @@ impl<'s> TypeChecker<'_, 's> {
                     }
                     _ => (),
                 }
-                this.check_statement(stmt)?;
+                this.check_stmt(stmt)?;
             }
 
             Ok(false)
@@ -921,8 +920,8 @@ impl<'s> TypeChecker<'_, 's> {
         }
     }
 
-    fn check_if_stat(&mut self, if_stat: &ast::IfStat<'s>) -> TResult<'s, ()> {
-        let condition_type = self.check_expr(if_stat.condition)?;
+    fn check_if_stmt(&mut self, if_stmt: &ast::IfStmt<'s>) -> TResult<'s, ()> {
+        let condition_type = self.check_expr(if_stmt.condition)?;
         if !self.can_equal_primitive(condition_type, &TypeKind::Boolean) {
             return Err(Box::new(CheckErr::MismatchedTypes(MismatchedTypes {
                 expected: self.tcx.pool.boolean(),
@@ -931,30 +930,30 @@ impl<'s> TypeChecker<'_, 's> {
         }
 
         self.with_scope::<TResult<'s, ()>>(|this| {
-            for stmt in &if_stat.body {
-                this.check_statement(stmt)?;
+            for stmt in &if_stmt.body {
+                this.check_stmt(stmt)?;
             }
 
             Ok(())
         })?;
 
-        match &if_stat.else_ {
+        match &if_stmt.else_ {
             Some(else_) => match else_.as_ref() {
                 ast::ElseBranch::Else(body) => self.with_scope(|this| {
                     for stmt in body {
-                        this.check_statement(stmt)?;
+                        this.check_stmt(stmt)?;
                     }
 
                     Ok(())
                 }),
-                ast::ElseBranch::ElseIf(else_if_stat) => self.check_if_stat(else_if_stat),
+                ast::ElseBranch::ElseIf(else_if_stmt) => self.check_if_stmt(else_if_stmt),
             },
             None => Ok(()),
         }
     }
 
-    fn check_while_stat(&mut self, while_stat: &ast::WhileStat<'s>) -> TResult<'s, ()> {
-        let condition_type = self.check_expr(while_stat.condition)?;
+    fn check_while_stmt(&mut self, while_stmt: &ast::WhileStmt<'s>) -> TResult<'s, ()> {
+        let condition_type = self.check_expr(while_stmt.condition)?;
         if !self.can_equal_primitive(condition_type, &TypeKind::Boolean) {
             return Err(Box::new(CheckErr::MismatchedTypes(MismatchedTypes {
                 expected: self.tcx.pool.boolean(),
@@ -963,8 +962,8 @@ impl<'s> TypeChecker<'_, 's> {
         }
 
         self.with_scope(|this| {
-            for stmt in &while_stat.body {
-                this.check_statement(stmt)?;
+            for stmt in &while_stmt.body {
+                this.check_stmt(stmt)?;
             }
 
             Ok(())
@@ -996,7 +995,7 @@ impl<'s> TypeChecker<'_, 's> {
                 .insert_value(range_for.var.to_str(this.source), this.tcx.pool.number());
 
             for stmt in &range_for.body {
-                this.check_statement(stmt)?;
+                this.check_stmt(stmt)?;
             }
 
             Ok(())
@@ -1032,7 +1031,7 @@ impl<'s> TypeChecker<'_, 's> {
                 this.tcx.value_map.insert_value(val_name, val_type);
 
                 for stmt in &keyval_for.body {
-                    this.check_statement(stmt)?;
+                    this.check_stmt(stmt)?;
                 }
 
                 Ok(())

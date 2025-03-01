@@ -1,8 +1,6 @@
 use rustc_hash::FxHashMap;
 
-use crate::{lexer::Span, parser::pool::ExprRef, typecheck::pool::TypeRef};
-
-pub trait DeepSize {
+pub(crate) trait DeepSize {
     fn deep_size_of(&self) -> usize {
         size_of_val(self) + self.deep_size_of_children()
     }
@@ -66,56 +64,55 @@ impl<K: DeepSize, V: DeepSize> DeepSize for FxHashMap<K, V> {
     }
 }
 
-impl DeepSize for ExprRef {
-    fn deep_size_of_children(&self) -> usize {
-        0
-    }
-}
-
-impl DeepSize for TypeRef<'_> {
-    fn deep_size_of_children(&self) -> usize {
-        0
-    }
-}
-
 impl DeepSize for &str {
     fn deep_size_of_children(&self) -> usize {
         0
     }
 }
 
-impl DeepSize for Span<'_> {
-    fn deep_size_of_children(&self) -> usize {
-        0
+mod lexer {
+    use super::DeepSize;
+    use crate::lexer::Span;
+
+    impl DeepSize for Span<'_> {
+        fn deep_size_of_children(&self) -> usize {
+            0
+        }
     }
 }
 
 mod parser {
-    use super::*;
-    use crate::parser::ast::*;
+    use super::DeepSize;
+    use crate::parser::{ast::*, pool::ExprRef};
 
-    impl DeepSize for Statement<'_> {
+    impl DeepSize for ExprRef {
+        fn deep_size_of_children(&self) -> usize {
+            0
+        }
+    }
+
+    impl DeepSize for Stmt<'_> {
         fn deep_size_of_children(&self) -> usize {
             match self {
-                Statement::Declare(declare) => declare.deep_size_of_children(),
-                Statement::MultiDecl(multi_decl) => multi_decl.deep_size_of_children(),
-                Statement::MethodDecl(method_decl) => method_decl.deep_size_of_children(),
-                Statement::Assign(assign) => assign.deep_size_of_children(),
-                Statement::MultiAssign(multi_assign) => multi_assign.deep_size_of_children(),
-                Statement::ExprStat(suffixed_expr) => suffixed_expr.deep_size_of_children(),
-                Statement::Block(block) => block.deep_size_of_children(),
-                Statement::Return(ReturnStmt { vals, .. }) => vals.deep_size_of_children(),
-                Statement::IfStat(if_stat) => if_stat.deep_size_of_children(),
-                Statement::WhileStat(while_stat) => while_stat.body.deep_size_of_children(),
-                Statement::RangeFor(range_for) => {
+                Stmt::Declare(declare) => declare.deep_size_of_children(),
+                Stmt::MultiDecl(multi_decl) => multi_decl.deep_size_of_children(),
+                Stmt::MethodDecl(method_decl) => method_decl.deep_size_of_children(),
+                Stmt::Assign(assign) => assign.deep_size_of_children(),
+                Stmt::MultiAssign(multi_assign) => multi_assign.deep_size_of_children(),
+                Stmt::ExprStmt(suffixed_expr) => suffixed_expr.deep_size_of_children(),
+                Stmt::Block(block) => block.deep_size_of_children(),
+                Stmt::Return(ReturnStmt { vals, .. }) => vals.deep_size_of_children(),
+                Stmt::IfStmt(if_stmt) => if_stmt.deep_size_of_children(),
+                Stmt::WhileStmt(while_stmt) => while_stmt.body.deep_size_of_children(),
+                Stmt::RangeFor(range_for) => {
                     range_for.body.deep_size_of_children() + range_for.range.deep_size_of()
                 }
-                Statement::KeyValFor(key_val_for) => key_val_for.body.deep_size_of_children(),
-                Statement::StructDecl(struct_decl) => {
+                Stmt::KeyValFor(key_val_for) => key_val_for.body.deep_size_of_children(),
+                Stmt::StructDecl(struct_decl) => {
                     struct_decl.constructor.deep_size_of_children()
                         + struct_decl.members.deep_size_of_children()
                 }
-                Statement::Break => 0,
+                Stmt::Break => 0,
             }
         }
     }
@@ -191,7 +188,7 @@ mod parser {
         }
     }
 
-    impl DeepSize for IfStat<'_> {
+    impl DeepSize for IfStmt<'_> {
         fn deep_size_of_children(&self) -> usize {
             self.body.deep_size_of_children() + self.else_.deep_size_of_children()
         }
@@ -201,7 +198,7 @@ mod parser {
         fn deep_size_of_children(&self) -> usize {
             match self {
                 ElseBranch::Else(vec) => vec.deep_size_of_children(),
-                ElseBranch::ElseIf(if_stat) => if_stat.deep_size_of_children(),
+                ElseBranch::ElseIf(if_stmt) => if_stmt.deep_size_of_children(),
             }
         }
     }
@@ -271,10 +268,17 @@ mod parser {
 }
 
 mod typecheck {
-    use super::*;
+    use super::DeepSize;
+    use crate::typecheck::pool::TypeRef;
+
+    impl DeepSize for TypeRef<'_> {
+        fn deep_size_of_children(&self) -> usize {
+            0
+        }
+    }
 
     mod types {
-        use super::*;
+        use super::DeepSize;
         use crate::typecheck::types::{Function, Struct, Type, TypeKind};
 
         impl DeepSize for Type<'_> {
@@ -303,7 +307,7 @@ mod typecheck {
     }
 
     mod type_env {
-        use super::*;
+        use super::DeepSize;
         use crate::typecheck::type_env::{Resolved, TypeEnv};
 
         impl DeepSize for TypeEnv<'_> {

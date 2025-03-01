@@ -13,11 +13,11 @@ macro_rules! format_to {
     };
 }
 
-pub trait Spanned<'s> {
+pub(crate) trait Spanned<'s> {
     fn span(&self) -> Span<'s>;
 }
 
-pub fn duration_fmt(duration: Duration) -> String {
+pub(crate) fn duration_fmt(duration: Duration) -> String {
     if duration.is_zero() {
         return "0 ns".to_owned();
     }
@@ -46,7 +46,7 @@ pub fn duration_fmt(duration: Duration) -> String {
     format!("{rounded} {unit}")
 }
 
-pub struct ByteFmt(pub usize);
+pub(crate) struct ByteFmt(pub usize);
 
 impl Display for ByteFmt {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
