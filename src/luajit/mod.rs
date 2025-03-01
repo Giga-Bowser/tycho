@@ -8,10 +8,10 @@ use bitflags::bitflags;
 use bytecode::{read_dump, BCPos, BCReg};
 use funcstate::VarIdx;
 
-use crate::ReadOpt;
+use crate::cli;
 
-pub fn read_main(args: ReadOpt) {
-    let dump = std::fs::read(args.file).unwrap();
+pub fn read_main(args: &cli::Read) {
+    let dump = std::fs::read(&args.file).unwrap();
 
     let (header, protos) = read_dump(&dump);
 

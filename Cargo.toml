@@ -5,10 +5,10 @@ edition = "2021"
 
 [dependencies]
 mimalloc = { version = "*", default-features = false }
-structopt = "0.3.26"
 rustc-hash = "2.1.1"
 bitflags = "2.8.0"
 ariadne = "0.5.0"
+clap = "4.5"
 
 [profile.dev-rel]
 debug = 1

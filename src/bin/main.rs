@@ -1,21 +1,16 @@
 use mimalloc::MiMalloc;
-use structopt::StructOpt;
 
-use tycho::{driver, luajit, TychoOpt};
+use tycho::{cli::CLI, driver, luajit};
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
 fn main() {
-    let args = TychoOpt::from_args();
+    let args = CLI::parse();
 
     match args {
-        TychoOpt::Build(build_opt) => {
-            driver::main(build_opt);
-        }
-        TychoOpt::Read(read_opt) => {
-            luajit::read_main(read_opt);
-        }
-        TychoOpt::Print(print_opt) => driver::print_main(&print_opt),
+        CLI::Build(build_opt) => driver::main(&build_opt),
+        CLI::Read(read_opt) => luajit::read_main(&read_opt),
+        CLI::Print(print_opt) => driver::print_main(&print_opt),
     }
 }

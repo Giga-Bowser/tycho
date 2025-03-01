@@ -861,7 +861,10 @@ impl<'s> TypeChecker<'_, 's> {
                 if self.comm_eq(lhs_type, rhs_type) {
                     Ok(lhs_type)
                 } else {
-                    Ok(self.tcx.pool.add(TypeKind::Adaptable.into()))
+                    Err(Box::new(CheckErr::MismatchedTypes(MismatchedTypes {
+                        expected: lhs_type,
+                        recieved: rhs_type,
+                    })))
                 }
             }
             ast::OpKind::And | ast::OpKind::Or => {
@@ -895,8 +898,26 @@ impl<'s> TypeChecker<'_, 's> {
                     })))
                 }
             }
-            // TODO: typecheck this
-            ast::OpKind::Cat => Ok(self.tcx.pool.string()),
+            ast::OpKind::Cat => {
+                let lhs_type = self.check_expr(binop.lhs)?;
+                let rhs_type = self.check_expr(binop.rhs)?;
+
+                if self.can_equal(lhs_type, self.tcx.pool.string()) {
+                    if self.can_equal(rhs_type, self.tcx.pool.string()) {
+                        Ok(self.tcx.pool.string())
+                    } else {
+                        Err(Box::new(CheckErr::MismatchedTypes(MismatchedTypes {
+                            expected: self.tcx.pool.string(),
+                            recieved: rhs_type,
+                        })))
+                    }
+                } else {
+                    Err(Box::new(CheckErr::MismatchedTypes(MismatchedTypes {
+                        expected: self.tcx.pool.string(),
+                        recieved: lhs_type,
+                    })))
+                }
+            }
         }
     }
 

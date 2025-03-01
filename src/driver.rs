@@ -7,6 +7,7 @@ use std::{
 use ariadne::{Label, Report, Source};
 
 use crate::{
+    cli::{self},
     errors::{Diag, DiagCtx, Snippetize},
     lexer::{Lexer, SpanToken, TokenKind},
     luajit::{
@@ -18,18 +19,17 @@ use crate::{
     transpiler::Transpiler,
     typecheck::{ctx::TypeContext, TypeChecker},
     utils::{duration_fmt, ByteFmt},
-    BuildOpt, PrintOpt,
 };
 
-pub fn main(args: BuildOpt) {
+pub fn main(args: &cli::Build) {
     let total_timer = Instant::now();
-    build(&args);
-    if args.verbose {
+    build(args);
+    if cli::verbose() {
         eprintln!("total build: {}", duration_fmt(total_timer.elapsed()));
     }
 }
 
-fn build(args: &BuildOpt) {
+fn build(args: &cli::Build) {
     let mut tcx = TypeContext::default();
 
     let include_timer = Instant::now();
@@ -44,7 +44,7 @@ fn build(args: &BuildOpt) {
         }
     }
 
-    if args.verbose {
+    if cli::verbose() {
         eprintln!("added includes: {}", duration_fmt(include_timer.elapsed()));
     }
 
@@ -54,7 +54,7 @@ fn build(args: &BuildOpt) {
 
     let tokens = Lexer::lex_all_span(&source);
 
-    if args.verbose {
+    if cli::verbose() {
         eprintln!("lexing done: {}", duration_fmt(lex_timer.elapsed()));
         eprintln!(
             "tokens memory: {}",
@@ -78,7 +78,7 @@ fn build(args: &BuildOpt) {
         }
     }
 
-    if args.verbose {
+    if cli::verbose() {
         eprintln!("parsing done: {}", duration_fmt(parse_timer.elapsed()));
         eprintln!("ast memory: {}", ByteFmt(stmts.deep_size_of()));
         eprintln!("pool memory: {}", ByteFmt(expr_pool.deep_size_of()));
@@ -97,7 +97,7 @@ fn build(args: &BuildOpt) {
         }
     }
 
-    if args.verbose {
+    if cli::verbose() {
         eprintln!("checking done: {}", duration_fmt(check_timer.elapsed()));
         eprintln!("type env memory: {}", ByteFmt(tcx.value_map.deep_size_of()));
         eprintln!("type pool memory: {}", ByteFmt(tcx.pool.deep_size_of()));
@@ -111,7 +111,7 @@ fn build(args: &BuildOpt) {
         transpile(&expr_pool, &stmts, &source)
     };
 
-    if args.verbose {
+    if cli::verbose() {
         eprintln!("compiling done: {}", duration_fmt(compile_timer.elapsed()));
     }
 
@@ -123,7 +123,7 @@ fn build(args: &BuildOpt) {
     output.write_all(&result).unwrap_or_else(|e| panic!("{e}"));
 }
 
-pub fn print_main(args: &PrintOpt) {
+pub fn print_main(args: &cli::Print) {
     let mut tcx = TypeContext::default();
 
     let include_timer = Instant::now();
@@ -138,7 +138,7 @@ pub fn print_main(args: &PrintOpt) {
         }
     }
 
-    if args.verbose {
+    if cli::verbose() {
         eprintln!("added includes: {}", duration_fmt(include_timer.elapsed()));
     }
 
@@ -148,7 +148,7 @@ pub fn print_main(args: &PrintOpt) {
 
     let tokens = Lexer::lex_all_span(&source);
 
-    if args.verbose {
+    if cli::verbose() {
         eprintln!("lexing done: {}", duration_fmt(lex_timer.elapsed()));
         eprintln!(
             "tokens memory: {}",
@@ -172,7 +172,7 @@ pub fn print_main(args: &PrintOpt) {
         }
     }
 
-    if args.verbose {
+    if cli::verbose() {
         eprintln!("parsing done: {}", duration_fmt(parse_timer.elapsed()));
         eprintln!("ast memory: {}", ByteFmt(stmts.deep_size_of()));
         eprintln!("pool memory: {}", ByteFmt(expr_pool.deep_size_of()));
@@ -191,7 +191,7 @@ pub fn print_main(args: &PrintOpt) {
         }
     }
 
-    if args.verbose {
+    if cli::verbose() {
         eprintln!("checking done: {}", duration_fmt(check_timer.elapsed()));
         eprintln!("type env memory: {}", ByteFmt(tcx.value_map.deep_size_of()));
     }
@@ -202,7 +202,7 @@ pub fn print_main(args: &PrintOpt) {
     compiler.compile_chunk(&stmts);
     compiler.fs_finish();
 
-    if args.verbose {
+    if cli::verbose() {
         eprintln!("compiling done: {}", duration_fmt(compile_timer.elapsed()));
     }
 
