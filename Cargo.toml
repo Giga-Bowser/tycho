@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 mimalloc = { version = "*", default-features = false }
 structopt = "0.3.26"
-rustc-hash = "2.1.0"
+rustc-hash = "2.1.1"
 bitflags = "2.8.0"
 ariadne = "0.5.0"
 
@@ -19,7 +19,7 @@ lto = "fat"
 codegen-units = 1
 
 [dev-dependencies]
-criterion2 = "2.0.0"
+criterion2 = "3.0.0"
 
 [[bench]]
 name = "my_benchmark"
