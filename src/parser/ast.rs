@@ -1,4 +1,4 @@
-use crate::{lexer::Span, parser::ExprRef, utils::Spanned};
+use crate::{lexer::Span, parser::ExprRef};
 
 #[derive(Debug, Clone)]
 pub enum Stmt<'s> {
@@ -252,27 +252,10 @@ pub struct FunctionType<'s> {
     pub return_type: Option<Box<ReturnType<'s>>>,
 }
 
-impl<'s> FunctionType<'s> {
-    pub fn span(&self) -> Span<'s> {
-        self.return_type
-            .as_ref()
-            .map_or(self.header_span, |it| it.span())
-    }
-}
-
 #[derive(Debug, Clone)]
 pub enum ReturnType<'s> {
     Single(TypeNode<'s>),
     Multiple(MultipleType<'s>),
-}
-
-impl<'s> ReturnType<'s> {
-    pub fn span(&self) -> Span<'s> {
-        match self {
-            ReturnType::Single(ty) => ty.span(),
-            ReturnType::Multiple(multiple_type) => multiple_type.span,
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -288,12 +271,6 @@ pub struct TableType<'s> {
     pub val_type: Box<TypeNode<'s>>,
 }
 
-impl<'s> Spanned<'s> for TableType<'s> {
-    fn span(&self) -> Span<'s> {
-        Span::cover(self.key_span, self.val_type.span())
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct MultipleType<'s> {
     pub types: Vec<TypeNode<'s>>,
@@ -304,27 +281,6 @@ pub struct MultipleType<'s> {
 pub struct OptionalType<'s> {
     pub inner: Box<TypeNode<'s>>,
     pub question: Span<'s>,
-}
-
-impl<'s> Spanned<'s> for OptionalType<'s> {
-    fn span(&self) -> Span<'s> {
-        Span::cover(self.inner.span(), self.question)
-    }
-}
-
-impl<'s> Spanned<'s> for TypeNode<'s> {
-    fn span(&self) -> Span<'s> {
-        match self {
-            TypeNode::Name(span) | TypeNode::Nil(span) | TypeNode::VariadicType(span) => *span,
-            TypeNode::FunctionType(function_type) => function_type.span(),
-            TypeNode::TableType(table_type) => {
-                Span::cover(table_type.key_span, table_type.val_type.span())
-            }
-            TypeNode::OptionalType(optional_type) => {
-                Span::cover(optional_type.inner.span(), optional_type.question)
-            }
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

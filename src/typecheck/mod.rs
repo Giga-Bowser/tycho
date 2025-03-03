@@ -13,7 +13,7 @@ use crate::{
         ast,
         pool::{ExprPool, ExprRef},
     },
-    utils::Spanned,
+    utils::spanned::Spanned,
 };
 
 use self::{

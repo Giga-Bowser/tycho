@@ -13,8 +13,6 @@ use self::{
     funcstate::VarIdx,
 };
 
-
-
 pub fn read_main(args: &cli::Read) {
     let dump = std::fs::read(&args.file).unwrap();
 
