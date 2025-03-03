@@ -24,6 +24,7 @@ use self::{
 };
 
 type TResult<'s, T> = Result<T, Box<CheckErr<'s>>>;
+type TRVec<'s, T> = TResult<'s, Vec<T>>;
 
 pub struct TypeChecker<'a, 's> {
     pub tcx: &'a mut TypeContext<'s>,
@@ -66,7 +67,7 @@ impl<'s> TypeChecker<'_, 's> {
     fn can_equal(&self, lhs: TypeRef<'s>, rhs: TypeRef<'s>) -> bool {
         let lhs = &self.tcx.pool[lhs];
         let rhs = &self.tcx.pool[rhs];
-        if let TypeKind::Any = lhs.kind {
+        if let TypeKind::Any | TypeKind::Variadic = lhs.kind {
             return true;
         }
 
@@ -228,21 +229,21 @@ impl<'s> TypeChecker<'_, 's> {
 
     fn check_decl(&mut self, decl: &ast::Declare<'s>) -> TResult<'s, ()> {
         if let Some(val) = decl.val {
-            let lhs_type = self.check_expr(val)?;
+            let val_type = self.check_expr(val)?;
 
             let decl_ty = if let Some(ty) = &decl.ty {
                 self.resolve_type_node(ty)?
             } else {
                 self.tcx
                     .value_map
-                    .insert_value(decl.lhs.name.to_str(self.source), lhs_type);
+                    .insert_value(decl.lhs.name.to_str(self.source), val_type);
                 return Ok(());
             };
 
-            if !self.can_equal(decl_ty, lhs_type) {
+            if !self.can_equal(decl_ty, val_type) {
                 return Err(Box::new(CheckErr::MismatchedTypes(MismatchedTypes {
                     expected: decl_ty,
-                    recieved: lhs_type,
+                    recieved: val_type,
                 })));
             }
 
@@ -257,6 +258,7 @@ impl<'s> TypeChecker<'_, 's> {
                     unreachable!("decl without type or value? that's just a name")
                 }
             };
+
             if decl.lhs.suffixes.is_empty() {
                 self.tcx
                     .value_map
@@ -267,8 +269,13 @@ impl<'s> TypeChecker<'_, 's> {
             let mut ty = self
                 .tcx
                 .value_map
-                .get_value_top(decl.lhs.name.to_str(self.source))
-                .unwrap();
+                .get_top(decl.lhs.name.to_str(self.source))
+                .ok_or_else(|| {
+                    Box::new(CheckErr::NoSuchVal(NoSuchVal {
+                        val_name: decl.lhs.name,
+                    }))
+                })?
+                .inner();
 
             for suffix in &mut decl.lhs.suffixes.iter().take(decl.lhs.suffixes.len() - 1) {
                 match suffix {
@@ -328,7 +335,9 @@ impl<'s> TypeChecker<'_, 's> {
             this.tcx.value_map.insert_value("self", ty);
             let func_ty = this.resolve_function_type(&func.ty)?;
             for (name, ty) in &func_ty.params {
-                this.tcx.value_map.insert_value(name, *ty);
+                if !name.is_empty() {
+                    this.tcx.value_map.insert_value(name, *ty);
+                }
             }
 
             if let TypeKind::Nil = this.tcx.pool[func_ty.returns].kind {
@@ -403,7 +412,7 @@ impl<'s> TypeChecker<'_, 's> {
             .members
             .iter()
             .map(|it| Ok((it.name.to_str(self.source), self.resolve_type_node(&it.ty)?)))
-            .collect::<TResult<'s, Vec<_>>>()?;
+            .collect::<TRVec<'s, _>>()?;
         let ty = Type {
             kind: TypeKind::Struct(Struct { name, fields }),
             span: Some(struct_decl.name),
@@ -579,11 +588,8 @@ impl<'s> TypeChecker<'_, 's> {
     fn check_func(&mut self, func: &ast::FuncNode<'s>) -> TResult<'s, TypeRef<'s>> {
         self.with_scope(|this| {
             let func_ty = this.resolve_function_type(&func.ty)?;
-            for ast::Param { name, ty } in &func.ty.params {
-                let param_ty = this.resolve_type_node(ty)?;
-                this.tcx
-                    .value_map
-                    .insert_value(name.to_str(this.source), param_ty);
+            for (name, ty) in &func_ty.params {
+                this.tcx.value_map.insert_value(name, *ty);
             }
 
             if let TypeKind::Nil = this.tcx.pool[func_ty.returns].kind {
@@ -657,7 +663,7 @@ impl<'s> TypeChecker<'_, 's> {
                         let returned_types = vals
                             .iter()
                             .map(|it| this.check_expr(*it))
-                            .collect::<TResult<'s, Vec<_>>>()?;
+                            .collect::<TRVec<'s, _>>()?;
 
                         if let TypeKind::Multiple(types) = &this.tcx.pool[return_type].kind {
                             if types.len() != vals.len() {
@@ -734,6 +740,11 @@ impl<'s> TypeChecker<'_, 's> {
     ) -> TResult<'s, TypeRef<'s>> {
         let mut ty = match &self.expr_pool[suffixed_expr.val] {
             ast::Expr::Name(name) => {
+                if name.to_str(self.source) == "debug_print_ctx" {
+                    eprintln!("{:#?}", self.tcx);
+                    return Ok(self.tcx.pool.nil());
+                }
+
                 let res = self
                     .tcx
                     .value_map
@@ -741,7 +752,9 @@ impl<'s> TypeChecker<'_, 's> {
                     .ok_or_else(|| Box::new(CheckErr::NoSuchVal(NoSuchVal { val_name: *name })))?;
 
                 if let Resolved::Type(_) = res {
-                    let Some(ast::Suffix::Method(_)) = suffixed_expr.suffixes.first() else {
+                    let Some(ast::Suffix::Method(_) | ast::Suffix::Access(_)) =
+                        suffixed_expr.suffixes.first()
+                    else {
                         return Err(Box::new(CheckErr::NoSuchVal(NoSuchVal { val_name: *name })));
                     };
                 }
@@ -806,28 +819,9 @@ impl<'s> TypeChecker<'_, 's> {
                 }
             },
             ast::Suffix::Call(ast::Call { args }) => {
-                for arg in args {
-                    self.check_expr(*arg)?;
-                }
-
-                if let TypeKind::Function(func_type) = &self.tcx.pool[base].kind {
-                    base = func_type.returns;
-                } else if let TypeKind::Adaptable = self.tcx.pool[base].kind {
-                    return Ok(base);
-                } else {
-                    // TODO: should probably be it's own error
-                    let expected = TypeKind::Function(Function {
-                        params: Vec::new(),
-                        returns: self.tcx.pool.nil(),
-                    })
-                    .into();
-                    return Err(Box::new(CheckErr::MismatchedTypes(MismatchedTypes {
-                        expected: self.tcx.pool.add(expected),
-                        recieved: base,
-                    })));
-                }
+                base = self.check_call(base, args)?;
             }
-            ast::Suffix::Method(ast::Method { method_name, .. }) => {
+            ast::Suffix::Method(ast::Method { method_name, args }) => {
                 let method_str = method_name.to_str(self.source);
                 if method_str == "new" {
                     return Ok(base);
@@ -841,10 +835,64 @@ impl<'s> TypeChecker<'_, 's> {
                         })))
                     }
                 }
+
+                base = self.check_call(base, args)?;
             }
         }
 
         Ok(base)
+    }
+
+    fn check_call(&mut self, ty: TypeRef<'s>, args: &[ExprRef]) -> TResult<'s, TypeRef<'s>> {
+        let args = args
+            .iter()
+            .map(|&arg| self.check_expr(arg))
+            .collect::<TRVec<'s, _>>()?;
+
+        let TypeKind::Function(func_ty) = &self.tcx.pool[ty].kind else {
+            // TODO: should probably be it's own error
+            let expected = TypeKind::Function(Function {
+                params: Vec::new(),
+                returns: self.tcx.pool.nil(),
+            })
+            .into();
+            return Err(Box::new(CheckErr::MismatchedTypes(MismatchedTypes {
+                expected: self.tcx.pool.add(expected),
+                recieved: ty,
+            })));
+        };
+
+        if args.len() > func_ty.params.len() {
+            let last_param = func_ty
+                .params
+                .last()
+                .ok_or_else(|| Box::new(CheckErr::TooManyArgs))?;
+            let TypeKind::Variadic = self.tcx.pool[last_param.1].kind else {
+                return Err(Box::new(CheckErr::TooManyArgs));
+            };
+        }
+
+        for (arg_ty, (_, param_ty)) in args.iter().zip(&func_ty.params) {
+            if !self.can_equal(*param_ty, *arg_ty) {
+                return Err(Box::new(CheckErr::MismatchedTypes(MismatchedTypes {
+                    expected: *param_ty,
+                    recieved: *arg_ty,
+                })));
+            }
+        }
+
+        // ensure remaining params can be skipped
+        // should we allow skipping non-optional nil params?
+        for (_, param_ty) in func_ty.params.iter().skip(args.len()) {
+            if !self.can_equal(*param_ty, self.tcx.pool.nil()) {
+                return Err(Box::new(CheckErr::MismatchedTypes(MismatchedTypes {
+                    expected: *param_ty,
+                    recieved: self.tcx.pool.nil(),
+                })));
+            }
+        }
+
+        Ok(func_ty.returns)
     }
 
     fn check_binop(&mut self, binop: &ast::BinOp) -> TResult<'s, TypeRef<'s>> {
@@ -1088,7 +1136,7 @@ impl<'s> TypeChecker<'_, 's> {
                 let types = types
                     .iter()
                     .map(|it| self.resolve_type_node(it))
-                    .collect::<TResult<'s, Vec<_>>>()?;
+                    .collect::<TRVec<'s, _>>()?;
 
                 self.tcx.pool.add(Type {
                     kind: TypeKind::Multiple(types),
@@ -1106,7 +1154,7 @@ impl<'s> TypeChecker<'_, 's> {
                 .params
                 .iter()
                 .map(|it| Ok((it.name.to_str(self.source), self.resolve_type_node(&it.ty)?)))
-                .collect::<TResult<'s, Vec<_>>>()?,
+                .collect::<TRVec<'s, _>>()?,
             returns,
         })
     }

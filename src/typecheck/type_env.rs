@@ -78,6 +78,10 @@ impl<'s> TypeEnv<'s> {
         self.get(key).and_then(Resolved::as_type)
     }
 
+    pub fn get_top(&mut self, key: &str) -> Option<Resolved<'s>> {
+        self.top_mut().get(key).copied()
+    }
+
     pub fn get_value_top(&mut self, key: &str) -> Option<TypeRef<'s>> {
         self.top_mut().get(key).and_then(|it| it.as_value())
     }

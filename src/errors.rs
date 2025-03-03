@@ -183,6 +183,8 @@ pub enum CheckErr<'s> {
     BadIndex { span: Span<'s>, ty: TypeRef<'s> },
     BadNegate { op_span: Span<'s>, ty: TypeRef<'s> },
     BadNot { op_span: Span<'s>, ty: TypeRef<'s> },
+    TooManyArgs,
+    TooFewArgs,
 }
 
 impl<'s> Snippetize<'s> for CheckErr<'s> {
@@ -256,6 +258,16 @@ impl<'s> Snippetize<'s> for CheckErr<'s> {
                     )),
                 }],
             },
+            CheckErr::TooManyArgs => Diag {
+                title: "too many args for function".to_owned(),
+                level: Level::Error,
+                annotations: Vec::new(),
+            },
+            CheckErr::TooFewArgs => Diag {
+                title: "too few args for function".to_owned(),
+                level: Level::Error,
+                annotations: Vec::new(),
+            },
         }
     }
 }
@@ -296,7 +308,11 @@ impl<'s> Snippetize<'s> for MismatchedTypes<'s> {
         }
 
         Diag {
-            title: "type mismatch".to_owned(),
+            title: format!(
+                "type mismatch, `{}` vs `{}`",
+                ctx.tcx.pool.wrap(self.expected),
+                ctx.tcx.pool.wrap(self.recieved),
+            ),
             level: Level::Error,
             annotations,
         }
