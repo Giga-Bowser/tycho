@@ -54,143 +54,6 @@ impl<'a, 's> TypeChecker<'a, 's> {
     }
 }
 
-impl TypeChecker<'_, '_> {
-    fn with_scope<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
-        self.tcx.value_map.push_scope();
-        let res = f(self);
-        self.tcx.value_map.pop_scope();
-        res
-    }
-}
-
-impl<'s> TypeChecker<'_, 's> {
-    fn can_equal(&self, lhs: TypeRef<'s>, rhs: TypeRef<'s>) -> bool {
-        let lhs = &self.tcx.pool[lhs];
-        let rhs = &self.tcx.pool[rhs];
-        if let TypeKind::Any | TypeKind::Variadic = lhs.kind {
-            return true;
-        }
-
-        if let TypeKind::Adaptable = rhs.kind {
-            return true;
-        }
-
-        if let TypeKind::Optional(base) = lhs.kind {
-            let base = &self.tcx.pool[base];
-            return std::mem::discriminant(&rhs.kind) == std::mem::discriminant(&base.kind)
-                || std::mem::discriminant(&rhs.kind) == std::mem::discriminant(&TypeKind::Nil);
-        }
-
-        if let TypeKind::Optional(base) = rhs.kind {
-            let base = &self.tcx.pool[base];
-            return std::mem::discriminant(&lhs.kind) == std::mem::discriminant(&base.kind);
-        }
-
-        if std::mem::discriminant(&lhs.kind) != std::mem::discriminant(&rhs.kind) {
-            return false;
-        }
-
-        if let TypeKind::Table(TableType {
-            key_type: lhs_key,
-            val_type: lhs_val,
-        }) = lhs.kind
-        {
-            let TypeKind::Table(TableType {
-                key_type: rhs_key,
-                val_type: rhs_val,
-            }) = rhs.kind
-            else {
-                unreachable!() // we know they have the same discriminant
-            };
-
-            return self.can_equal(lhs_key, rhs_key) && self.can_equal(lhs_val, rhs_val);
-        }
-
-        true
-    }
-
-    fn can_equal_primitive(&self, lhs: TypeRef<'s>, rhs: &TypeKind<'s>) -> bool {
-        assert!(matches!(
-            rhs,
-            TypeKind::Nil
-                | TypeKind::Any
-                | TypeKind::Number
-                | TypeKind::String
-                | TypeKind::Boolean
-                | TypeKind::Adaptable
-                | TypeKind::Variadic
-        ));
-
-        let lhs = &self.tcx.pool[lhs];
-        if let TypeKind::Any = lhs.kind {
-            return true;
-        }
-
-        if let TypeKind::Adaptable = rhs {
-            return true;
-        }
-
-        if let TypeKind::Optional(base) = lhs.kind {
-            let base = &self.tcx.pool[base];
-            return std::mem::discriminant(rhs) == std::mem::discriminant(&base.kind)
-                || std::mem::discriminant(rhs) == std::mem::discriminant(&TypeKind::Nil);
-        }
-
-        if std::mem::discriminant(&lhs.kind) != std::mem::discriminant(rhs) {
-            return false;
-        }
-
-        true
-    }
-
-    fn comm_eq(&self, lhs: TypeRef<'s>, rhs: TypeRef<'s>) -> bool {
-        let lhs = &self.tcx.pool[lhs].kind;
-        let rhs = &self.tcx.pool[rhs].kind;
-        match (lhs, rhs) {
-            (TypeKind::Adaptable, _) | (_, TypeKind::Adaptable) => return true,
-            _ => (),
-        }
-
-        match (lhs, rhs) {
-            (TypeKind::Optional(opt), other) | (other, TypeKind::Optional(opt)) => {
-                let opt = &self.tcx.pool[*opt];
-                if let TypeKind::Nil = other {
-                    return true;
-                }
-
-                if std::mem::discriminant(other) == std::mem::discriminant(&opt.kind) {
-                    return true;
-                }
-
-                return false;
-            }
-            _ => (),
-        }
-
-        if std::mem::discriminant(lhs) != std::mem::discriminant(rhs) {
-            return false;
-        }
-
-        if let TypeKind::Table(TableType {
-            key_type: lhs_key,
-            val_type: lhs_val,
-        }) = lhs
-        {
-            let TypeKind::Table(TableType {
-                key_type: rhs_key,
-                val_type: rhs_val,
-            }) = rhs
-            else {
-                unreachable!() // we know they have the same discriminant
-            };
-
-            return self.comm_eq(*lhs_key, *rhs_key) && self.comm_eq(*lhs_val, *rhs_val);
-        }
-
-        true
-    }
-}
-
 impl<'s> TypeChecker<'_, 's> {
     pub fn check_stmt(&mut self, stmt: &ast::Stmt<'s>) -> TResult<'s, ()> {
         match stmt {
@@ -1177,5 +1040,142 @@ impl<'s> TypeChecker<'_, 's> {
             kind: TypeKind::Table(TableType { key_type, val_type }),
             span: Some(table_type.span()),
         }))
+    }
+}
+
+impl TypeChecker<'_, '_> {
+    fn with_scope<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
+        self.tcx.value_map.push_scope();
+        let res = f(self);
+        self.tcx.value_map.pop_scope();
+        res
+    }
+}
+
+impl<'s> TypeChecker<'_, 's> {
+    fn can_equal(&self, lhs: TypeRef<'s>, rhs: TypeRef<'s>) -> bool {
+        let lhs = &self.tcx.pool[lhs];
+        let rhs = &self.tcx.pool[rhs];
+        if let TypeKind::Any | TypeKind::Variadic = lhs.kind {
+            return true;
+        }
+
+        if let TypeKind::Adaptable = rhs.kind {
+            return true;
+        }
+
+        if let TypeKind::Optional(base) = lhs.kind {
+            let base = &self.tcx.pool[base];
+            return std::mem::discriminant(&rhs.kind) == std::mem::discriminant(&base.kind)
+                || std::mem::discriminant(&rhs.kind) == std::mem::discriminant(&TypeKind::Nil);
+        }
+
+        if let TypeKind::Optional(base) = rhs.kind {
+            let base = &self.tcx.pool[base];
+            return std::mem::discriminant(&lhs.kind) == std::mem::discriminant(&base.kind);
+        }
+
+        if std::mem::discriminant(&lhs.kind) != std::mem::discriminant(&rhs.kind) {
+            return false;
+        }
+
+        if let TypeKind::Table(TableType {
+            key_type: lhs_key,
+            val_type: lhs_val,
+        }) = lhs.kind
+        {
+            let TypeKind::Table(TableType {
+                key_type: rhs_key,
+                val_type: rhs_val,
+            }) = rhs.kind
+            else {
+                unreachable!() // we know they have the same discriminant
+            };
+
+            return self.can_equal(lhs_key, rhs_key) && self.can_equal(lhs_val, rhs_val);
+        }
+
+        true
+    }
+
+    fn can_equal_primitive(&self, lhs: TypeRef<'s>, rhs: &TypeKind<'s>) -> bool {
+        assert!(matches!(
+            rhs,
+            TypeKind::Nil
+                | TypeKind::Any
+                | TypeKind::Number
+                | TypeKind::String
+                | TypeKind::Boolean
+                | TypeKind::Adaptable
+                | TypeKind::Variadic
+        ));
+
+        let lhs = &self.tcx.pool[lhs];
+        if let TypeKind::Any = lhs.kind {
+            return true;
+        }
+
+        if let TypeKind::Adaptable = rhs {
+            return true;
+        }
+
+        if let TypeKind::Optional(base) = lhs.kind {
+            let base = &self.tcx.pool[base];
+            return std::mem::discriminant(rhs) == std::mem::discriminant(&base.kind)
+                || std::mem::discriminant(rhs) == std::mem::discriminant(&TypeKind::Nil);
+        }
+
+        if std::mem::discriminant(&lhs.kind) != std::mem::discriminant(rhs) {
+            return false;
+        }
+
+        true
+    }
+
+    fn comm_eq(&self, lhs: TypeRef<'s>, rhs: TypeRef<'s>) -> bool {
+        let lhs = &self.tcx.pool[lhs].kind;
+        let rhs = &self.tcx.pool[rhs].kind;
+        match (lhs, rhs) {
+            (TypeKind::Adaptable, _) | (_, TypeKind::Adaptable) => return true,
+            _ => (),
+        }
+
+        match (lhs, rhs) {
+            (TypeKind::Optional(opt), other) | (other, TypeKind::Optional(opt)) => {
+                let opt = &self.tcx.pool[*opt];
+                if let TypeKind::Nil = other {
+                    return true;
+                }
+
+                if std::mem::discriminant(other) == std::mem::discriminant(&opt.kind) {
+                    return true;
+                }
+
+                return false;
+            }
+            _ => (),
+        }
+
+        if std::mem::discriminant(lhs) != std::mem::discriminant(rhs) {
+            return false;
+        }
+
+        if let TypeKind::Table(TableType {
+            key_type: lhs_key,
+            val_type: lhs_val,
+        }) = lhs
+        {
+            let TypeKind::Table(TableType {
+                key_type: rhs_key,
+                val_type: rhs_val,
+            }) = rhs
+            else {
+                unreachable!() // we know they have the same discriminant
+            };
+
+            return self.comm_eq(*lhs_key, *rhs_key) && self.comm_eq(*lhs_val, *rhs_val);
+        }
+
+        true
     }
 }
