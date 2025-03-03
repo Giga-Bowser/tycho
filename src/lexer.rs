@@ -239,9 +239,10 @@ impl<'s> Span<'s> {
     }
 
     #[inline]
-    pub fn cover(v1: Self, v2: Self) -> Self {
-        let start = SrcLoc::min(v1.start, v1.end);
-        let end = SrcLoc::min(v1.end, v2.end);
+    #[must_use]
+    pub fn cover(self, rhs: Self) -> Self {
+        let start = SrcLoc::min(self.start, rhs.start);
+        let end = SrcLoc::min(self.end, rhs.end);
         Self::new(start, end)
     }
 
