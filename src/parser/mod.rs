@@ -744,24 +744,31 @@ impl<'s> Parser<'_, 's> {
 
         self.tokens.pop_front(); // pop '->'
         let ty_start = self.tokens[0].text.start;
-        let ty = if self.tokens[0].kind == LParen {
-            self.tokens.pop_front();
-            let mut types = Vec::new();
-            types.push(self.parse_type()?);
-
-            while self.tokens[0].kind == Comma {
+        let ty = match self.tokens[0].kind {
+            LParen => {
                 self.tokens.pop_front();
+                let mut types = Vec::new();
                 types.push(self.parse_type()?);
+
+                while self.tokens[0].kind == Comma {
+                    self.tokens.pop_front();
+                    types.push(self.parse_type()?);
+                }
+
+                let ty_end = self.tokens.expect(RParen)?.text.end;
+
+                ReturnType::Multiple(MultipleType {
+                    types,
+                    span: Span::new(ty_start, ty_end),
+                })
             }
+            Elipsis => {
+                // NOTE: should this be it's own variant on ReturnType?
 
-            let ty_end = self.tokens.expect(RParen)?.text.end;
-
-            ReturnType::Multiple(MultipleType {
-                types,
-                span: Span::new(ty_start, ty_end),
-            })
-        } else {
-            ReturnType::Single(self.parse_type()?)
+                let span = self.tokens.pop_front().text;
+                ReturnType::Single(TypeNode::VariadicType(span))
+            }
+            _ => ReturnType::Single(self.parse_type()?),
         };
 
         Ok(Some(ty))
