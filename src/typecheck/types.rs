@@ -75,20 +75,45 @@ impl<'s> From<TypeKind<'s>> for Type<'s> {
     }
 }
 
-impl<'s> Type<'s> {
-    pub fn pooled<'a>(&'a self, pool: &'a TypePool<'s>) -> PooledType<'a, 's> {
-        PooledType { ty: self, pool }
-    }
+pub struct PooledType<'a, 's> {
+    pool: &'a TypePool<'s>,
+    ty: TypeRef<'s>,
+    depth: u32,
+    inside: Option<TypeRef<'s>>,
 }
 
-pub struct PooledType<'a, 's> {
-    pub ty: &'a Type<'s>,
-    pub pool: &'a TypePool<'s>,
+impl<'a, 's> PooledType<'a, 's> {
+    pub fn new(pool: &'a TypePool<'s>, ty: TypeRef<'s>) -> Self {
+        PooledType {
+            pool,
+            ty,
+            depth: 0,
+            inside: None,
+        }
+    }
+
+    pub fn wrap(&self, ty: TypeRef<'s>) -> Self {
+        PooledType {
+            pool: self.pool,
+            ty,
+            depth: self.depth + 1,
+            inside: self.inside,
+        }
+    }
+
+    pub fn inside(mut self, ty: TypeRef<'s>) -> Self {
+        self.inside = Some(ty);
+        self
+    }
 }
 
 impl fmt::Debug for PooledType<'_, '_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.ty.kind {
+        if self.depth > 255 {
+            return f.write_str("<depth limit>");
+        }
+
+        match &self.pool[self.ty].kind {
             TypeKind::Nil => f.write_str("nil"),
             TypeKind::Any => f.write_str("any"),
             TypeKind::Number => f.write_str("number"),
@@ -102,7 +127,7 @@ impl fmt::Debug for PooledType<'_, '_> {
                     .params
                     .iter()
                     .map(|(name, ty)| {
-                        let ty = self.pool.wrap(*ty);
+                        let ty = self.wrap(*ty);
                         if name.is_empty() {
                             format!("{ty}")
                         } else {
@@ -117,19 +142,30 @@ impl fmt::Debug for PooledType<'_, '_> {
                 match &self.pool[function.returns].kind {
                     TypeKind::Nil => Ok(()),
                     TypeKind::Multiple(types) if types.is_empty() => Ok(()),
-                    _ => write!(f, " -> {}", self.pool.wrap(function.returns)),
+                    _ => write!(f, " -> {}", self.wrap(function.returns)),
                 }
             }
             TypeKind::Table(TableType { key_type, val_type }) => {
-                let key_type = self.pool.wrap(*key_type);
-                let val_type = self.pool.wrap(*val_type);
+                let key_type = self.wrap(*key_type);
+                let val_type = self.wrap(*val_type);
                 write!(f, "[{key_type}]{val_type}",)
             }
             TypeKind::Struct(strukt) => {
+                if let Some(inside) = &self.inside {
+                    if inside.exact_eq(self.ty) {
+                        return f.write_str("Self");
+                    }
+                }
+
+                // TODO: escape the hell that i am in lol
+                if strukt.name == "string" {
+                    return f.write_str("string")
+                }
+
                 let mut s = &mut (f.debug_struct(strukt.name));
 
                 for (name, ty) in &strukt.fields {
-                    s = s.field(name, &self.pool.wrap(*ty));
+                    s = s.field(name, &self.wrap(*ty).inside(self.ty));
                 }
 
                 s.finish()
@@ -139,13 +175,13 @@ impl fmt::Debug for PooledType<'_, '_> {
             TypeKind::Multiple(items) => {
                 let inner = items
                     .iter()
-                    .map(|ty| format!("{}", self.pool.wrap(*ty)))
+                    .map(|ty| format!("{}", self.wrap(*ty)))
                     .collect::<Vec<String>>()
                     .join(", ");
 
                 write!(f, "({inner})")
             }
-            TypeKind::Optional(inner) => write!(f, "{}?", self.pool.wrap(*inner)),
+            TypeKind::Optional(inner) => write!(f, "{}?", self.wrap(*inner)),
         }
     }
 }

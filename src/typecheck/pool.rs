@@ -50,10 +50,7 @@ impl<'s> TypePool<'s> {
     }
 
     pub fn wrap(&self, ty: TypeRef<'s>) -> PooledType<'_, 's> {
-        PooledType {
-            ty: &self[ty],
-            pool: self,
-        }
+        PooledType::new(self, ty)
     }
 }
 
@@ -79,6 +76,11 @@ impl TypeRef<'_> {
             raw: value as TypeRefInner,
             _m: PhantomData,
         }
+    }
+
+    /// this *probably* isn't what you want
+    pub const fn exact_eq(self, rhs: Self) -> bool {
+        self.raw == rhs.raw
     }
 }
 
