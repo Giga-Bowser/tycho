@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use crate::{
     mem_size::DeepSize,
-    typecheck::types::{Type, TypeKind},
+    typecheck::types::{PooledType, Type, TypeKind},
 };
 
 #[derive(Debug, Clone)]
@@ -47,6 +47,13 @@ impl<'s> TypePool<'s> {
 
     pub const fn boolean(&self) -> TypeRef<'s> {
         TypeRef::from_usize(4)
+    }
+
+    pub fn wrap(&self, ty: TypeRef<'s>) -> PooledType<'_, 's> {
+        PooledType {
+            ty: &self[ty],
+            pool: self,
+        }
     }
 }
 

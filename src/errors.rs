@@ -210,7 +210,7 @@ impl<'s> Snippetize<'s> for CheckErr<'s> {
                     range: op_span.to_range(),
                     label: Some(format!(
                         "expected `number` for this operator, found `{}`",
-                        ty.pooled(&ctx.tcx.pool)
+                        ctx.tcx.pool.wrap(*ty)
                     )),
                 }],
             },
@@ -222,14 +222,14 @@ impl<'s> Snippetize<'s> for CheckErr<'s> {
                     range: op_span.to_range(),
                     label: Some(format!(
                         "expected `boolean` for this operator, found `{}`",
-                        ty.pooled(&ctx.tcx.pool)
+                        ctx.tcx.pool.wrap(*ty)
                     )),
                 }],
             },
             CheckErr::BadIndex { span, ty } => Diag {
                 title: format!(
                     "cannot index into value of type `{}`",
-                    ty.pooled(&ctx.tcx.pool)
+                    ctx.tcx.pool.wrap(*ty)
                 ),
                 level: Level::Error,
                 annotations: vec![Annotation {
@@ -237,14 +237,14 @@ impl<'s> Snippetize<'s> for CheckErr<'s> {
                     range: span.to_range(),
                     label: Some(format!(
                         "cannot index into value of type `{}`",
-                        ty.pooled(&ctx.tcx.pool)
+                        ctx.tcx.pool.wrap(*ty)
                     )),
                 }],
             },
             CheckErr::BadAccess { span, ty } => Diag {
                 title: format!(
                     "cannot perform access on value of type `{}`",
-                    ty.pooled(&ctx.tcx.pool)
+                    ctx.tcx.pool.wrap(*ty)
                 ),
                 level: Level::Error,
                 annotations: vec![Annotation {
@@ -252,7 +252,7 @@ impl<'s> Snippetize<'s> for CheckErr<'s> {
                     range: span.to_range(),
                     label: Some(format!(
                         "cannot perform access on value of type `{}`",
-                        ty.pooled(&ctx.tcx.pool)
+                        ctx.tcx.pool.wrap(*ty)
                     )),
                 }],
             },
@@ -289,8 +289,8 @@ impl<'s> Snippetize<'s> for MismatchedTypes<'s> {
                 range: recieved_str.to_range(),
                 label: Some(format!(
                     "expected `{}`, found `{}`",
-                    self.expected.pooled(&ctx.tcx.pool),
-                    self.recieved.pooled(&ctx.tcx.pool)
+                    ctx.tcx.pool.wrap(self.expected),
+                    ctx.tcx.pool.wrap(self.recieved)
                 )),
             });
         }
@@ -428,7 +428,7 @@ impl<'s> Snippetize<'s> for MethodOnWrongType<'s> {
         Diag {
             title: format!(
                 "tried to declare method on non-struct type `{}`",
-                self.ty.pooled(&ctx.tcx.pool)
+                ctx.tcx.pool.wrap(self.ty)
             ),
             level: Level::Error,
             annotations: vec![Annotation {

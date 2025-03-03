@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::{
     lexer::Span,
     typecheck::pool::{TypePool, TypeRef},
@@ -79,22 +81,13 @@ impl<'s> Type<'s> {
     }
 }
 
-impl<'s> TypeRef<'s> {
-    pub fn pooled<'a>(self, pool: &'a TypePool<'s>) -> PooledType<'a, 's> {
-        PooledType {
-            ty: &pool[self],
-            pool,
-        }
-    }
-}
-
 pub struct PooledType<'a, 's> {
-    ty: &'a Type<'s>,
-    pool: &'a TypePool<'s>,
+    pub ty: &'a Type<'s>,
+    pub pool: &'a TypePool<'s>,
 }
 
-impl std::fmt::Display for PooledType<'_, '_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for PooledType<'_, '_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.ty.kind {
             TypeKind::Nil => f.write_str("nil"),
             TypeKind::Any => f.write_str("any"),
@@ -109,7 +102,7 @@ impl std::fmt::Display for PooledType<'_, '_> {
                     .params
                     .iter()
                     .map(|(name, ty)| {
-                        let ty = ty.pooled(self.pool);
+                        let ty = self.pool.wrap(*ty);
                         if name.is_empty() {
                             format!("{ty}")
                         } else {
@@ -124,27 +117,41 @@ impl std::fmt::Display for PooledType<'_, '_> {
                 match &self.pool[function.returns].kind {
                     TypeKind::Nil => Ok(()),
                     TypeKind::Multiple(types) if types.is_empty() => Ok(()),
-                    _ => write!(f, " -> {}", function.returns.pooled(self.pool)),
+                    _ => write!(f, " -> {}", self.pool.wrap(function.returns)),
                 }
             }
             TypeKind::Table(TableType { key_type, val_type }) => {
-                let key_type = key_type.pooled(self.pool);
-                let val_type = val_type.pooled(self.pool);
+                let key_type = self.pool.wrap(*key_type);
+                let val_type = self.pool.wrap(*val_type);
                 write!(f, "[{key_type}]{val_type}",)
             }
-            TypeKind::Struct(strukt) => f.write_str(strukt.name),
-            TypeKind::Adaptable => f.write_str("<adaptable>"),
+            TypeKind::Struct(strukt) => {
+                let mut s = &mut (f.debug_struct(strukt.name));
+
+                for (name, ty) in &strukt.fields {
+                    s = s.field(name, &self.pool.wrap(*ty));
+                }
+
+                s.finish()
+            }
+            TypeKind::Adaptable => f.write_str("_"),
             TypeKind::Variadic => f.write_str("..."),
             TypeKind::Multiple(items) => {
                 let inner = items
                     .iter()
-                    .map(|ty| format!("{}", ty.pooled(self.pool)))
+                    .map(|ty| format!("{}", self.pool.wrap(*ty)))
                     .collect::<Vec<String>>()
                     .join(", ");
 
                 write!(f, "({inner})")
             }
-            TypeKind::Optional(inner) => write!(f, "{}?", inner.pooled(self.pool)),
+            TypeKind::Optional(inner) => write!(f, "{}?", self.pool.wrap(*inner)),
         }
+    }
+}
+
+impl fmt::Display for PooledType<'_, '_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{self:?}")
     }
 }
