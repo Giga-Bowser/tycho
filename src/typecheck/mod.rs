@@ -914,32 +914,16 @@ impl<'s> TypeChecker<'_, 's> {
     }
 
     fn check_keyval_for(&mut self, keyval_for: &ast::KeyValFor<'s>) -> TResult<'s, ()> {
-        // now because i'm evil, we have to retokenize the `key, val` string_view
-        // but who cares.
-        let names = keyval_for.names.to_str(self.source).as_bytes();
-
-        let mut i = 0;
-        while names[i] != b',' {
-            i += 1;
-        }
-
-        let key_name = unsafe { std::str::from_utf8_unchecked(&names[0..i]) };
-
-        // now we skip the comma
-        i += 1;
-
-        while names[i].is_ascii_whitespace() {
-            i += 1;
-        }
-
-        let val_name = unsafe { std::str::from_utf8_unchecked(&names[i..]) };
-
         let lhs_type = self.check_expr(keyval_for.iter)?;
 
         if let TypeKind::Table(TableType { key_type, val_type }) = self.tcx.pool[lhs_type].kind {
             self.with_scope(|this| {
-                this.tcx.value_map.insert_value(key_name, key_type);
-                this.tcx.value_map.insert_value(val_name, val_type);
+                this.tcx
+                    .value_map
+                    .insert_value(keyval_for.key_name.to_str(self.source), key_type);
+                this.tcx
+                    .value_map
+                    .insert_value(keyval_for.val_name.to_str(self.source), val_type);
 
                 for stmt in &keyval_for.body {
                     this.check_stmt(stmt)?;

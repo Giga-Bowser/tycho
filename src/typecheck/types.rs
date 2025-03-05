@@ -159,7 +159,7 @@ impl fmt::Debug for PooledType<'_, '_> {
 
                 // TODO: escape the hell that i am in lol
                 if strukt.name == "string" {
-                    return f.write_str("string")
+                    return f.write_str("string");
                 }
 
                 let mut s = &mut (f.debug_struct(strukt.name));

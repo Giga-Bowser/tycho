@@ -121,8 +121,8 @@ pub struct RangeExpr {
 
 #[derive(Debug, Clone)]
 pub struct KeyValFor<'s> {
-    /// this should be 'keyname, valname' in one str
-    pub names: Span<'s>,
+    pub key_name: Span<'s>,
+    pub val_name: Span<'s>,
     pub iter: ExprRef,
     pub body: Block<'s>,
 }

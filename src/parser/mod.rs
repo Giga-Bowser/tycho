@@ -197,16 +197,13 @@ impl<'s> Parser<'_, 's> {
     fn for_stmt(&mut self) -> PResult<'s, Stmt<'s>> {
         self.tokens.pop_front(); // pop 'for'
 
-        let first_name = self.tokens.pop_name()?;
+        let key_name = self.tokens.pop_name()?;
 
         match self.tokens[0].kind {
             Comma => {
                 self.tokens.pop_front();
 
-                let second_name = self.tokens.pop_name()?;
-
-                // this is gross
-                let names = Span::new(first_name.start, second_name.end);
+                let val_name = self.tokens.pop_name()?;
 
                 self.tokens.expect(In)?;
 
@@ -214,7 +211,12 @@ impl<'s> Parser<'_, 's> {
 
                 let body = self.parse_block()?;
 
-                Ok(Stmt::KeyValFor(KeyValFor { names, iter, body }))
+                Ok(Stmt::KeyValFor(KeyValFor {
+                    key_name,
+                    val_name,
+                    iter,
+                    body,
+                }))
             }
             In => {
                 self.tokens.pop_front();
@@ -228,7 +230,7 @@ impl<'s> Parser<'_, 's> {
                 let body = self.parse_block()?;
 
                 Ok(Stmt::RangeFor(RangeFor {
-                    var: first_name,
+                    var: key_name,
                     range: Box::new(RangeExpr { lhs, rhs }),
                     body,
                 }))

@@ -490,28 +490,8 @@ impl<'s> LJCompiler<'s, '_> {
         self.var_new(1, FOR_STATE);
         self.var_new(2, FOR_CTL);
 
-        // now because i'm evil, we have to retokenize the `key, val` string_view
-        // but who cares.
-        let names = keyval_for.names.to_str(self.source).as_bytes();
-
-        let mut i = 0;
-        while names[i] != b',' {
-            i += 1;
-        }
-
-        let key_name = unsafe { std::str::from_utf8_unchecked(&names[0..i]) };
-
-        // now we skip the comma
-        i += 1;
-
-        while names[i].is_ascii_whitespace() {
-            i += 1;
-        }
-
-        let val_name = unsafe { std::str::from_utf8_unchecked(&names[i..]) };
-
-        self.var_new(3, key_name);
-        self.var_new(4, val_name);
+        self.var_new(3, keyval_for.key_name.to_str(self.source));
+        self.var_new(4, keyval_for.val_name.to_str(self.source));
 
         let call_expr = {
             let mut expr = ExprDesc::new(ExprKind::Global("pairs"));

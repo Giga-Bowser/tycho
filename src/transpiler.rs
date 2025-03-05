@@ -185,9 +185,12 @@ impl<'s, 'pool> Transpiler<'s, 'pool> {
     }
 
     fn transpile_keyval_for(&mut self, keyval_for: &ast::KeyValFor<'s>) {
-        self.result += "for ";
-        self.result += keyval_for.names.to_str(self.source);
-        self.result += " in pairs(";
+        format_to!(
+            self.result,
+            "for {}, {} in pairs(",
+            keyval_for.key_name.to_str(self.source),
+            keyval_for.val_name.to_str(self.source)
+        );
         self.transpile_expr(keyval_for.iter);
         self.result += ") do";
         self.transpile_block(&keyval_for.body);
