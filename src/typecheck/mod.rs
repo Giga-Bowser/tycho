@@ -71,10 +71,7 @@ impl<'s> TypeChecker<'_, 's> {
                 if self.can_equal(lhs_type, rhs_type) {
                     Ok(())
                 } else {
-                    Err(Box::new(CheckErr::MismatchedTypes(MismatchedTypes {
-                        expected: lhs_type,
-                        recieved: rhs_type,
-                    })))
+                    Err(MismatchedTypes::err(lhs_type, rhs_type))
                 }
             }
             ast::Stmt::MultiAssign(multi_assign) => self.check_multi_assign(multi_assign),
@@ -105,10 +102,7 @@ impl<'s> TypeChecker<'_, 's> {
             };
 
             if !self.can_equal(decl_ty, val_type) {
-                return Err(Box::new(CheckErr::MismatchedTypes(MismatchedTypes {
-                    expected: decl_ty,
-                    recieved: val_type,
-                })));
+                return Err(MismatchedTypes::err(decl_ty, val_type));
             }
 
             self.tcx
@@ -313,10 +307,7 @@ impl<'s> TypeChecker<'_, 's> {
             };
 
             if !self.can_equal(expected, recieved) {
-                return Err(Box::new(CheckErr::MismatchedTypes(MismatchedTypes {
-                    expected,
-                    recieved,
-                })));
+                return Err(MismatchedTypes::err(expected, recieved));
             }
         }
 
@@ -539,12 +530,7 @@ impl<'s> TypeChecker<'_, 's> {
 
                             for (lhs, rhs) in types.iter().zip(returned_types.iter()) {
                                 if !this.can_equal(*lhs, *rhs) {
-                                    return Err(Box::new(CheckErr::MismatchedTypes(
-                                        MismatchedTypes {
-                                            expected: *lhs,
-                                            recieved: *rhs,
-                                        },
-                                    )));
+                                    return Err(MismatchedTypes::err(*lhs, *rhs));
                                 }
                             }
                         } else {
@@ -559,10 +545,7 @@ impl<'s> TypeChecker<'_, 's> {
                             return if this.can_equal(return_type, return_val) {
                                 Ok(true)
                             } else {
-                                Err(Box::new(CheckErr::MismatchedTypes(MismatchedTypes {
-                                    expected: return_type,
-                                    recieved: return_val,
-                                })))
+                                Err(MismatchedTypes::err(return_type, return_val))
                             };
                         }
 
@@ -666,13 +649,13 @@ impl<'s> TypeChecker<'_, 's> {
                     if self.can_equal(string_ty, key_type) {
                         base = val_type;
                     } else {
-                        return Err(Box::new(CheckErr::MismatchedTypes(MismatchedTypes {
-                            expected: self.tcx.pool.add(Type {
+                        return Err(MismatchedTypes::err(
+                            self.tcx.pool.add(Type {
                                 kind: TypeKind::String,
                                 span: Some(*field_name),
                             }),
-                            recieved: key_type,
-                        })));
+                            key_type,
+                        ));
                     }
                 }
                 _ => {
@@ -720,10 +703,7 @@ impl<'s> TypeChecker<'_, 's> {
                 returns: self.tcx.pool.nil(),
             })
             .into();
-            return Err(Box::new(CheckErr::MismatchedTypes(MismatchedTypes {
-                expected: self.tcx.pool.add(expected),
-                recieved: ty,
-            })));
+            return Err(MismatchedTypes::err(self.tcx.pool.add(expected), ty));
         };
 
         if args.len() > func_ty.params.len() {
@@ -738,10 +718,7 @@ impl<'s> TypeChecker<'_, 's> {
 
         for (arg_ty, (_, param_ty)) in args.iter().zip(&func_ty.params) {
             if !self.can_equal(*param_ty, *arg_ty) {
-                return Err(Box::new(CheckErr::MismatchedTypes(MismatchedTypes {
-                    expected: *param_ty,
-                    recieved: *arg_ty,
-                })));
+                return Err(MismatchedTypes::err(*param_ty, *arg_ty));
             }
         }
 
@@ -749,10 +726,7 @@ impl<'s> TypeChecker<'_, 's> {
         // should we allow skipping non-optional nil params?
         for (_, param_ty) in func_ty.params.iter().skip(args.len()) {
             if !self.can_equal(*param_ty, self.tcx.pool.nil()) {
-                return Err(Box::new(CheckErr::MismatchedTypes(MismatchedTypes {
-                    expected: *param_ty,
-                    recieved: self.tcx.pool.nil(),
-                })));
+                return Err(MismatchedTypes::err(*param_ty, self.tcx.pool.nil()));
             }
         }
 
@@ -772,10 +746,7 @@ impl<'s> TypeChecker<'_, 's> {
                 if self.comm_eq(lhs_type, rhs_type) {
                     Ok(lhs_type)
                 } else {
-                    Err(Box::new(CheckErr::MismatchedTypes(MismatchedTypes {
-                        expected: lhs_type,
-                        recieved: rhs_type,
-                    })))
+                    Err(MismatchedTypes::err(lhs_type, rhs_type))
                 }
             }
             ast::OpKind::And | ast::OpKind::Or => {
@@ -785,10 +756,7 @@ impl<'s> TypeChecker<'_, 's> {
                 if self.comm_eq(lhs_type, rhs_type) {
                     Ok(lhs_type)
                 } else {
-                    Err(Box::new(CheckErr::MismatchedTypes(MismatchedTypes {
-                        expected: lhs_type,
-                        recieved: rhs_type,
-                    })))
+                    Err(MismatchedTypes::err(lhs_type, rhs_type))
                 }
             }
             ast::OpKind::Equ
@@ -803,10 +771,7 @@ impl<'s> TypeChecker<'_, 's> {
                 if self.comm_eq(lhs_type, rhs_type) {
                     Ok(self.tcx.pool.boolean())
                 } else {
-                    Err(Box::new(CheckErr::MismatchedTypes(MismatchedTypes {
-                        expected: lhs_type,
-                        recieved: rhs_type,
-                    })))
+                    Err(MismatchedTypes::err(lhs_type, rhs_type))
                 }
             }
             ast::OpKind::Cat => {
@@ -817,16 +782,10 @@ impl<'s> TypeChecker<'_, 's> {
                     if self.can_equal(rhs_type, self.tcx.pool.string()) {
                         Ok(self.tcx.pool.string())
                     } else {
-                        Err(Box::new(CheckErr::MismatchedTypes(MismatchedTypes {
-                            expected: self.tcx.pool.string(),
-                            recieved: rhs_type,
-                        })))
+                        Err(MismatchedTypes::err(self.tcx.pool.string(), rhs_type))
                     }
                 } else {
-                    Err(Box::new(CheckErr::MismatchedTypes(MismatchedTypes {
-                        expected: self.tcx.pool.string(),
-                        recieved: lhs_type,
-                    })))
+                    Err(MismatchedTypes::err(self.tcx.pool.string(), lhs_type))
                 }
             }
         }
@@ -835,10 +794,10 @@ impl<'s> TypeChecker<'_, 's> {
     fn check_if_stmt(&mut self, if_stmt: &ast::IfStmt<'s>) -> TResult<'s, ()> {
         let condition_type = self.check_expr(if_stmt.condition)?;
         if !self.can_equal_primitive(condition_type, &TypeKind::Boolean) {
-            return Err(Box::new(CheckErr::MismatchedTypes(MismatchedTypes {
-                expected: self.tcx.pool.boolean(),
-                recieved: condition_type,
-            })));
+            return Err(MismatchedTypes::err(
+                self.tcx.pool.boolean(),
+                condition_type,
+            ));
         }
 
         self.with_scope::<TResult<'s, ()>>(|this| {
@@ -867,10 +826,10 @@ impl<'s> TypeChecker<'_, 's> {
     fn check_while_stmt(&mut self, while_stmt: &ast::WhileStmt<'s>) -> TResult<'s, ()> {
         let condition_type = self.check_expr(while_stmt.condition)?;
         if !self.can_equal_primitive(condition_type, &TypeKind::Boolean) {
-            return Err(Box::new(CheckErr::MismatchedTypes(MismatchedTypes {
-                expected: self.tcx.pool.boolean(),
-                recieved: condition_type,
-            })));
+            return Err(MismatchedTypes::err(
+                self.tcx.pool.boolean(),
+                condition_type,
+            ));
         }
 
         self.with_scope(|this| {
@@ -888,17 +847,11 @@ impl<'s> TypeChecker<'_, 's> {
         let number_type = self.tcx.pool.number();
 
         if !self.can_equal(lhs_type, number_type) {
-            return Err(Box::new(CheckErr::MismatchedTypes(MismatchedTypes {
-                expected: number_type,
-                recieved: lhs_type,
-            })));
+            return Err(MismatchedTypes::err(number_type, lhs_type));
         }
 
         if !self.can_equal(rhs_type, number_type) {
-            return Err(Box::new(CheckErr::MismatchedTypes(MismatchedTypes {
-                expected: number_type,
-                recieved: lhs_type,
-            })));
+            return Err(MismatchedTypes::err(number_type, lhs_type));
         }
 
         self.with_scope(|this| {

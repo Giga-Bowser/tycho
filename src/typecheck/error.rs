@@ -114,6 +114,15 @@ pub struct MismatchedTypes<'s> {
     pub recieved: TypeRef<'s>,
 }
 
+impl<'s> MismatchedTypes<'s> {
+    pub fn err(expected: TypeRef<'s>, recieved: TypeRef<'s>) -> Box<CheckErr<'s>> {
+        Box::new(CheckErr::MismatchedTypes(MismatchedTypes {
+            expected,
+            recieved,
+        }))
+    }
+}
+
 impl<'s> Snippetize<'s> for MismatchedTypes<'s> {
     fn snippetize(&self, ctx: &DiagCtx<'_, 's>) -> Diag {
         let expected = &ctx.tcx.pool[self.expected];
