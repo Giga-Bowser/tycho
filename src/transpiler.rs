@@ -1,4 +1,4 @@
-use std::{cell::Cell, slice, str};
+use std::cell::Cell;
 
 use crate::{
     format_to,
@@ -6,6 +6,7 @@ use crate::{
         ast,
         pool::{ExprPool, ExprRef},
     },
+    utils::Span,
 };
 
 #[derive(Debug)]
@@ -199,7 +200,7 @@ impl<'s, 'pool> Transpiler<'s, 'pool> {
 
     fn transpile_expr(&mut self, expr: ExprRef) {
         if let Some(jitted) = self.jit_expr(expr) {
-            self.result += jitted;
+            self.result += jitted.to_str(self.source);
             return;
         }
 
@@ -396,37 +397,23 @@ impl<'s, 'pool> Transpiler<'s, 'pool> {
         self.indent.set(new);
     }
 
-    fn jit_expr(&self, expr: ExprRef) -> Option<&'s str> {
+    fn jit_expr(&self, expr: ExprRef) -> Option<Span<'s>> {
         match &self.pool[expr] {
             ast::Expr::BinOp(bin_op) => match bin_op.op {
                 ast::OpKind::Neq | ast::OpKind::And | ast::OpKind::Or => None,
                 _ => {
                     let lhs = self.jit_expr(bin_op.lhs)?;
-                    let lhs_range = lhs.as_bytes().as_ptr_range();
-
                     let rhs = self.jit_expr(bin_op.rhs)?;
-                    let rhs_range = rhs.as_bytes().as_ptr_range();
-
-                    let start = std::cmp::min(lhs_range.start, rhs_range.start);
-                    let end = std::cmp::max(lhs_range.end, rhs_range.end);
-
-                    Some(unsafe {
-                        str::from_utf8_unchecked(slice::from_raw_parts(
-                            start,
-                            end.offset_from(start) as usize,
-                        ))
-                    })
+                    Some(Span::cover(lhs, rhs))
                 }
             },
             ast::Expr::UnOp(un_op) => {
                 let val = self.jit_expr(un_op.val)?;
-                let ptr = unsafe { val.as_ptr().sub(1) };
-                Some(unsafe { str::from_utf8_unchecked(slice::from_raw_parts(ptr, val.len() + 1)) })
+                Some(un_op.op_span.cover(val))
             }
             ast::Expr::Paren(paren_expr) => {
-                let val = self.jit_expr(paren_expr.val)?;
-                let ptr = unsafe { val.as_ptr().sub(1) };
-                Some(unsafe { str::from_utf8_unchecked(slice::from_raw_parts(ptr, val.len() + 2)) })
+                self.jit_expr(paren_expr.val)?;
+                Some(paren_expr.span)
             }
             ast::Expr::Simple(
                 ast::SimpleExpr::Num(s)
@@ -434,7 +421,7 @@ impl<'s, 'pool> Transpiler<'s, 'pool> {
                 | ast::SimpleExpr::Bool(s)
                 | ast::SimpleExpr::Nil(s),
             )
-            | ast::Expr::Name(s) => Some(s.to_str(self.source)),
+            | ast::Expr::Name(s) => Some(*s),
             ast::Expr::Simple(ast::SimpleExpr::SuffixedExpr(suffixed_expr)) => {
                 if suffixed_expr.suffixes.is_empty() {
                     self.jit_expr(suffixed_expr.val)
