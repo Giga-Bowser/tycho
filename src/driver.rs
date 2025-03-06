@@ -8,7 +8,7 @@ use ariadne::{Label, Report, Source};
 
 use crate::{
     cli::{self},
-    errors::{Diag, DiagCtx, Snippetize},
+    error::{Diag, DiagCtx, Snippetize},
     lexer::{Lexer, SpanToken, TokenKind},
     luajit::{
         bytecode::{dump_bc, Header},

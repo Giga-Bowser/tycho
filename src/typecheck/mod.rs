@@ -4,7 +4,7 @@ pub mod type_env;
 pub mod types;
 
 use crate::{
-    errors::{
+    error::{
         CheckErr, DiagCtx, MethodOnWrongType, MismatchedTypes, NoReturn, NoSuchField, NoSuchMethod,
         NoSuchVal, ReturnCount,
     },

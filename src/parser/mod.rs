@@ -2,7 +2,7 @@ pub mod ast;
 pub mod pool;
 
 use crate::{
-    errors::{DiagCtx, ParseError, UnexpectedToken},
+    error::{DiagCtx, ParseError, UnexpectedToken},
     lexer::{
         SpanTokens,
         TokenKind::{self, *},

@@ -1,4 +1,4 @@
-mod errors;
+mod error;
 mod mem_size;
 mod utils;
 
