@@ -196,7 +196,7 @@ impl<'s> LJCompiler<'s, '_> {
             } // self.compile_suffixed_expr(suffixed_expr),
             ast::Stmt::Block(block) => self.compile_block(block),
             ast::Stmt::Return(return_stmt) => self.compile_return(&return_stmt.vals),
-            ast::Stmt::Break => {
+            ast::Stmt::Break(_) => {
                 self.func_state.scope.flags |= ScopeFlags::BREAK;
                 let pc = self.func_state.bcemit_jmp();
                 self.func_state
@@ -815,7 +815,7 @@ impl<'s> LJCompiler<'s, '_> {
             },
             ast::SimpleExpr::Nil(_) => ExprDesc::new(ExprKind::KNil),
             ast::SimpleExpr::FuncNode(func_node) => self.compile_func::<false>(func_node), // self.compile_func(func_node)
-            ast::SimpleExpr::TableNode(table_node) => self.compile_table(table_node), // self.compile_table(table_node)
+            ast::SimpleExpr::TableNode(table_node) => self.compile_table(&table_node.fields), // self.compile_table(table_node)
             ast::SimpleExpr::SuffixedExpr(suffixed_expr) => {
                 self.compile_suffixed_expr(suffixed_expr)
             }
@@ -945,7 +945,7 @@ impl<'s> LJCompiler<'s, '_> {
         let local_reg = self.func_state.free_reg;
         self.func_state.bcreg_reserve(1);
         self.var_add(1);
-        let mut table_expr = self.compile_table(&ast::TableNode { fields: Vec::new() });
+        let mut table_expr = self.compile_table(&[]);
         // self.bcemit_store(val, b) without setting var as RW
         self.func_state.expr_free(&table_expr);
         self.func_state.expr_toreg(&mut table_expr, local_reg);
@@ -991,7 +991,7 @@ impl<'s> LJCompiler<'s, '_> {
             {
                 // create a self variable, the one the user modifies
                 self.var_new(0, "self");
-                let table_expr = self.compile_table(&ast::TableNode { fields: Vec::new() });
+                let table_expr = self.compile_table(&[]);
                 self.assign_adjust(1, 1, table_expr);
                 self.var_add(1);
             };
@@ -1070,7 +1070,7 @@ impl<'s> LJCompiler<'s, '_> {
         self.bcemit_store(&lhs, func);
     }
 
-    fn compile_table(&mut self, table_node: &ast::TableNode<'s>) -> ExprDesc<'s> {
+    fn compile_table(&mut self, fields: &[ast::FieldNode<'s>]) -> ExprDesc<'s> {
         let mut t_idx: Option<usize> = None;
         let mut free_reg = self.func_state.free_reg;
         let pc = self.bcemit(BCInstr::new_ad(BCOp::TNEW, free_reg as u8, 0));
@@ -1085,7 +1085,7 @@ impl<'s> LJCompiler<'s, '_> {
         let mut fix_t = false;
         let mut array_len = 1;
         let mut hash_len = 0;
-        for field in &table_node.fields {
+        for field in fields {
             vcall = false;
 
             let (mut key, val) = match field {

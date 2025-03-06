@@ -1,5 +1,6 @@
 mod span;
 
+pub(crate) mod pooled;
 pub(crate) mod spanned;
 
 use std::{fmt::Display, time::Duration};

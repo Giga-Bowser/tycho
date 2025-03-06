@@ -53,7 +53,7 @@ impl<'s, 'pool> Transpiler<'s, 'pool> {
                     self.expr_list(vals, ", ");
                 }
             }
-            ast::Stmt::Break => self.result += "break",
+            ast::Stmt::Break(_) => self.result += "break",
             ast::Stmt::IfStmt(if_stmt) => self.transpile_if_stmt(if_stmt),
             ast::Stmt::WhileStmt(while_stmt) => self.transpile_while_stmt(while_stmt),
             ast::Stmt::RangeFor(range_for) => self.transpile_range_for(range_for),

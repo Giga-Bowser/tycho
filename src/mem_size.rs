@@ -112,7 +112,7 @@ mod parser {
                     struct_decl.constructor.deep_size_of_children()
                         + struct_decl.members.deep_size_of_children()
                 }
-                Stmt::Break => 0,
+                Stmt::Break(_) => 0,
             }
         }
     }
@@ -184,7 +184,10 @@ mod parser {
 
     impl DeepSize for Block<'_> {
         fn deep_size_of_children(&self) -> usize {
-            self.stmts.deep_size_of_children()
+            match self {
+                Block::Some(stmts) => stmts.deep_size_of_children(),
+                Block::None(_) => 0,
+            }
         }
     }
 

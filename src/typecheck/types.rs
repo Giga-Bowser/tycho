@@ -92,6 +92,7 @@ impl<'a, 's> PooledType<'a, 's> {
         }
     }
 
+    #[must_use]
     pub fn wrap(&self, ty: TypeRef<'s>) -> Self {
         PooledType {
             pool: self.pool,
@@ -101,6 +102,7 @@ impl<'a, 's> PooledType<'a, 's> {
         }
     }
 
+    #[must_use]
     pub fn inside(mut self, ty: TypeRef<'s>) -> Self {
         self.inside = Some(ty);
         self

@@ -6,6 +6,7 @@ use crate::{
     lexer::{SpanToken, TokenKind},
     parser::{ast, pool::ExprPool},
     typecheck::{ctx::TypeContext, pool::TypeRef},
+    utils::spanned::Spanned,
     utils::Span,
 };
 
@@ -72,7 +73,7 @@ pub enum ParseError<'s> {
     EmptyError,
     NoSuchType(Span<'s>),
     UnexpectedToken(UnexpectedToken<'s>),
-    BadExprStmt(ast::Expr<'s>),
+    BadExprStmt(ast::SuffixedExpr<'s>),
 }
 
 #[derive(Debug)]
@@ -112,14 +113,14 @@ impl<'s> Snippetize<'s> for ParseError<'s> {
                 }
             }
             ParseError::UnexpectedToken(unexpected_token) => unexpected_token.snippetize(ctx),
-            ParseError::BadExprStmt(expr) => {
-                let mut annotations = Vec::new();
-                if let ast::Expr::Name(name) = &expr {
-                    annotations.push(Annotation {
-                        level: Level::Error,
-                        range: name.to_range(),
-                        label: Some("expression statements here".to_owned()),
-                    });
+            ParseError::BadExprStmt(suffixed_expr) => {
+                let mut annotations = vec![Annotation {
+                    level: Level::Error,
+                    range: ctx.expr_pool.wrap(suffixed_expr).span().to_range(),
+                    label: Some("expression statement here".to_owned()),
+                }];
+
+                if let ast::Expr::Name(name) = &ctx.expr_pool[suffixed_expr.val] {
                     let name_str = name.to_str(ctx.source);
                     if let "local" | "let" = name_str {
                         annotations.push(Annotation {
@@ -130,7 +131,7 @@ impl<'s> Snippetize<'s> for ParseError<'s> {
                     }
                 }
                 Diag {
-                    title: format!("bad expression statements: `{expr:?}`"),
+                    title: format!("bad expression statements: `{suffixed_expr:?}`"),
                     level: Level::Error,
                     annotations,
                 }
@@ -389,18 +390,22 @@ pub struct NoReturn<'s> {
 }
 
 impl<'s> Snippetize<'s> for NoReturn<'s> {
-    fn snippetize(&self, _ctx: &DiagCtx<'_, 's>) -> Diag {
-        let return_span: Option<Span<'s>> = None;
-
+    fn snippetize(&self, ctx: &DiagCtx<'_, 's>) -> Diag {
         let mut annotations = Vec::new();
 
-        if let Some(return_span) = return_span {
+        if let Some(return_type) = &self.func_node.ty.return_type {
             annotations.push(Annotation {
                 level: Level::Error,
-                range: return_span.to_range(),
+                range: return_type.span().to_range(),
                 label: Some("expected return type".to_owned()),
             });
         }
+
+        annotations.push(Annotation {
+            level: Level::Info,
+            range: ctx.expr_pool.wrap(&self.func_node).span().to_range(),
+            label: Some("function here".to_owned()),
+        });
 
         Diag {
             title: "non-nil function does not return".to_owned(),
@@ -417,13 +422,14 @@ pub struct ReturnCount<'s> {
 }
 
 impl<'s> Snippetize<'s> for ReturnCount<'s> {
-    fn snippetize(&self, _ctx: &DiagCtx<'_, 's>) -> Diag {
+    fn snippetize(&self, ctx: &DiagCtx<'_, 's>) -> Diag {
+        let return_span = ctx.expr_pool.wrap(&self.return_node).span();
         Diag {
             title: "wrong number of returns".to_owned(),
             level: Level::Error,
             annotations: vec![Annotation {
                 level: Level::Error,
-                range: self.return_node.kw_span.to_range(),
+                range: return_span.to_range(),
                 label: Some(format!(
                     "expected `{}` return values here, recieved `{}`",
                     self.expected,

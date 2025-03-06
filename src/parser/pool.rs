@@ -1,4 +1,4 @@
-use crate::{mem_size::DeepSize, parser::ast::Expr};
+use crate::{mem_size::DeepSize, parser::ast::Expr, utils::pooled::Pooled};
 
 #[derive(Debug, Clone, Default)]
 pub struct ExprPool<'s> {
@@ -14,6 +14,10 @@ impl<'s> ExprPool<'s> {
         let idx = ExprRef::from(self.vec.len());
         self.vec.push(expr);
         idx
+    }
+
+    pub fn wrap<T>(&self, expr: T) -> Pooled<'_, T, Self> {
+        Pooled::new(self, expr)
     }
 }
 

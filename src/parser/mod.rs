@@ -61,28 +61,47 @@ impl<'s> Parser<'_, 's> {
                 }))
             }
             Break => {
-                self.tokens.pop_front();
-                Ok(Stmt::Break)
+                let span = self.tokens.pop_front().text;
+                Ok(Stmt::Break(span))
             }
             Struct => Ok(Stmt::StructDecl(self.parse_struct_decl()?)),
-            LCurly => Ok(Stmt::Block(self.parse_block()?)),
+            LCurly => Ok(Stmt::Block(self.parse_block_spanned()?)),
             _ => self.parse_expr_stmt(),
         }
     }
 
     fn parse_block(&mut self) -> PResult<'s, Block<'s>> {
         // technically unnecessary sometimes. idk, probably no biggie
-        self.tokens.expect(LCurly)?; // `{`
+        let start = self.tokens.expect(LCurly)?.text.start;
 
         let mut stmts = Vec::new();
         while self.tokens[0].kind != RCurly {
             stmts.push(self.parse_stmt()?);
         }
 
-        self.tokens.pop_front(); // `}`
+        let end = self.tokens.pop_front().text.end;
 
-        Ok(Block {
+        if stmts.is_empty() {
+            Ok(Block::None(Span::new(start, end)))
+        } else {
+            Ok(Block::Some(stmts.into_boxed_slice()))
+        }
+    }
+
+    fn parse_block_spanned(&mut self) -> PResult<'s, SpannedBlock<'s>> {
+        // technically unnecessary sometimes. idk, probably no biggie
+        let start = self.tokens.expect(LCurly)?.text.start;
+
+        let mut stmts = Vec::new();
+        while self.tokens[0].kind != RCurly {
+            stmts.push(self.parse_stmt()?);
+        }
+
+        let end = self.tokens.pop_front().text.end;
+
+        Ok(SpannedBlock {
             stmts: stmts.into_boxed_slice(),
+            span: Span::new(start, end),
         })
     }
 
@@ -151,7 +170,7 @@ impl<'s> Parser<'_, 's> {
     }
 
     fn if_stmt(&mut self) -> PResult<'s, IfStmt<'s>> {
-        self.tokens.pop_front(); // pop 'if'
+        let kw_span = self.tokens.pop_front().text; // pop 'if'
 
         let condition = self.parse_expr()?;
         let body = self.parse_block()?;
@@ -161,6 +180,7 @@ impl<'s> Parser<'_, 's> {
                 condition,
                 body,
                 else_: None,
+                kw_span,
             });
         }
 
@@ -173,6 +193,7 @@ impl<'s> Parser<'_, 's> {
                 condition,
                 body,
                 else_,
+                kw_span,
             });
         }
 
@@ -183,20 +204,25 @@ impl<'s> Parser<'_, 's> {
             condition,
             body,
             else_,
+            kw_span,
         })
     }
 
     fn while_stmt(&mut self) -> PResult<'s, WhileStmt<'s>> {
-        self.tokens.pop_front(); // pop 'while'
+        let kw_span = self.tokens.pop_front().text; // pop 'while'
 
         let condition = self.parse_expr()?;
         let body = self.parse_block()?;
 
-        Ok(WhileStmt { condition, body })
+        Ok(WhileStmt {
+            condition,
+            body,
+            kw_span,
+        })
     }
 
     fn for_stmt(&mut self) -> PResult<'s, Stmt<'s>> {
-        self.tokens.pop_front(); // pop 'for'
+        let kw_span = self.tokens.pop_front().text; // pop 'for'
 
         let key_name = self.tokens.pop_name()?;
 
@@ -217,6 +243,7 @@ impl<'s> Parser<'_, 's> {
                     val_name,
                     iter,
                     body,
+                    kw_span,
                 }))
             }
             In => {
@@ -234,6 +261,7 @@ impl<'s> Parser<'_, 's> {
                     var: key_name,
                     range: Box::new(RangeExpr { lhs, rhs }),
                     body,
+                    kw_span,
                 }))
             }
             _ => Err(Box::new(ParseError::UnexpectedToken(UnexpectedToken {
@@ -263,9 +291,7 @@ impl<'s> Parser<'_, 's> {
 
             if self.tokens[0].kind != Comma {
                 if sufexpr.suffixes.is_empty() {
-                    return Err(Box::new(ParseError::BadExprStmt(
-                        self.expr_pool[sufexpr.val].clone(),
-                    )));
+                    return Err(Box::new(ParseError::BadExprStmt(sufexpr.clone())));
                 }
                 return Ok(Stmt::ExprStmt(sufexpr));
             }
@@ -321,9 +347,7 @@ impl<'s> Parser<'_, 's> {
         }
 
         if sufexpr.suffixes.is_empty() {
-            return Err(Box::new(ParseError::BadExprStmt(
-                self.expr_pool[sufexpr.val].clone(),
-            )));
+            return Err(Box::new(ParseError::BadExprStmt(sufexpr.clone())));
         }
 
         Ok(Stmt::ExprStmt(sufexpr))
@@ -342,7 +366,10 @@ impl<'s> Parser<'_, 's> {
                 }
                 Colon => {
                     if self.tokens[1].kind == Equal {
-                        return Ok(SuffixedExpr { val, suffixes });
+                        return Ok(SuffixedExpr {
+                            val,
+                            suffixes: suffixes.into(),
+                        });
                     }
 
                     if self.tokens[1].kind == Name && self.tokens[2].kind == LParen {
@@ -362,7 +389,10 @@ impl<'s> Parser<'_, 's> {
                             args: self.parse_func_args()?,
                         }));
                     } else {
-                        return Ok(SuffixedExpr { val, suffixes });
+                        return Ok(SuffixedExpr {
+                            val,
+                            suffixes: suffixes.into(),
+                        });
                     }
                 }
                 LSquare => {
@@ -373,7 +403,12 @@ impl<'s> Parser<'_, 's> {
                         args: self.parse_func_args()?,
                     }));
                 }
-                _ => return Ok(SuffixedExpr { val, suffixes }),
+                _ => {
+                    return Ok(SuffixedExpr {
+                        val,
+                        suffixes: suffixes.into(),
+                    })
+                }
             }
         }
     }
@@ -431,11 +466,14 @@ impl<'s> Parser<'_, 's> {
                 Ok(self.expr_pool.add(Expr::Name(name)))
             }
             LParen => {
-                self.tokens.pop_front();
+                let start = self.tokens.pop_front().text.start;
                 let val = self.parse_expr()?;
-                self.tokens.expect(RParen)?;
+                let end = self.tokens.expect(RParen)?.text.end;
 
-                Ok(self.expr_pool.add(Expr::Paren(ParenExpr { val })))
+                Ok(self.expr_pool.add(Expr::Paren(ParenExpr {
+                    val,
+                    span: Span::new(start, end),
+                })))
             }
             _ => Err(Box::new(ParseError::UnexpectedToken(UnexpectedToken {
                 token: self.tokens[0].clone(),
@@ -453,7 +491,7 @@ impl<'s> Parser<'_, 's> {
             let op_span = self.tokens.pop_front().text;
             let val = self.expr_impl(12)?;
 
-            self.expr_pool.add(Expr::UnOp(UnOp { op, op_span, val }))
+            self.expr_pool.add(Expr::UnOp(UnOp { op, val, op_span }))
         } else {
             let val = self.simple_expr()?;
 
@@ -465,7 +503,7 @@ impl<'s> Parser<'_, 's> {
                 break;
             }
 
-            self.tokens.pop_front();
+            let op_start = self.tokens.pop_front().text.start;
 
             let rhs = self.expr_impl(prec.right)?;
 
@@ -473,6 +511,7 @@ impl<'s> Parser<'_, 's> {
                 op,
                 lhs: result,
                 rhs,
+                op_start,
             }));
         }
 
@@ -499,7 +538,7 @@ impl<'s> Parser<'_, 's> {
                 Ok(SimpleExpr::Nil(str))
             }
             LCurly => Ok(SimpleExpr::TableNode(self.table_constructor()?)),
-            Func => Ok(SimpleExpr::FuncNode(self.func_constructor()?)),
+            Func => Ok(SimpleExpr::FuncNode(Box::new(self.func_constructor()?))),
             _ => Ok(SimpleExpr::SuffixedExpr(self.parse_suffixed_expr()?)),
         }
     }
@@ -540,14 +579,17 @@ impl<'s> Parser<'_, 's> {
     }
 
     fn table_constructor(&mut self) -> PResult<'s, TableNode<'s>> {
-        self.tokens.pop_front();
-
-        let mut fields = Vec::new();
+        let start = self.tokens.pop_front().text.start;
 
         if self.tokens[0].kind == RCurly {
-            self.tokens.pop_front();
-            return Ok(TableNode { fields });
+            let end = self.tokens.pop_front().text.end;
+            return Ok(TableNode {
+                fields: Box::default(),
+                span: Span::new(start, end),
+            });
         }
+
+        let mut fields = Vec::new();
 
         while self.tokens[0].kind != RCurly {
             fields.push(self.field()?);
@@ -559,9 +601,12 @@ impl<'s> Parser<'_, 's> {
             }
         }
 
-        self.tokens.expect(RCurly)?;
+        let end = self.tokens.expect(RCurly)?.text.end;
 
-        Ok(TableNode { fields })
+        Ok(TableNode {
+            fields: fields.into_boxed_slice(),
+            span: Span::new(start, end),
+        })
     }
 
     fn member(&mut self) -> PResult<'s, Member<'s>> {
@@ -609,14 +654,14 @@ impl<'s> Parser<'_, 's> {
             }
         };
 
-        let body = self.parse_block()?;
+        let body = self.parse_block_spanned()?;
 
         Ok(FuncNode {
-            ty: Box::new(FunctionType {
+            ty: FunctionType {
                 params,
-                header_span: Span::new(start, end),
                 return_type: None,
-            }),
+                header_span: Span::new(start, end),
+            },
             body,
         })
     }
@@ -631,11 +676,12 @@ impl<'s> Parser<'_, 's> {
         let mut members = Vec::new();
 
         if self.tokens[0].kind == RCurly {
-            let _end_str = self.tokens.pop_front().text.end;
+            let end_loc = self.tokens.pop_front().text.end;
             return Ok(StructDecl {
                 name,
                 members,
                 constructor: None,
+                end_loc,
             });
         }
 
@@ -652,20 +698,22 @@ impl<'s> Parser<'_, 's> {
 
         match self.tokens[0].kind {
             RCurly => {
-                self.tokens.pop_front();
+                let end_loc = self.tokens.pop_front().text.end;
                 Ok(StructDecl {
                     name,
                     members,
                     constructor: None,
+                    end_loc,
                 })
             }
             Constructor => {
                 let constructor = Some(Box::new(self.parse_struct_constructor()?));
-                self.tokens.expect(RCurly)?;
+                let end_loc = self.tokens.expect(RCurly)?.text.end;
                 Ok(StructDecl {
                     name,
                     members,
                     constructor,
+                    end_loc,
                 })
             }
             _ => Err(Box::new(ParseError::UnexpectedToken(UnexpectedToken {
@@ -724,20 +772,17 @@ impl<'s> Parser<'_, 's> {
 
         Ok(FunctionType {
             params,
-            header_span: Span::new(start, end),
             return_type,
+            header_span: Span::new(start, end),
         })
     }
 
     fn func_constructor(&mut self) -> PResult<'s, FuncNode<'s>> {
         let ty = self.parse_func_header()?;
 
-        let body = self.parse_block()?;
+        let body = self.parse_block_spanned()?;
 
-        Ok(FuncNode {
-            ty: Box::new(ty),
-            body,
-        })
+        Ok(FuncNode { ty, body })
     }
 
     fn parse_return_type(&mut self) -> PResult<'s, Option<ReturnType<'s>>> {
@@ -849,7 +894,7 @@ impl<'s> Parser<'_, 's> {
             let op_span = self.tokens.pop_front().text;
             let val = self.range_expr_impl(12)?;
 
-            self.expr_pool.add(Expr::UnOp(UnOp { op, op_span, val }))
+            self.expr_pool.add(Expr::UnOp(UnOp { op, val, op_span }))
         } else {
             let val = self.simple_expr()?;
 
@@ -865,7 +910,7 @@ impl<'s> Parser<'_, 's> {
                 break;
             }
 
-            self.tokens.pop_front();
+            let op_start = self.tokens.pop_front().text.start;
 
             let rhs = self.range_expr_impl(prec.right)?;
 
@@ -873,6 +918,7 @@ impl<'s> Parser<'_, 's> {
                 op,
                 lhs: result,
                 rhs,
+                op_start,
             }));
         }
 
