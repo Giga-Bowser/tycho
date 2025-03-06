@@ -1,7 +1,7 @@
 use std::{collections::VecDeque, mem::ManuallyDrop, ops::Index};
 
 use crate::{
-    error::{ParseError, UnexpectedToken},
+    parser::error::{ParseError, UnexpectedToken},
     utils::{Span, SrcLoc},
 };
 

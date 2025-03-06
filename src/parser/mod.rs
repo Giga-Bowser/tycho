@@ -1,8 +1,9 @@
 pub mod ast;
+pub mod error;
 pub mod pool;
 
 use crate::{
-    error::{DiagCtx, ParseError, UnexpectedToken},
+    error::DiagCtx,
     lexer::{
         SpanTokens,
         TokenKind::{self, *},
@@ -13,6 +14,7 @@ use crate::{
 
 use self::{
     ast::*,
+    error::{ParseError, UnexpectedToken},
     pool::{ExprPool, ExprRef},
 };
 

@@ -1,13 +1,11 @@
 pub mod ctx;
+pub mod error;
 pub mod pool;
 pub mod type_env;
 pub mod types;
 
 use crate::{
-    error::{
-        CheckErr, DiagCtx, MethodOnWrongType, MismatchedTypes, NoReturn, NoSuchField, NoSuchMethod,
-        NoSuchVal, ReturnCount,
-    },
+    error::DiagCtx,
     parser::{
         ast,
         pool::{ExprPool, ExprRef},
@@ -17,6 +15,10 @@ use crate::{
 
 use self::{
     ctx::TypeContext,
+    error::{
+        CheckErr, MethodOnWrongType, MismatchedTypes, NoReturn, NoSuchField, NoSuchMethod,
+        NoSuchVal, ReturnCount,
+    },
     pool::TypeRef,
     type_env::Resolved,
     types::{Function, Struct, TableType, Type, TypeKind},
