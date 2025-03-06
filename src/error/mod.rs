@@ -39,9 +39,33 @@ impl Level {
 
 #[derive(Debug)]
 pub struct Diag {
-    pub title: String,
     pub level: Level,
+    pub title: String,
     pub annotations: Vec<Annotation>,
+}
+
+impl Diag {
+    pub fn new(level: Level, title: impl Into<String>) -> Self {
+        Diag {
+            level,
+            title: title.into(),
+            annotations: Vec::new(),
+        }
+    }
+
+    #[must_use]
+    pub fn add_annotation(mut self, annotation: Annotation) -> Self {
+        self.annotations.push(annotation);
+
+        self
+    }
+
+    #[must_use]
+    pub fn add_annotations(mut self, annotations: impl IntoIterator<Item = Annotation>) -> Self {
+        self.annotations.extend(annotations);
+
+        self
+    }
 }
 
 #[derive(Debug, Clone)]
