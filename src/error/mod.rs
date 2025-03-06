@@ -2,7 +2,7 @@ use std::ops::Range;
 
 use ariadne::{Color, ReportKind};
 
-use crate::{parser::pool::ExprPool, typecheck::ctx::TypeContext};
+use crate::{parser::pool::ExprPool, typecheck::ctx::TypeContext, utils::Span};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Level {
@@ -44,11 +44,34 @@ pub struct Diag {
     pub annotations: Vec<Annotation>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Annotation {
     pub level: Level,
     pub range: Range<usize>,
     pub label: Option<String>,
+}
+
+impl Annotation {
+    pub fn new(level: Level, range: Range<usize>) -> Self {
+        Annotation {
+            level,
+            range,
+            label: None,
+        }
+    }
+
+    pub fn new_span(level: Level, span: Span<'_>) -> Self {
+        Annotation {
+            level,
+            range: span.to_range(),
+            label: None,
+        }
+    }
+
+    pub fn label(mut self, label: impl Into<String>) -> Self {
+        self.label = Some(label.into());
+        self
+    }
 }
 
 pub struct DiagCtx<'a, 's> {

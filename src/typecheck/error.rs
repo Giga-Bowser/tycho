@@ -43,26 +43,18 @@ impl<'s> Snippetize<'s> for CheckErr<'s> {
             CheckErr::BadNegate { op_span, ty } => Diag {
                 title: "cannot unary negate non-number type".to_owned(),
                 level: Level::Error,
-                annotations: vec![Annotation {
-                    level: Level::Error,
-                    range: op_span.to_range(),
-                    label: Some(format!(
-                        "expected `number` for this operator, found `{}`",
-                        ctx.tcx.pool.wrap(*ty)
-                    )),
-                }],
+                annotations: vec![Annotation::new_span(Level::Error, *op_span).label(format!(
+                    "expected `number` for this operator, found `{}`",
+                    ctx.tcx.pool.wrap(*ty)
+                ))],
             },
             CheckErr::BadNot { op_span, ty } => Diag {
                 title: "cannot unary not non-boolean type".to_owned(),
                 level: Level::Error,
-                annotations: vec![Annotation {
-                    level: Level::Error,
-                    range: op_span.to_range(),
-                    label: Some(format!(
-                        "expected `boolean` for this operator, found `{}`",
-                        ctx.tcx.pool.wrap(*ty)
-                    )),
-                }],
+                annotations: vec![Annotation::new_span(Level::Error, *op_span).label(format!(
+                    "expected `boolean` for this operator, found `{}`",
+                    ctx.tcx.pool.wrap(*ty)
+                ))],
             },
             CheckErr::BadIndex { span, ty } => Diag {
                 title: format!(
@@ -70,14 +62,10 @@ impl<'s> Snippetize<'s> for CheckErr<'s> {
                     ctx.tcx.pool.wrap(*ty)
                 ),
                 level: Level::Error,
-                annotations: vec![Annotation {
-                    level: Level::Error,
-                    range: span.to_range(),
-                    label: Some(format!(
-                        "cannot index into value of type `{}`",
-                        ctx.tcx.pool.wrap(*ty)
-                    )),
-                }],
+                annotations: vec![Annotation::new_span(Level::Error, *span).label(format!(
+                    "cannot index into value of type `{}`",
+                    ctx.tcx.pool.wrap(*ty)
+                ))],
             },
             CheckErr::BadAccess { span, ty } => Diag {
                 title: format!(
@@ -85,14 +73,10 @@ impl<'s> Snippetize<'s> for CheckErr<'s> {
                     ctx.tcx.pool.wrap(*ty)
                 ),
                 level: Level::Error,
-                annotations: vec![Annotation {
-                    level: Level::Error,
-                    range: span.to_range(),
-                    label: Some(format!(
-                        "cannot perform access on value of type `{}`",
-                        ctx.tcx.pool.wrap(*ty)
-                    )),
-                }],
+                annotations: vec![Annotation::new_span(Level::Error, *span).label(format!(
+                    "cannot perform access on value of type `{}`",
+                    ctx.tcx.pool.wrap(*ty)
+                ))],
             },
             CheckErr::TooManyArgs => Diag {
                 title: "too many args for function".to_owned(),
@@ -133,23 +117,19 @@ impl<'s> Snippetize<'s> for MismatchedTypes<'s> {
         let mut annotations = Vec::new();
 
         if let Some(expected_span) = expected_span {
-            annotations.push(Annotation {
-                level: Level::Info,
-                range: expected_span.to_range(),
-                label: Some("expected due to this".to_owned()),
-            });
+            annotations.push(
+                Annotation::new_span(Level::Info, expected_span).label("expected due to this"),
+            );
         }
 
         if let Some(recieved_str) = recieved_span {
-            annotations.push(Annotation {
-                level: Level::Error,
-                range: recieved_str.to_range(),
-                label: Some(format!(
+            annotations.push(
+                Annotation::new_span(Level::Error, recieved_str).label(format!(
                     "expected `{}`, found `{}`",
                     ctx.tcx.pool.wrap(self.expected),
                     ctx.tcx.pool.wrap(self.recieved)
                 )),
-            });
+            );
         }
 
         Diag {
@@ -176,11 +156,9 @@ impl<'s> Snippetize<'s> for NoSuchVal<'s> {
         Diag {
             title: format!("cannot find value `{val_str}` in this scope"),
             level: Level::Error,
-            annotations: vec![Annotation {
-                level: Level::Error,
-                range: self.val_name.to_range(),
-                label: Some("not found in this scope".to_owned()),
-            }],
+            annotations: vec![
+                Annotation::new_span(Level::Error, self.val_name).label("not found in this scope")
+            ],
         }
     }
 }
@@ -197,11 +175,8 @@ impl<'s> Snippetize<'s> for NoSuchField<'s> {
         Diag {
             title: format!("cannot find field `{field_str}` on this type"),
             level: Level::Error,
-            annotations: vec![Annotation {
-                level: Level::Error,
-                range: self.field_name.to_range(),
-                label: Some("field not found on this type".to_owned()),
-            }],
+            annotations: vec![Annotation::new_span(Level::Error, self.field_name)
+                .label("field not found on this type")],
         }
     }
 }
@@ -218,11 +193,8 @@ impl<'s> Snippetize<'s> for NoSuchMethod<'s> {
         Diag {
             title: format!("cannot find method `{method_str}` on this type"),
             level: Level::Error,
-            annotations: vec![Annotation {
-                level: Level::Error,
-                range: self.method_name.to_range(),
-                label: Some("method not found on this type".to_owned()),
-            }],
+            annotations: vec![Annotation::new_span(Level::Error, self.method_name)
+                .label("method not found on this type")],
         }
     }
 }
@@ -237,18 +209,16 @@ impl<'s> Snippetize<'s> for NoReturn<'s> {
         let mut annotations = Vec::new();
 
         if let Some(return_type) = &self.func_node.ty.return_type {
-            annotations.push(Annotation {
-                level: Level::Error,
-                range: return_type.span().to_range(),
-                label: Some("expected return type".to_owned()),
-            });
+            annotations.push(
+                Annotation::new_span(Level::Error, return_type.span())
+                    .label("expected return type"),
+            );
         }
 
-        annotations.push(Annotation {
-            level: Level::Info,
-            range: ctx.expr_pool.wrap(&self.func_node).span().to_range(),
-            label: Some("function here".to_owned()),
-        });
+        annotations.push(
+            Annotation::new_span(Level::Info, ctx.expr_pool.wrap(&self.func_node).span())
+                .label("function here"),
+        );
 
         Diag {
             title: "non-nil function does not return".to_owned(),
@@ -270,15 +240,13 @@ impl<'s> Snippetize<'s> for ReturnCount<'s> {
         Diag {
             title: "wrong number of returns".to_owned(),
             level: Level::Error,
-            annotations: vec![Annotation {
-                level: Level::Error,
-                range: return_span.to_range(),
-                label: Some(format!(
+            annotations: vec![
+                Annotation::new_span(Level::Error, return_span).label(format!(
                     "expected `{}` return values here, recieved `{}`",
                     self.expected,
                     self.return_node.vals.len()
                 )),
-            }],
+            ],
         }
     }
 }
@@ -297,11 +265,9 @@ impl<'s> Snippetize<'s> for MethodOnWrongType<'s> {
                 ctx.tcx.pool.wrap(self.ty)
             ),
             level: Level::Error,
-            annotations: vec![Annotation {
-                level: Level::Error,
-                range: self.span.to_range(),
-                label: Some("method declaration here".to_owned()),
-            }],
+            annotations: vec![
+                Annotation::new_span(Level::Error, self.span).label("method declaration here")
+            ],
         }
     }
 }
