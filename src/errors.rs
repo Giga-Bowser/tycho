@@ -3,9 +3,10 @@ use std::ops::Range;
 use ariadne::{Color, ReportKind};
 
 use crate::{
-    lexer::{Span, SpanToken, TokenKind},
+    lexer::{SpanToken, TokenKind},
     parser::{ast, pool::ExprPool},
     typecheck::{ctx::TypeContext, pool::TypeRef},
+    utils::Span,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]

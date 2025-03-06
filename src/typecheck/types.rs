@@ -1,8 +1,8 @@
 use std::fmt;
 
 use crate::{
-    lexer::Span,
     typecheck::pool::{TypePool, TypeRef},
+    utils::Span,
 };
 
 #[derive(Debug, Clone)]

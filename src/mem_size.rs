@@ -72,7 +72,7 @@ impl DeepSize for &str {
 
 mod lexer {
     use super::DeepSize;
-    use crate::lexer::Span;
+    use crate::utils::Span;
 
     impl DeepSize for Span<'_> {
         fn deep_size_of_children(&self) -> usize {

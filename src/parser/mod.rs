@@ -4,10 +4,11 @@ pub mod pool;
 use crate::{
     errors::{DiagCtx, ParseError, UnexpectedToken},
     lexer::{
-        Span, SpanTokens,
+        SpanTokens,
         TokenKind::{self, *},
     },
     typecheck::ctx::TypeContext,
+    utils::Span,
 };
 
 use self::{

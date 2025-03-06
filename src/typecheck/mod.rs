@@ -8,12 +8,11 @@ use crate::{
         CheckErr, DiagCtx, MethodOnWrongType, MismatchedTypes, NoReturn, NoSuchField, NoSuchMethod,
         NoSuchVal, ReturnCount,
     },
-    lexer::Span,
     parser::{
         ast,
         pool::{ExprPool, ExprRef},
     },
-    utils::spanned::Spanned,
+    utils::{spanned::Spanned, Span},
 };
 
 use self::{

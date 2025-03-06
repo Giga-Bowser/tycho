@@ -1,6 +1,10 @@
+mod span;
+
 pub(crate) mod spanned;
 
 use std::{fmt::Display, time::Duration};
+
+pub(crate) use span::{Span, SrcLoc};
 
 #[macro_export]
 macro_rules! format_to {

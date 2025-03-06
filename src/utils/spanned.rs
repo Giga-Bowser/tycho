@@ -1,4 +1,4 @@
-use crate::lexer::Span;
+use crate::utils::Span;
 
 pub(crate) trait Spanned<'s> {
     fn span(&self) -> Span<'s>;

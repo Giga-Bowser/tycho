@@ -1,4 +1,4 @@
-use crate::{lexer::Span, parser::ExprRef};
+use crate::{parser::ExprRef, utils::Span};
 
 #[derive(Debug, Clone)]
 pub enum Stmt<'s> {
