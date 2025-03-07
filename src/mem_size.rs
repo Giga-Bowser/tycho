@@ -74,7 +74,7 @@ mod lexer {
     use super::DeepSize;
     use crate::utils::Span;
 
-    impl DeepSize for Span<'_> {
+    impl DeepSize for Span {
         fn deep_size_of_children(&self) -> usize {
             0
         }
@@ -91,7 +91,7 @@ mod parser {
         }
     }
 
-    impl DeepSize for Stmt<'_> {
+    impl DeepSize for Stmt {
         fn deep_size_of_children(&self) -> usize {
             match self {
                 Stmt::Declare(declare) => declare.deep_size_of_children(),
@@ -117,25 +117,25 @@ mod parser {
         }
     }
 
-    impl DeepSize for Declare<'_> {
+    impl DeepSize for Declare {
         fn deep_size_of_children(&self) -> usize {
             self.lhs.deep_size_of_children()
         }
     }
 
-    impl DeepSize for SuffixedExpr<'_> {
+    impl DeepSize for SuffixedExpr {
         fn deep_size_of_children(&self) -> usize {
             self.suffixes.deep_size_of_children()
         }
     }
 
-    impl DeepSize for SuffixedName<'_> {
+    impl DeepSize for SuffixedName {
         fn deep_size_of_children(&self) -> usize {
             self.suffixes.deep_size_of_children()
         }
     }
 
-    impl DeepSize for Suffix<'_> {
+    impl DeepSize for Suffix {
         fn deep_size_of_children(&self) -> usize {
             match self {
                 Suffix::Call(Call { args }) | Suffix::Method(Method { args, .. }) => {
@@ -146,43 +146,43 @@ mod parser {
         }
     }
 
-    impl DeepSize for MultiDecl<'_> {
+    impl DeepSize for MultiDecl {
         fn deep_size_of_children(&self) -> usize {
             self.lhs_arr.deep_size_of() + self.rhs_arr.deep_size_of_children()
         }
     }
 
-    impl DeepSize for MethodDecl<'_> {
+    impl DeepSize for MethodDecl {
         fn deep_size_of_children(&self) -> usize {
             self.func.deep_size_of_children()
         }
     }
 
-    impl DeepSize for FuncNode<'_> {
+    impl DeepSize for FuncNode {
         fn deep_size_of_children(&self) -> usize {
             self.body.deep_size_of_children() + self.ty.deep_size_of_children()
         }
     }
 
-    impl DeepSize for Member<'_> {
+    impl DeepSize for Member {
         fn deep_size_of_children(&self) -> usize {
             self.ty.deep_size_of_children()
         }
     }
 
-    impl DeepSize for Assign<'_> {
+    impl DeepSize for Assign {
         fn deep_size_of_children(&self) -> usize {
             self.lhs.deep_size_of_children()
         }
     }
 
-    impl DeepSize for MultiAssign<'_> {
+    impl DeepSize for MultiAssign {
         fn deep_size_of_children(&self) -> usize {
             self.lhs_arr.deep_size_of_children() + self.rhs_arr.deep_size_of_children()
         }
     }
 
-    impl DeepSize for Block<'_> {
+    impl DeepSize for Block {
         fn deep_size_of_children(&self) -> usize {
             match self {
                 Block::Some(stmts) => stmts.deep_size_of_children(),
@@ -191,13 +191,13 @@ mod parser {
         }
     }
 
-    impl DeepSize for IfStmt<'_> {
+    impl DeepSize for IfStmt {
         fn deep_size_of_children(&self) -> usize {
             self.body.deep_size_of_children() + self.else_.deep_size_of_children()
         }
     }
 
-    impl DeepSize for ElseBranch<'_> {
+    impl DeepSize for ElseBranch {
         fn deep_size_of_children(&self) -> usize {
             match self {
                 ElseBranch::Else(vec) => vec.deep_size_of_children(),
@@ -206,7 +206,7 @@ mod parser {
         }
     }
 
-    impl DeepSize for Expr<'_> {
+    impl DeepSize for Expr {
         fn deep_size_of_children(&self) -> usize {
             match self {
                 Expr::Simple(simple_expr) => simple_expr.deep_size_of_children(),
@@ -215,7 +215,7 @@ mod parser {
         }
     }
 
-    impl DeepSize for SimpleExpr<'_> {
+    impl DeepSize for SimpleExpr {
         fn deep_size_of_children(&self) -> usize {
             match self {
                 SimpleExpr::Num(_)
@@ -229,7 +229,7 @@ mod parser {
         }
     }
 
-    impl DeepSize for FieldNode<'_> {
+    impl DeepSize for FieldNode {
         fn deep_size_of_children(&self) -> usize {
             0
         }
@@ -241,7 +241,7 @@ mod parser {
         }
     }
 
-    impl DeepSize for TypeNode<'_> {
+    impl DeepSize for TypeNode {
         fn deep_size_of_children(&self) -> usize {
             match self {
                 TypeNode::Name(_) | TypeNode::Nil(_) | TypeNode::VariadicType(_) => 0,
@@ -257,13 +257,13 @@ mod parser {
         }
     }
 
-    impl DeepSize for FunctionType<'_> {
+    impl DeepSize for FunctionType {
         fn deep_size_of_children(&self) -> usize {
             self.params.deep_size_of_children()
         }
     }
 
-    impl DeepSize for Param<'_> {
+    impl DeepSize for Param {
         fn deep_size_of_children(&self) -> usize {
             self.ty.deep_size_of_children()
         }

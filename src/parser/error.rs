@@ -6,27 +6,27 @@ use crate::{
 };
 
 #[derive(Default, Debug)]
-pub enum ParseError<'s> {
+pub enum ParseError {
     #[default]
     EmptyError,
-    NoSuchType(Span<'s>),
-    UnexpectedToken(UnexpectedToken<'s>),
-    BadExprStmt(ast::SuffixedExpr<'s>),
+    NoSuchType(Span),
+    UnexpectedToken(UnexpectedToken),
+    BadExprStmt(ast::SuffixedExpr),
 }
 
 #[derive(Debug)]
-pub struct UnexpectedToken<'s> {
-    pub token: SpanToken<'s>,
+pub struct UnexpectedToken {
+    pub token: SpanToken,
     pub expected_kinds: Vec<TokenKind>,
 }
 
-impl<'s> From<UnexpectedToken<'s>> for ParseError<'s> {
-    fn from(value: UnexpectedToken<'s>) -> Self {
+impl From<UnexpectedToken> for ParseError {
+    fn from(value: UnexpectedToken) -> Self {
         ParseError::UnexpectedToken(value)
     }
 }
 
-impl<'s> Snippetize<'s> for ParseError<'s> {
+impl<'s> Snippetize<'s> for ParseError {
     fn snippetize(&self, ctx: &DiagCtx<'_, 's>) -> Diag {
         match self {
             ParseError::EmptyError => Diag::new(Level::Error, "oh no, empty error"),
@@ -67,7 +67,7 @@ impl<'s> Snippetize<'s> for ParseError<'s> {
     }
 }
 
-impl<'s> Snippetize<'s> for UnexpectedToken<'s> {
+impl<'s> Snippetize<'s> for UnexpectedToken {
     fn snippetize(&self, ctx: &DiagCtx<'_, 's>) -> Diag {
         let mut diag = Diag::new(
             Level::Error,

@@ -6,72 +6,72 @@ use crate::{
 };
 
 #[derive(Debug, Clone)]
-pub enum Stmt<'s> {
-    Declare(Declare<'s>),
-    MultiDecl(MultiDecl<'s>),
-    MethodDecl(MethodDecl<'s>),
-    Assign(Assign<'s>),
-    MultiAssign(MultiAssign<'s>),
-    ExprStmt(SuffixedExpr<'s>),
-    Block(SpannedBlock<'s>),
-    Return(ReturnStmt<'s>),
-    Break(Span<'s>),
-    IfStmt(IfStmt<'s>),
-    WhileStmt(WhileStmt<'s>),
-    RangeFor(RangeFor<'s>),
-    KeyValFor(KeyValFor<'s>),
-    StructDecl(StructDecl<'s>),
+pub enum Stmt {
+    Declare(Declare),
+    MultiDecl(MultiDecl),
+    MethodDecl(MethodDecl),
+    Assign(Assign),
+    MultiAssign(MultiAssign),
+    ExprStmt(SuffixedExpr),
+    Block(SpannedBlock),
+    Return(ReturnStmt),
+    Break(Span),
+    IfStmt(IfStmt),
+    WhileStmt(WhileStmt),
+    RangeFor(RangeFor),
+    KeyValFor(KeyValFor),
+    StructDecl(StructDecl),
 }
 
 #[derive(Debug, Clone)]
-pub struct Declare<'s> {
-    pub lhs: Box<SuffixedName<'s>>,
-    pub ty: Option<Box<TypeNode<'s>>>,
+pub struct Declare {
+    pub lhs: Box<SuffixedName>,
+    pub ty: Option<Box<TypeNode>>,
     pub val: Option<ExprRef>,
 }
 
 #[derive(Debug, Clone)]
-pub struct MultiDecl<'s> {
-    pub lhs_arr: Vec<Span<'s>>,
+pub struct MultiDecl {
+    pub lhs_arr: Vec<Span>,
     pub rhs_arr: Vec<ExprRef>,
 }
 
 #[derive(Debug, Clone)]
-pub struct MethodDecl<'s> {
-    pub struct_name: Span<'s>,
-    pub method_name: Span<'s>,
-    pub func: Box<FuncNode<'s>>,
+pub struct MethodDecl {
+    pub struct_name: Span,
+    pub method_name: Span,
+    pub func: Box<FuncNode>,
 }
 
 #[derive(Debug, Clone)]
-pub struct Assign<'s> {
-    pub lhs: Box<SuffixedName<'s>>,
+pub struct Assign {
+    pub lhs: Box<SuffixedName>,
     pub rhs: ExprRef,
 }
 
 #[derive(Debug, Clone)]
-pub struct MultiAssign<'s> {
-    pub lhs_arr: Vec<SuffixedExpr<'s>>,
+pub struct MultiAssign {
+    pub lhs_arr: Vec<SuffixedExpr>,
     pub rhs_arr: Vec<ExprRef>,
 }
 
 #[derive(Debug, Clone)]
-pub struct SuffixedName<'s> {
-    pub name: Span<'s>,
-    pub suffixes: Box<[Suffix<'s>]>,
+pub struct SuffixedName {
+    pub name: Span,
+    pub suffixes: Box<[Suffix]>,
 }
 
 #[derive(Debug, Clone)]
-pub enum Block<'s> {
-    Some(Box<[Stmt<'s>]>),
-    None(Span<'s>),
+pub enum Block {
+    Some(Box<[Stmt]>),
+    None(Span),
 }
 
-impl<'s> Deref for Block<'s> {
-    type Target = [Stmt<'s>];
+impl Deref for Block {
+    type Target = [Stmt];
 
     #[inline]
-    fn deref(&self) -> &[Stmt<'s>] {
+    fn deref(&self) -> &[Stmt] {
         match self {
             Block::Some(stmts) => stmts.as_ref(),
             Block::None(_) => &[],
@@ -79,9 +79,9 @@ impl<'s> Deref for Block<'s> {
     }
 }
 
-impl<'a, 's> IntoIterator for &'a Block<'s> {
-    type Item = &'a Stmt<'s>;
-    type IntoIter = std::slice::Iter<'a, Stmt<'s>>;
+impl<'a> IntoIterator for &'a Block {
+    type Item = &'a Stmt;
+    type IntoIter = std::slice::Iter<'a, Stmt>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
@@ -90,23 +90,23 @@ impl<'a, 's> IntoIterator for &'a Block<'s> {
 
 /// A block with a span requiring no calculation, use when space is available.
 #[derive(Debug, Clone)]
-pub struct SpannedBlock<'s> {
-    pub stmts: Box<[Stmt<'s>]>,
-    pub span: Span<'s>,
+pub struct SpannedBlock {
+    pub stmts: Box<[Stmt]>,
+    pub span: Span,
 }
 
-impl<'s> Deref for SpannedBlock<'s> {
-    type Target = [Stmt<'s>];
+impl Deref for SpannedBlock {
+    type Target = [Stmt];
 
     #[inline]
-    fn deref(&self) -> &[Stmt<'s>] {
+    fn deref(&self) -> &[Stmt] {
         &self.stmts
     }
 }
 
-impl<'a, 's> IntoIterator for &'a SpannedBlock<'s> {
-    type Item = &'a Stmt<'s>;
-    type IntoIter = std::slice::Iter<'a, Stmt<'s>>;
+impl<'a> IntoIterator for &'a SpannedBlock {
+    type Item = &'a Stmt;
+    type IntoIter = std::slice::Iter<'a, Stmt>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
@@ -114,46 +114,46 @@ impl<'a, 's> IntoIterator for &'a SpannedBlock<'s> {
 }
 
 #[derive(Debug, Clone)]
-pub struct ReturnStmt<'s> {
+pub struct ReturnStmt {
     pub vals: Vec<ExprRef>,
 
     // for diagnostics,
-    pub kw_span: Span<'s>,
+    pub kw_span: Span,
 }
 
 #[derive(Debug, Clone)]
-pub struct IfStmt<'s> {
+pub struct IfStmt {
     pub condition: ExprRef,
-    pub body: Block<'s>,
-    pub else_: Option<Box<ElseBranch<'s>>>,
+    pub body: Block,
+    pub else_: Option<Box<ElseBranch>>,
 
     // for diagnostics
-    pub kw_span: Span<'s>,
+    pub kw_span: Span,
 }
 
 #[derive(Debug, Clone)]
-pub enum ElseBranch<'s> {
-    Else(Block<'s>),
-    ElseIf(IfStmt<'s>),
+pub enum ElseBranch {
+    Else(Block),
+    ElseIf(IfStmt),
 }
 
 #[derive(Debug, Clone)]
-pub struct WhileStmt<'s> {
+pub struct WhileStmt {
     pub condition: ExprRef,
-    pub body: Block<'s>,
+    pub body: Block,
 
     // for diagnostics
-    pub kw_span: Span<'s>,
+    pub kw_span: Span,
 }
 
 #[derive(Debug, Clone)]
-pub struct RangeFor<'s> {
-    pub var: Span<'s>,
+pub struct RangeFor {
+    pub var: Span,
     pub range: Box<RangeExpr>,
-    pub body: Block<'s>,
+    pub body: Block,
 
     // for diagnostics
-    pub kw_span: Span<'s>,
+    pub kw_span: Span,
 }
 
 #[derive(Debug, Clone)]
@@ -163,39 +163,39 @@ pub struct RangeExpr {
 }
 
 #[derive(Debug, Clone)]
-pub struct KeyValFor<'s> {
-    pub key_name: Span<'s>,
-    pub val_name: Span<'s>,
+pub struct KeyValFor {
+    pub key_name: Span,
+    pub val_name: Span,
     pub iter: ExprRef,
-    pub body: Block<'s>,
+    pub body: Block,
 
     // for diagnostics
-    pub kw_span: Span<'s>,
+    pub kw_span: Span,
 }
 
 #[derive(Debug, Clone)]
-pub struct StructDecl<'s> {
-    pub name: Span<'s>,
-    pub members: Vec<Member<'s>>,
-    pub constructor: Option<Box<FuncNode<'s>>>,
+pub struct StructDecl {
+    pub name: Span,
+    pub members: Vec<Member>,
+    pub constructor: Option<Box<FuncNode>>,
 
     // for diagnostics
     pub end_loc: SrcLoc,
 }
 
 #[derive(Debug, Clone)]
-pub struct Member<'s> {
-    pub name: Span<'s>,
-    pub ty: TypeNode<'s>,
+pub struct Member {
+    pub name: Span,
+    pub ty: TypeNode,
 }
 
 #[derive(Debug, Clone)]
-pub enum Expr<'s> {
+pub enum Expr {
     BinOp(BinOp),
-    UnOp(UnOp<'s>),
-    Paren(ParenExpr<'s>),
-    Simple(SimpleExpr<'s>),
-    Name(Span<'s>),
+    UnOp(UnOp),
+    Paren(ParenExpr),
+    Simple(SimpleExpr),
+    Name(Span),
 }
 
 #[derive(Debug, Clone)]
@@ -209,79 +209,79 @@ pub struct BinOp {
 }
 
 #[derive(Debug, Clone)]
-pub struct UnOp<'s> {
+pub struct UnOp {
     pub op: UnOpKind,
     pub val: ExprRef,
 
     // for diagnostics
-    pub op_span: Span<'s>,
+    pub op_span: Span,
 }
 
 #[derive(Debug, Clone)]
-pub struct ParenExpr<'s> {
+pub struct ParenExpr {
     pub val: ExprRef,
 
     // for diagnostics
-    pub span: Span<'s>,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]
-pub enum SimpleExpr<'s> {
-    Num(Span<'s>),
-    Str(Span<'s>),
-    Bool(Span<'s>),
-    Nil(Span<'s>),
-    FuncNode(Box<FuncNode<'s>>),
-    TableNode(TableNode<'s>),
-    SuffixedExpr(SuffixedExpr<'s>),
+pub enum SimpleExpr {
+    Num(Span),
+    Str(Span),
+    Bool(Span),
+    Nil(Span),
+    FuncNode(Box<FuncNode>),
+    TableNode(TableNode),
+    SuffixedExpr(SuffixedExpr),
 }
 
 #[derive(Debug, Clone)]
-pub struct FuncNode<'s> {
-    pub ty: FunctionType<'s>,
-    pub body: SpannedBlock<'s>,
+pub struct FuncNode {
+    pub ty: FunctionType,
+    pub body: SpannedBlock,
 }
 
 #[derive(Debug, Clone)]
-pub struct TableNode<'s> {
-    pub fields: Box<[FieldNode<'s>]>,
+pub struct TableNode {
+    pub fields: Box<[FieldNode]>,
 
     // for diagnostics
-    pub span: Span<'s>,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]
-pub enum FieldNode<'s> {
-    Field { key: Span<'s>, val: ExprRef },
+pub enum FieldNode {
+    Field { key: Span, val: ExprRef },
     ExprField { key: ExprRef, val: ExprRef },
     ValField { val: ExprRef },
 }
 
 #[derive(Debug, Clone)]
-pub struct SuffixedExpr<'s> {
+pub struct SuffixedExpr {
     pub val: ExprRef,
-    pub suffixes: Box<[Suffix<'s>]>,
+    pub suffixes: Box<[Suffix]>,
 }
 
 #[derive(Debug, Clone)]
-pub enum Suffix<'s> {
-    Index(Index<'s>),
-    Access(Access<'s>),
+pub enum Suffix {
+    Index(Index),
+    Access(Access),
     Call(Call),
-    Method(Method<'s>),
+    Method(Method),
 }
 
 #[derive(Debug, Clone)]
-pub struct Index<'s> {
+pub struct Index {
     pub key: ExprRef,
 
     // for diagnostics
-    pub span: Span<'s>,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]
-pub struct Access<'s> {
-    pub field_name: Span<'s>,
+pub struct Access {
+    pub field_name: Span,
 }
 
 #[derive(Debug, Clone)]
@@ -290,65 +290,65 @@ pub struct Call {
 }
 
 #[derive(Debug, Clone)]
-pub struct Method<'s> {
-    pub method_name: Span<'s>,
+pub struct Method {
+    pub method_name: Span,
     pub args: Vec<ExprRef>,
 }
 
 #[derive(Debug, Clone)]
-pub enum TypeNode<'s> {
-    Name(Span<'s>),
-    Nil(Span<'s>),
-    FunctionType(FunctionType<'s>),
-    TableType(TableType<'s>),
-    OptionalType(OptionalType<'s>),
-    VariadicType(Span<'s>),
+pub enum TypeNode {
+    Name(Span),
+    Nil(Span),
+    FunctionType(FunctionType),
+    TableType(TableType),
+    OptionalType(OptionalType),
+    VariadicType(Span),
 }
 
 #[derive(Debug, Clone)]
-pub struct FunctionType<'s> {
-    pub params: Vec<Param<'s>>,
-    pub return_type: Option<Box<ReturnType<'s>>>,
+pub struct FunctionType {
+    pub params: Vec<Param>,
+    pub return_type: Option<Box<ReturnType>>,
 
     // for diagnostics
-    pub header_span: Span<'s>, // from `func` to end of params
+    pub header_span: Span, // from `func` to end of params
 }
 
 #[derive(Debug, Clone)]
-pub enum ReturnType<'s> {
-    Single(TypeNode<'s>),
-    Multiple(MultipleType<'s>),
+pub enum ReturnType {
+    Single(TypeNode),
+    Multiple(MultipleType),
 }
 
 #[derive(Debug, Clone)]
-pub struct Param<'s> {
-    pub name: Span<'s>,
-    pub ty: TypeNode<'s>,
+pub struct Param {
+    pub name: Span,
+    pub ty: TypeNode,
 }
 
 #[derive(Debug, Clone)]
-pub struct TableType<'s> {
-    pub key_type: Option<Box<TypeNode<'s>>>,
-    pub val_type: Box<TypeNode<'s>>,
+pub struct TableType {
+    pub key_type: Option<Box<TypeNode>>,
+    pub val_type: Box<TypeNode>,
 
     // for diagnostics
-    pub key_span: Span<'s>, // covers both brackets
+    pub key_span: Span, // covers both brackets
 }
 
 #[derive(Debug, Clone)]
-pub struct MultipleType<'s> {
-    pub types: Vec<TypeNode<'s>>,
+pub struct MultipleType {
+    pub types: Vec<TypeNode>,
 
     // for diagnostics
-    pub span: Span<'s>,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]
-pub struct OptionalType<'s> {
-    pub inner: Box<TypeNode<'s>>,
+pub struct OptionalType {
+    pub inner: Box<TypeNode>,
 
     // for diagnostics
-    pub question: Span<'s>,
+    pub question: Span,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

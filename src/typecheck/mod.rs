@@ -24,19 +24,19 @@ use self::{
     types::{Function, Struct, TableType, Type, TypeKind},
 };
 
-type TResult<'s, T> = Result<T, Box<CheckErr<'s>>>;
-type TRVec<'s, T> = TResult<'s, Vec<T>>;
+type TResult<T> = Result<T, Box<CheckErr>>;
+type TRVec<T> = TResult<Vec<T>>;
 
 pub struct TypeChecker<'a, 's> {
     pub tcx: &'a mut TypeContext<'s>,
-    pub expr_pool: &'a ExprPool<'s>,
+    pub expr_pool: &'a ExprPool,
     pub source: &'s str,
 }
 
 impl<'a, 's> TypeChecker<'a, 's> {
     pub const fn new(
         tcx: &'a mut TypeContext<'s>,
-        expr_pool: &'a ExprPool<'s>,
+        expr_pool: &'a ExprPool,
         source: &'s str,
     ) -> Self {
         TypeChecker {
@@ -55,8 +55,8 @@ impl<'a, 's> TypeChecker<'a, 's> {
     }
 }
 
-impl<'s> TypeChecker<'_, 's> {
-    pub fn check_stmt(&mut self, stmt: &ast::Stmt<'s>) -> TResult<'s, ()> {
+impl TypeChecker<'_, '_> {
+    pub fn check_stmt(&mut self, stmt: &ast::Stmt) -> TResult<()> {
         match stmt {
             ast::Stmt::Declare(decl) => self.check_decl(decl),
             ast::Stmt::MethodDecl(method_decl) => self.check_method_decl(method_decl),
@@ -88,7 +88,7 @@ impl<'s> TypeChecker<'_, 's> {
         }
     }
 
-    fn check_decl(&mut self, decl: &ast::Declare<'s>) -> TResult<'s, ()> {
+    fn check_decl(&mut self, decl: &ast::Declare) -> TResult<()> {
         if let Some(val) = decl.val {
             let val_type = self.check_expr(val)?;
 
@@ -174,7 +174,7 @@ impl<'s> TypeChecker<'_, 's> {
         }
     }
 
-    fn check_method_decl(&mut self, method_decl: &ast::MethodDecl<'s>) -> TResult<'s, ()> {
+    fn check_method_decl(&mut self, method_decl: &ast::MethodDecl) -> TResult<()> {
         let ty = self
             .tcx
             .value_map
@@ -188,7 +188,7 @@ impl<'s> TypeChecker<'_, 's> {
             })));
         };
 
-        let func: &ast::FuncNode<'s> = &method_decl.func;
+        let func: &ast::FuncNode = &method_decl.func;
         let method_type = self.with_scope(|this| {
             this.tcx.value_map.insert_value("self", ty);
             let func_ty = this.resolve_function_type(&func.ty)?;
@@ -229,7 +229,7 @@ impl<'s> TypeChecker<'_, 's> {
         Ok(())
     }
 
-    fn check_multi_decl(&mut self, multi_decl: &ast::MultiDecl<'s>) -> TResult<'s, ()> {
+    fn check_multi_decl(&mut self, multi_decl: &ast::MultiDecl) -> TResult<()> {
         // ok so we need to basically flatten the types. so for example
         // a, b, c := twoReturnFunction(), oneReturnFunction()
         // a, b, c := (type1, type2), type3
@@ -264,13 +264,13 @@ impl<'s> TypeChecker<'_, 's> {
         Ok(())
     }
 
-    fn check_struct_decl(&mut self, struct_decl: &ast::StructDecl<'s>) -> TResult<'s, ()> {
+    fn check_struct_decl(&mut self, struct_decl: &ast::StructDecl) -> TResult<()> {
         let name = struct_decl.name.to_str(self.source);
         let fields = struct_decl
             .members
             .iter()
             .map(|it| Ok((it.name.to_str(self.source), self.resolve_type_node(&it.ty)?)))
-            .collect::<TRVec<'s, _>>()?;
+            .collect::<TRVec<_>>()?;
         let ty = Type {
             kind: TypeKind::Struct(Struct { name, fields }),
             span: Some(struct_decl.name),
@@ -279,7 +279,7 @@ impl<'s> TypeChecker<'_, 's> {
         Ok(())
     }
 
-    fn check_multi_assign(&mut self, multi_assign: &ast::MultiAssign<'s>) -> TResult<'s, ()> {
+    fn check_multi_assign(&mut self, multi_assign: &ast::MultiAssign) -> TResult<()> {
         // ok so we need to basically flatten the types. so for example
         // a, b, c := twoReturnFunction(), oneReturnFunction()
         // a, b, c := (type1, type2), type3
@@ -314,7 +314,7 @@ impl<'s> TypeChecker<'_, 's> {
         Ok(())
     }
 
-    fn check_expr(&mut self, expr: ExprRef) -> TResult<'s, TypeRef> {
+    fn check_expr(&mut self, expr: ExprRef) -> TResult<TypeRef> {
         match &self.expr_pool[expr] {
             ast::Expr::BinOp(binop) => self.check_binop(binop),
             ast::Expr::UnOp(unop) => match unop.op {
@@ -355,14 +355,14 @@ impl<'s> TypeChecker<'_, 's> {
         }
     }
 
-    fn check_field(&mut self, field_node: &ast::FieldNode<'s>) -> TResult<'s, TableType> {
+    fn check_field(&mut self, field_node: &ast::FieldNode) -> TResult<TableType> {
         Ok(TableType {
             key_type: self.check_field_key(field_node)?,
             val_type: self.check_field_val(field_node)?,
         })
     }
 
-    fn check_field_key(&mut self, field_node: &ast::FieldNode<'s>) -> TResult<'s, TypeRef> {
+    fn check_field_key(&mut self, field_node: &ast::FieldNode) -> TResult<TypeRef> {
         match field_node {
             ast::FieldNode::Field { key, .. } => Ok(self.tcx.pool.add(Type {
                 kind: TypeKind::String,
@@ -376,7 +376,7 @@ impl<'s> TypeChecker<'_, 's> {
         }
     }
 
-    fn check_field_val(&mut self, field_node: &ast::FieldNode<'s>) -> TResult<'s, TypeRef> {
+    fn check_field_val(&mut self, field_node: &ast::FieldNode) -> TResult<TypeRef> {
         match field_node {
             ast::FieldNode::Field { val, .. }
             | ast::FieldNode::ExprField { val, .. }
@@ -384,7 +384,7 @@ impl<'s> TypeChecker<'_, 's> {
         }
     }
 
-    fn check_table(&mut self, table_node: &ast::TableNode<'s>) -> TResult<'s, TableType> {
+    fn check_table(&mut self, table_node: &ast::TableNode) -> TResult<TableType> {
         if table_node.fields.is_empty() {
             return Ok(TableType {
                 key_type: self.tcx.pool.add(TypeKind::Adaptable.into()),
@@ -413,7 +413,7 @@ impl<'s> TypeChecker<'_, 's> {
         Ok(result)
     }
 
-    fn check_simple_expr(&mut self, simple_expr: &ast::SimpleExpr<'s>) -> TResult<'s, TypeRef> {
+    fn check_simple_expr(&mut self, simple_expr: &ast::SimpleExpr) -> TResult<TypeRef> {
         match simple_expr {
             ast::SimpleExpr::Num(s) => Ok(self.tcx.pool.add(Type {
                 kind: TypeKind::Number,
@@ -440,7 +440,7 @@ impl<'s> TypeChecker<'_, 's> {
         }
     }
 
-    fn check_func(&mut self, func: &ast::FuncNode<'s>) -> TResult<'s, TypeRef> {
+    fn check_func(&mut self, func: &ast::FuncNode) -> TResult<TypeRef> {
         self.with_scope(|this| {
             let func_ty = this.resolve_function_type(&func.ty)?;
             for (name, ty) in &func_ty.params {
@@ -464,11 +464,7 @@ impl<'s> TypeChecker<'_, 's> {
         })
     }
 
-    fn check_func_body(
-        &mut self,
-        body: &[ast::Stmt<'s>],
-        return_type: TypeRef,
-    ) -> TResult<'s, bool> {
+    fn check_func_body(&mut self, body: &[ast::Stmt], return_type: TypeRef) -> TResult<bool> {
         self.with_scope(|this| {
             for stmt in body {
                 match stmt {
@@ -518,7 +514,7 @@ impl<'s> TypeChecker<'_, 's> {
                         let returned_types = vals
                             .iter()
                             .map(|it| this.check_expr(*it))
-                            .collect::<TRVec<'s, _>>()?;
+                            .collect::<TRVec<_>>()?;
 
                         if let TypeKind::Multiple(types) = &this.tcx.pool[return_type].kind {
                             if types.len() != vals.len() {
@@ -560,10 +556,7 @@ impl<'s> TypeChecker<'_, 's> {
         })
     }
 
-    fn check_suffixed_name(
-        &mut self,
-        suffixed_name: &ast::SuffixedName<'s>,
-    ) -> TResult<'s, TypeRef> {
+    fn check_suffixed_name(&mut self, suffixed_name: &ast::SuffixedName) -> TResult<TypeRef> {
         let mut ty = self
             .tcx
             .value_map
@@ -581,10 +574,7 @@ impl<'s> TypeChecker<'_, 's> {
         Ok(ty)
     }
 
-    fn check_suffixed_expr(
-        &mut self,
-        suffixed_expr: &ast::SuffixedExpr<'s>,
-    ) -> TResult<'s, TypeRef> {
+    fn check_suffixed_expr(&mut self, suffixed_expr: &ast::SuffixedExpr) -> TResult<TypeRef> {
         let mut ty = match &self.expr_pool[suffixed_expr.val] {
             ast::Expr::Name(name) => {
                 if name.to_str(self.source) == "debug_print_ctx" {
@@ -618,11 +608,7 @@ impl<'s> TypeChecker<'_, 's> {
         Ok(ty)
     }
 
-    fn check_suffix(
-        &mut self,
-        mut base: TypeRef,
-        suffix: &ast::Suffix<'s>,
-    ) -> TResult<'s, TypeRef> {
+    fn check_suffix(&mut self, mut base: TypeRef, suffix: &ast::Suffix) -> TResult<TypeRef> {
         match suffix {
             ast::Suffix::Index(ast::Index { key: _, span }) => match &self.tcx.pool[base].kind {
                 TypeKind::Table(TableType { val_type, .. }) => base = *val_type,
@@ -690,11 +676,11 @@ impl<'s> TypeChecker<'_, 's> {
         Ok(base)
     }
 
-    fn check_call(&mut self, ty: TypeRef, args: &[ExprRef]) -> TResult<'s, TypeRef> {
+    fn check_call(&mut self, ty: TypeRef, args: &[ExprRef]) -> TResult<TypeRef> {
         let args = args
             .iter()
             .map(|&arg| self.check_expr(arg))
-            .collect::<TRVec<'s, _>>()?;
+            .collect::<TRVec<_>>()?;
 
         let TypeKind::Function(func_ty) = &self.tcx.pool[ty].kind else {
             // TODO: should probably be it's own error
@@ -733,7 +719,7 @@ impl<'s> TypeChecker<'_, 's> {
         Ok(func_ty.returns)
     }
 
-    fn check_binop(&mut self, binop: &ast::BinOp) -> TResult<'s, TypeRef> {
+    fn check_binop(&mut self, binop: &ast::BinOp) -> TResult<TypeRef> {
         match binop.op {
             ast::OpKind::Add
             | ast::OpKind::Sub
@@ -791,7 +777,7 @@ impl<'s> TypeChecker<'_, 's> {
         }
     }
 
-    fn check_if_stmt(&mut self, if_stmt: &ast::IfStmt<'s>) -> TResult<'s, ()> {
+    fn check_if_stmt(&mut self, if_stmt: &ast::IfStmt) -> TResult<()> {
         let condition_type = self.check_expr(if_stmt.condition)?;
         if !self.can_equal_primitive(condition_type, &TypeKind::Boolean) {
             return Err(MismatchedTypes::err(
@@ -800,7 +786,7 @@ impl<'s> TypeChecker<'_, 's> {
             ));
         }
 
-        self.with_scope::<TResult<'s, ()>>(|this| {
+        self.with_scope::<TResult<()>>(|this| {
             for stmt in &if_stmt.body {
                 this.check_stmt(stmt)?;
             }
@@ -823,7 +809,7 @@ impl<'s> TypeChecker<'_, 's> {
         }
     }
 
-    fn check_while_stmt(&mut self, while_stmt: &ast::WhileStmt<'s>) -> TResult<'s, ()> {
+    fn check_while_stmt(&mut self, while_stmt: &ast::WhileStmt) -> TResult<()> {
         let condition_type = self.check_expr(while_stmt.condition)?;
         if !self.can_equal_primitive(condition_type, &TypeKind::Boolean) {
             return Err(MismatchedTypes::err(
@@ -841,7 +827,7 @@ impl<'s> TypeChecker<'_, 's> {
         })
     }
 
-    fn check_range_for(&mut self, range_for: &ast::RangeFor<'s>) -> TResult<'s, ()> {
+    fn check_range_for(&mut self, range_for: &ast::RangeFor) -> TResult<()> {
         let lhs_type = self.check_expr(range_for.range.lhs)?;
         let rhs_type = self.check_expr(range_for.range.rhs)?;
         let number_type = self.tcx.pool.number();
@@ -867,7 +853,7 @@ impl<'s> TypeChecker<'_, 's> {
         })
     }
 
-    fn check_keyval_for(&mut self, keyval_for: &ast::KeyValFor<'s>) -> TResult<'s, ()> {
+    fn check_keyval_for(&mut self, keyval_for: &ast::KeyValFor) -> TResult<()> {
         let lhs_type = self.check_expr(keyval_for.iter)?;
 
         if let TypeKind::Table(TableType { key_type, val_type }) = self.tcx.pool[lhs_type].kind {
@@ -892,7 +878,7 @@ impl<'s> TypeChecker<'_, 's> {
 }
 
 impl<'s> TypeChecker<'_, 's> {
-    fn resolve_type_node(&mut self, type_node: &ast::TypeNode<'s>) -> TResult<'s, TypeRef> {
+    fn resolve_type_node(&mut self, type_node: &ast::TypeNode) -> TResult<TypeRef> {
         match type_node {
             ast::TypeNode::Name(span) => self
                 .tcx
@@ -929,15 +915,15 @@ impl<'s> TypeChecker<'_, 's> {
 
     fn resolve_function_type(
         &mut self,
-        function_type: &ast::FunctionType<'s>,
-    ) -> TResult<'s, Function<'s>> {
+        function_type: &ast::FunctionType,
+    ) -> TResult<Function<'s>> {
         let returns = match function_type.return_type.as_ref().map(AsRef::as_ref) {
             Some(ast::ReturnType::Single(ty)) => self.resolve_type_node(ty)?,
             Some(ast::ReturnType::Multiple(ast::MultipleType { types, span })) => {
                 let types = types
                     .iter()
                     .map(|it| self.resolve_type_node(it))
-                    .collect::<TRVec<'s, _>>()?;
+                    .collect::<TRVec<_>>()?;
 
                 self.tcx.pool.add(Type {
                     kind: TypeKind::Multiple(types),
@@ -955,12 +941,12 @@ impl<'s> TypeChecker<'_, 's> {
                 .params
                 .iter()
                 .map(|it| Ok((it.name.to_str(self.source), self.resolve_type_node(&it.ty)?)))
-                .collect::<TRVec<'s, _>>()?,
+                .collect::<TRVec<_>>()?,
             returns,
         })
     }
 
-    fn resolve_table_type(&mut self, table_type: &ast::TableType<'s>) -> TResult<'s, TypeRef> {
+    fn resolve_table_type(&mut self, table_type: &ast::TableType) -> TResult<TypeRef> {
         let key_type = match &table_type.key_type {
             Some(key_type) => self.resolve_type_node(key_type.as_ref())?,
             None => self.tcx.pool.add(Type {

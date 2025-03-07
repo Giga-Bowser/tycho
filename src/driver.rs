@@ -58,7 +58,7 @@ fn build(args: &cli::Build) {
         eprintln!("lexing done: {}", duration_fmt(lex_timer.elapsed()));
         eprintln!(
             "tokens memory: {}",
-            ByteFmt(tokens.dq.len() * size_of::<SpanToken<'_>>())
+            ByteFmt(tokens.dq.len() * size_of::<SpanToken>())
         );
     }
 
@@ -152,7 +152,7 @@ pub fn print_main(args: &cli::Print) {
         eprintln!("lexing done: {}", duration_fmt(lex_timer.elapsed()));
         eprintln!(
             "tokens memory: {}",
-            ByteFmt(tokens.dq.len() * size_of::<SpanToken<'_>>())
+            ByteFmt(tokens.dq.len() * size_of::<SpanToken>())
         );
     }
 
@@ -209,11 +209,7 @@ pub fn print_main(args: &cli::Print) {
     eprintln!("{:#?}", compiler.protos);
 }
 
-fn transpile<'pool>(
-    pool: &'pool ExprPool<'pool>,
-    stmts: &[ast::Stmt<'_>],
-    source: &str,
-) -> Vec<u8> {
+fn transpile(pool: &ExprPool, stmts: &[ast::Stmt], source: &str) -> Vec<u8> {
     let mut compiler = Transpiler::new(pool, source);
     for stmt in stmts {
         compiler.transpile_stmt(stmt);
@@ -222,7 +218,7 @@ fn transpile<'pool>(
     compiler.result.into_bytes()
 }
 
-fn compile<'pool>(pool: &'pool ExprPool<'pool>, stmts: &[ast::Stmt<'_>], source: &str) -> Vec<u8> {
+fn compile(pool: &ExprPool, stmts: &[ast::Stmt], source: &str) -> Vec<u8> {
     let mut compiler = LJCompiler::new(pool, source);
     compiler.compile_chunk(stmts);
 

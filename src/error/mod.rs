@@ -84,7 +84,7 @@ impl Annotation {
         }
     }
 
-    pub fn new_span(level: Level, span: Span<'_>) -> Self {
+    pub fn new_span(level: Level, span: Span) -> Self {
         Annotation {
             level,
             range: span.to_range(),
@@ -100,7 +100,7 @@ impl Annotation {
 
 pub struct DiagCtx<'a, 's> {
     pub tcx: &'a TypeContext<'s>,
-    pub expr_pool: &'a ExprPool<'s>,
+    pub expr_pool: &'a ExprPool,
     pub source: &'s str,
 }
 

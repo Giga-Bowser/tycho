@@ -6,24 +6,24 @@ use crate::{
 };
 
 #[derive(Debug, Clone)]
-pub enum CheckErr<'s> {
+pub enum CheckErr {
     MismatchedTypes(MismatchedTypes),
-    NoReturn(NoReturn<'s>),
-    ReturnCount(ReturnCount<'s>),
-    MethodOnWrongType(MethodOnWrongType<'s>),
-    NoSuchVal(NoSuchVal<'s>),
-    NoSuchField(NoSuchField<'s>),
-    NoSuchMethod(NoSuchMethod<'s>),
+    NoReturn(NoReturn),
+    ReturnCount(ReturnCount),
+    MethodOnWrongType(MethodOnWrongType),
+    NoSuchVal(NoSuchVal),
+    NoSuchField(NoSuchField),
+    NoSuchMethod(NoSuchMethod),
     NotIterable,
-    BadAccess { span: Span<'s>, ty: TypeRef },
-    BadIndex { span: Span<'s>, ty: TypeRef },
-    BadNegate { op_span: Span<'s>, ty: TypeRef },
-    BadNot { op_span: Span<'s>, ty: TypeRef },
+    BadAccess { span: Span, ty: TypeRef },
+    BadIndex { span: Span, ty: TypeRef },
+    BadNegate { op_span: Span, ty: TypeRef },
+    BadNot { op_span: Span, ty: TypeRef },
     TooManyArgs,
     TooFewArgs,
 }
 
-impl<'s> Snippetize<'s> for CheckErr<'s> {
+impl<'s> Snippetize<'s> for CheckErr {
     fn snippetize(&self, ctx: &DiagCtx<'_, 's>) -> Diag {
         match self {
             CheckErr::MismatchedTypes(mismatched_types) => mismatched_types.snippetize(ctx),
@@ -87,7 +87,7 @@ pub struct MismatchedTypes {
 }
 
 impl MismatchedTypes {
-    pub fn err<'s>(expected: TypeRef, recieved: TypeRef) -> Box<CheckErr<'s>> {
+    pub fn err(expected: TypeRef, recieved: TypeRef) -> Box<CheckErr> {
         Box::new(CheckErr::MismatchedTypes(MismatchedTypes {
             expected,
             recieved,
@@ -132,11 +132,11 @@ impl<'s> Snippetize<'s> for MismatchedTypes {
 }
 
 #[derive(Debug, Clone)]
-pub struct NoSuchVal<'s> {
-    pub val_name: Span<'s>,
+pub struct NoSuchVal {
+    pub val_name: Span,
 }
 
-impl<'s> Snippetize<'s> for NoSuchVal<'s> {
+impl<'s> Snippetize<'s> for NoSuchVal {
     fn snippetize(&self, ctx: &DiagCtx<'_, 's>) -> Diag {
         let val_str = self.val_name.to_str(ctx.source);
 
@@ -151,11 +151,11 @@ impl<'s> Snippetize<'s> for NoSuchVal<'s> {
 }
 
 #[derive(Debug, Clone)]
-pub struct NoSuchField<'s> {
-    pub field_name: Span<'s>,
+pub struct NoSuchField {
+    pub field_name: Span,
 }
 
-impl<'s> Snippetize<'s> for NoSuchField<'s> {
+impl<'s> Snippetize<'s> for NoSuchField {
     fn snippetize(&self, ctx: &DiagCtx<'_, 's>) -> Diag {
         let field_str = self.field_name.to_str(ctx.source);
 
@@ -171,11 +171,11 @@ impl<'s> Snippetize<'s> for NoSuchField<'s> {
 }
 
 #[derive(Debug, Clone)]
-pub struct NoSuchMethod<'s> {
-    pub method_name: Span<'s>,
+pub struct NoSuchMethod {
+    pub method_name: Span,
 }
 
-impl<'s> Snippetize<'s> for NoSuchMethod<'s> {
+impl<'s> Snippetize<'s> for NoSuchMethod {
     fn snippetize(&self, ctx: &DiagCtx<'_, 's>) -> Diag {
         let method_str = self.method_name.to_str(ctx.source);
 
@@ -191,11 +191,11 @@ impl<'s> Snippetize<'s> for NoSuchMethod<'s> {
 }
 
 #[derive(Debug, Clone)]
-pub struct NoReturn<'s> {
-    pub func_node: ast::FuncNode<'s>,
+pub struct NoReturn {
+    pub func_node: ast::FuncNode,
 }
 
-impl<'s> Snippetize<'s> for NoReturn<'s> {
+impl<'s> Snippetize<'s> for NoReturn {
     fn snippetize(&self, ctx: &DiagCtx<'_, 's>) -> Diag {
         let mut diag = Diag::new(Level::Error, "non-nil function does not return");
 
@@ -216,12 +216,12 @@ impl<'s> Snippetize<'s> for NoReturn<'s> {
 }
 
 #[derive(Debug, Clone)]
-pub struct ReturnCount<'s> {
-    pub return_node: ast::ReturnStmt<'s>,
+pub struct ReturnCount {
+    pub return_node: ast::ReturnStmt,
     pub expected: usize,
 }
 
-impl<'s> Snippetize<'s> for ReturnCount<'s> {
+impl<'s> Snippetize<'s> for ReturnCount {
     fn snippetize(&self, ctx: &DiagCtx<'_, 's>) -> Diag {
         let return_span = ctx.expr_pool.wrap(&self.return_node).span();
         Diag::new(Level::Error, "wrong number of returns").add_annotation(
@@ -235,12 +235,12 @@ impl<'s> Snippetize<'s> for ReturnCount<'s> {
 }
 
 #[derive(Debug, Clone)]
-pub struct MethodOnWrongType<'s> {
-    pub span: Span<'s>,
+pub struct MethodOnWrongType {
+    pub span: Span,
     pub ty: TypeRef,
 }
 
-impl<'s> Snippetize<'s> for MethodOnWrongType<'s> {
+impl<'s> Snippetize<'s> for MethodOnWrongType {
     fn snippetize(&self, ctx: &DiagCtx<'_, 's>) -> Diag {
         Diag::new(
             Level::Error,

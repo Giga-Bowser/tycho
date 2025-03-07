@@ -54,7 +54,7 @@ pub enum TypeKind<'s> {
 #[derive(Debug, Clone)]
 pub struct Type<'s> {
     pub kind: TypeKind<'s>,
-    pub span: Option<Span<'s>>,
+    pub span: Option<Span>,
 }
 
 impl TypeKind<'_> {

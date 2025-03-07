@@ -183,13 +183,13 @@ impl<'s> Lexer<'s> {
     }
 
     #[inline]
-    fn span(&self) -> Span<'s> {
+    fn span(&self) -> Span {
         Span::new(self.token_start as SrcLoc, self.token_end as SrcLoc)
     }
 }
 
-impl<'s> Iterator for Lexer<'s> {
-    type Item = SpanToken<'s>;
+impl Iterator for Lexer<'_> {
+    type Item = SpanToken;
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
@@ -208,13 +208,13 @@ impl<'s> Iterator for Lexer<'s> {
 }
 
 #[derive(Debug, Clone)]
-pub struct SpanToken<'s> {
+pub struct SpanToken {
     pub kind: TokenKind,
-    pub text: Span<'s>,
+    pub text: Span,
 }
 
-impl<'s> SpanToken<'s> {
-    pub fn new(kind: TokenKind, span: Span<'s>) -> Self {
+impl SpanToken {
+    pub fn new(kind: TokenKind, span: Span) -> Self {
         Self { kind, text: span }
     }
 }
@@ -222,11 +222,11 @@ impl<'s> SpanToken<'s> {
 #[derive(Debug, Clone)]
 pub struct SpanTokens<'s> {
     pub source: &'s str,
-    pub dq: VecDeque<SpanToken<'s>>,
+    pub dq: VecDeque<SpanToken>,
 }
 
-impl<'s> Index<usize> for SpanTokens<'s> {
-    type Output = SpanToken<'s>;
+impl Index<usize> for SpanTokens<'_> {
+    type Output = SpanToken;
 
     #[inline]
     fn index(&self, index: usize) -> &Self::Output {
@@ -234,13 +234,13 @@ impl<'s> Index<usize> for SpanTokens<'s> {
     }
 }
 
-impl<'s> SpanTokens<'s> {
+impl SpanTokens<'_> {
     #[inline]
-    pub fn pop_front(&mut self) -> SpanToken<'s> {
+    pub fn pop_front(&mut self) -> SpanToken {
         self.dq.pop_front().unwrap()
     }
 
-    pub fn pop_name(&mut self) -> Result<Span<'s>, Box<ParseError<'s>>> {
+    pub fn pop_name(&mut self) -> Result<Span, Box<ParseError>> {
         if self.dq[0].kind != TokenKind::Name {
             return Err(Box::new(ParseError::UnexpectedToken(UnexpectedToken {
                 token: self.dq[0].clone(),
@@ -251,10 +251,7 @@ impl<'s> SpanTokens<'s> {
         Ok(self.pop_front().text)
     }
 
-    pub fn expect(
-        &mut self,
-        expected_kind: TokenKind,
-    ) -> Result<SpanToken<'s>, Box<ParseError<'s>>> {
+    pub fn expect(&mut self, expected_kind: TokenKind) -> Result<SpanToken, Box<ParseError>> {
         if self.dq[0].kind == expected_kind {
             Ok(self.pop_front())
         } else {

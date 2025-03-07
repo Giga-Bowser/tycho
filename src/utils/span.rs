@@ -1,22 +1,17 @@
-use std::{marker::PhantomData, ops::Range};
+use std::ops::Range;
 
 pub(crate) type SrcLoc = u32;
 
 #[derive(Debug, Clone, Copy)]
-pub struct Span<'s> {
+pub struct Span {
     pub start: SrcLoc,
     pub end: SrcLoc,
-    _m: PhantomData<&'s str>,
 }
 
-impl<'s> Span<'s> {
+impl Span {
     #[inline]
     pub const fn new(start: SrcLoc, end: SrcLoc) -> Self {
-        Self {
-            start,
-            end,
-            _m: PhantomData,
-        }
+        Self { start, end }
     }
 
     #[inline]
@@ -46,7 +41,7 @@ impl<'s> Span<'s> {
     }
 
     #[inline]
-    pub fn to_str(self, source: &'s str) -> &'s str {
+    pub fn to_str(self, source: &str) -> &str {
         unsafe { source.get_unchecked(self.to_range()) }
     }
 

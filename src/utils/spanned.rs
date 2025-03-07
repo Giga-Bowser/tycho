@@ -1,16 +1,16 @@
 use crate::utils::Span;
 
 pub(crate) trait Spanned<'s> {
-    fn span(&self) -> Span<'s>;
+    fn span(&self) -> Span;
 }
 
-pub(crate) trait Covering<'s>: Iterator<Item = Span<'s>> + Sized {
-    fn covering(self) -> Option<Span<'s>> {
+pub(crate) trait Covering<'s>: Iterator<Item = Span> + Sized {
+    fn covering(self) -> Option<Span> {
         self.reduce(Span::cover)
     }
 }
 
-impl<'s, T: Iterator<Item = Span<'s>>> Covering<'s> for T {}
+impl<T: Iterator<Item = Span>> Covering<'_> for T {}
 
 mod ast {
     use super::*;
@@ -22,8 +22,8 @@ mod ast {
         utils::pooled::Pooled,
     };
 
-    impl<'s> Spanned<'s> for Pooled<'_, &ast::Stmt<'s>, ExprPool<'s>> {
-        fn span(&self) -> Span<'s> {
+    impl Spanned<'_> for Pooled<'_, &ast::Stmt, ExprPool> {
+        fn span(&self) -> Span {
             match &self.val {
                 ast::Stmt::Declare(declare) => self.wrap(declare).span(),
                 ast::Stmt::MultiDecl(multi_decl) => self.wrap(multi_decl).span(),
@@ -43,8 +43,8 @@ mod ast {
         }
     }
 
-    impl<'s> Spanned<'s> for Pooled<'_, &ast::Declare<'s>, ExprPool<'s>> {
-        fn span(&self) -> Span<'s> {
+    impl Spanned<'_> for Pooled<'_, &ast::Declare, ExprPool> {
+        fn span(&self) -> Span {
             let mut span = self.val.lhs.name;
 
             if let Some(ty) = &self.val.ty {
@@ -59,8 +59,8 @@ mod ast {
         }
     }
 
-    impl<'s> Spanned<'s> for Pooled<'_, &ast::MultiDecl<'s>, ExprPool<'s>> {
-        fn span(&self) -> Span<'s> {
+    impl Spanned<'_> for Pooled<'_, &ast::MultiDecl, ExprPool> {
+        fn span(&self) -> Span {
             let mut span = self.val.lhs_arr.iter().copied().covering().unwrap();
             if let Some(rhs_span) = self
                 .val
@@ -75,23 +75,23 @@ mod ast {
         }
     }
 
-    impl<'s> Spanned<'s> for Pooled<'_, &ast::MethodDecl<'s>, ExprPool<'s>> {
-        fn span(&self) -> Span<'s> {
+    impl Spanned<'_> for Pooled<'_, &ast::MethodDecl, ExprPool> {
+        fn span(&self) -> Span {
             Span::cover(self.val.method_name, self.val.struct_name)
                 .cover(self.wrap(self.val.func.as_ref()).span())
         }
     }
 
-    impl<'s> Spanned<'s> for Pooled<'_, &ast::Assign<'s>, ExprPool<'s>> {
-        fn span(&self) -> Span<'s> {
+    impl Spanned<'_> for Pooled<'_, &ast::Assign, ExprPool> {
+        fn span(&self) -> Span {
             self.wrap(self.val.lhs.as_ref())
                 .span()
                 .cover(self.wrap(self.val.rhs).span())
         }
     }
 
-    impl<'s> Spanned<'s> for Pooled<'_, &ast::MultiAssign<'s>, ExprPool<'s>> {
-        fn span(&self) -> Span<'s> {
+    impl Spanned<'_> for Pooled<'_, &ast::MultiAssign, ExprPool> {
+        fn span(&self) -> Span {
             self.val
                 .lhs_arr
                 .iter()
@@ -102,8 +102,8 @@ mod ast {
         }
     }
 
-    impl<'s> Spanned<'s> for Pooled<'_, &ast::Block<'s>, ExprPool<'s>> {
-        fn span(&self) -> Span<'s> {
+    impl Spanned<'_> for Pooled<'_, &ast::Block, ExprPool> {
+        fn span(&self) -> Span {
             match self.val {
                 ast::Block::Some(stmts) => stmts
                     .iter()
@@ -115,14 +115,14 @@ mod ast {
         }
     }
 
-    impl<'s> Spanned<'s> for Pooled<'_, &ast::SpannedBlock<'s>, ExprPool<'s>> {
-        fn span(&self) -> Span<'s> {
+    impl Spanned<'_> for Pooled<'_, &ast::SpannedBlock, ExprPool> {
+        fn span(&self) -> Span {
             self.val.span
         }
     }
 
-    impl<'s> Spanned<'s> for Pooled<'_, &ast::ReturnStmt<'s>, ExprPool<'s>> {
-        fn span(&self) -> Span<'s> {
+    impl Spanned<'_> for Pooled<'_, &ast::ReturnStmt, ExprPool> {
+        fn span(&self) -> Span {
             let mut span = self.val.kw_span;
 
             if let Some(val_span) = self
@@ -139,8 +139,8 @@ mod ast {
         }
     }
 
-    impl<'s> Spanned<'s> for Pooled<'_, &ast::IfStmt<'s>, ExprPool<'s>> {
-        fn span(&self) -> Span<'s> {
+    impl Spanned<'_> for Pooled<'_, &ast::IfStmt, ExprPool> {
+        fn span(&self) -> Span {
             let mut span = self.wrap(self.val.condition).span();
 
             span = span.cover(self.wrap(&self.val.body).span());
@@ -156,39 +156,39 @@ mod ast {
         }
     }
 
-    impl<'s> Spanned<'s> for Pooled<'_, &ast::WhileStmt<'s>, ExprPool<'s>> {
-        fn span(&self) -> Span<'s> {
+    impl Spanned<'_> for Pooled<'_, &ast::WhileStmt, ExprPool> {
+        fn span(&self) -> Span {
             self.val.kw_span.cover(self.wrap(&self.val.body).span())
         }
     }
 
-    impl<'s> Spanned<'s> for Pooled<'_, &ast::RangeFor<'s>, ExprPool<'s>> {
-        fn span(&self) -> Span<'s> {
+    impl Spanned<'_> for Pooled<'_, &ast::RangeFor, ExprPool> {
+        fn span(&self) -> Span {
             self.val.kw_span.cover(self.wrap(&self.val.body).span())
         }
     }
 
-    impl<'s> Spanned<'s> for Pooled<'_, &ast::KeyValFor<'s>, ExprPool<'s>> {
-        fn span(&self) -> Span<'s> {
+    impl Spanned<'_> for Pooled<'_, &ast::KeyValFor, ExprPool> {
+        fn span(&self) -> Span {
             self.val.kw_span.cover(self.wrap(&self.val.body).span())
         }
     }
 
-    impl<'s> Spanned<'s> for Pooled<'_, &ast::StructDecl<'s>, ExprPool<'s>> {
-        fn span(&self) -> Span<'s> {
+    impl Spanned<'_> for Pooled<'_, &ast::StructDecl, ExprPool> {
+        fn span(&self) -> Span {
             self.val.name.cover_loc(self.val.end_loc)
         }
     }
 
-    impl<'s> Spanned<'s> for Pooled<'_, &ast::Member<'s>, ExprPool<'s>> {
-        fn span(&self) -> Span<'s> {
+    impl Spanned<'_> for Pooled<'_, &ast::Member, ExprPool> {
+        fn span(&self) -> Span {
             self.val.name.cover(self.val.ty.span())
         }
     }
 
     // expr nodes
-    impl<'s> Spanned<'s> for Pooled<'_, ExprRef, ExprPool<'s>> {
-        fn span(&self) -> Span<'s> {
+    impl Spanned<'_> for Pooled<'_, ExprRef, ExprPool> {
+        fn span(&self) -> Span {
             match &self.pool[self.val] {
                 ast::Expr::BinOp(bin_op) => {
                     Span::cover(self.wrap(bin_op.lhs).span(), self.wrap(bin_op.rhs).span())
@@ -201,8 +201,8 @@ mod ast {
         }
     }
 
-    impl<'s> Spanned<'s> for Pooled<'_, &ast::SimpleExpr<'s>, ExprPool<'s>> {
-        fn span(&self) -> Span<'s> {
+    impl Spanned<'_> for Pooled<'_, &ast::SimpleExpr, ExprPool> {
+        fn span(&self) -> Span {
             match self.val {
                 ast::SimpleExpr::Num(span)
                 | ast::SimpleExpr::Str(span)
@@ -215,14 +215,14 @@ mod ast {
         }
     }
 
-    impl<'s> Spanned<'s> for Pooled<'_, &ast::FuncNode<'s>, ExprPool<'s>> {
-        fn span(&self) -> Span<'s> {
+    impl Spanned<'_> for Pooled<'_, &ast::FuncNode, ExprPool> {
+        fn span(&self) -> Span {
             Span::cover(self.val.ty.span(), self.wrap(&self.val.body).span())
         }
     }
 
-    impl<'s> Spanned<'s> for Pooled<'_, &ast::SuffixedExpr<'s>, ExprPool<'s>> {
-        fn span(&self) -> Span<'s> {
+    impl Spanned<'_> for Pooled<'_, &ast::SuffixedExpr, ExprPool> {
+        fn span(&self) -> Span {
             let mut span = self.wrap(self.val.val).span();
 
             for suffix in &self.val.suffixes {
@@ -254,8 +254,8 @@ mod ast {
         }
     }
 
-    impl<'s> Spanned<'s> for Pooled<'_, &ast::RangeExpr, ExprPool<'s>> {
-        fn span(&self) -> Span<'s> {
+    impl Spanned<'_> for Pooled<'_, &ast::RangeExpr, ExprPool> {
+        fn span(&self) -> Span {
             Span::cover(
                 self.wrap(self.val.lhs).span(),
                 self.wrap(self.val.rhs).span(),
@@ -263,8 +263,8 @@ mod ast {
         }
     }
 
-    impl<'s> Spanned<'s> for Pooled<'_, &ast::SuffixedName<'s>, ExprPool<'s>> {
-        fn span(&self) -> Span<'s> {
+    impl Spanned<'_> for Pooled<'_, &ast::SuffixedName, ExprPool> {
+        fn span(&self) -> Span {
             let mut span = self.val.name;
 
             for suffix in &self.val.suffixes {
@@ -297,8 +297,8 @@ mod ast {
     }
 
     // type nodes
-    impl<'s> Spanned<'s> for ast::TypeNode<'s> {
-        fn span(&self) -> Span<'s> {
+    impl Spanned<'_> for ast::TypeNode {
+        fn span(&self) -> Span {
             match self {
                 ast::TypeNode::Name(span)
                 | ast::TypeNode::Nil(span)
@@ -310,8 +310,8 @@ mod ast {
         }
     }
 
-    impl<'s> Spanned<'s> for ast::FunctionType<'s> {
-        fn span(&self) -> Span<'s> {
+    impl Spanned<'_> for ast::FunctionType {
+        fn span(&self) -> Span {
             let mut span = self.header_span;
 
             if let Some(return_type) = &self.return_type {
@@ -322,8 +322,8 @@ mod ast {
         }
     }
 
-    impl<'s> Spanned<'s> for ast::ReturnType<'s> {
-        fn span(&self) -> Span<'s> {
+    impl Spanned<'_> for ast::ReturnType {
+        fn span(&self) -> Span {
             match self {
                 ast::ReturnType::Single(ty) => ty.span(),
                 ast::ReturnType::Multiple(multiple_type) => multiple_type.span,
@@ -331,14 +331,14 @@ mod ast {
         }
     }
 
-    impl<'s> Spanned<'s> for ast::TableType<'s> {
-        fn span(&self) -> Span<'s> {
+    impl Spanned<'_> for ast::TableType {
+        fn span(&self) -> Span {
             Span::cover(self.key_span, self.val_type.as_ref().span())
         }
     }
 
-    impl<'s> Spanned<'s> for ast::OptionalType<'s> {
-        fn span(&self) -> Span<'s> {
+    impl Spanned<'_> for ast::OptionalType {
+        fn span(&self) -> Span {
             Span::cover(self.inner.as_ref().span(), self.question)
         }
     }

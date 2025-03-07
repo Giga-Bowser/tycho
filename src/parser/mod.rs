@@ -18,15 +18,15 @@ use self::{
     pool::{ExprPool, ExprRef},
 };
 
-type PResult<'s, T> = Result<T, Box<ParseError<'s>>>;
+type PResult<T> = Result<T, Box<ParseError>>;
 
 pub struct Parser<'a, 's> {
     pub tokens: SpanTokens<'s>,
-    pub expr_pool: &'a mut ExprPool<'s>,
+    pub expr_pool: &'a mut ExprPool,
 }
 
 impl<'a, 's> Parser<'a, 's> {
-    pub const fn new(tokens: SpanTokens<'s>, expr_pool: &'a mut ExprPool<'s>) -> Self {
+    pub const fn new(tokens: SpanTokens<'s>, expr_pool: &'a mut ExprPool) -> Self {
         Parser { tokens, expr_pool }
     }
 
@@ -39,8 +39,8 @@ impl<'a, 's> Parser<'a, 's> {
     }
 }
 
-impl<'s> Parser<'_, 's> {
-    pub fn parse_stmt(&mut self) -> PResult<'s, Stmt<'s>> {
+impl Parser<'_, '_> {
+    pub fn parse_stmt(&mut self) -> PResult<Stmt> {
         match self.tokens[0].kind {
             Name => {
                 if self.tokens[1].kind == Colon
@@ -72,7 +72,7 @@ impl<'s> Parser<'_, 's> {
         }
     }
 
-    fn parse_block(&mut self) -> PResult<'s, Block<'s>> {
+    fn parse_block(&mut self) -> PResult<Block> {
         // technically unnecessary sometimes. idk, probably no biggie
         let start = self.tokens.expect(LCurly)?.text.start;
 
@@ -90,7 +90,7 @@ impl<'s> Parser<'_, 's> {
         }
     }
 
-    fn parse_block_spanned(&mut self) -> PResult<'s, SpannedBlock<'s>> {
+    fn parse_block_spanned(&mut self) -> PResult<SpannedBlock> {
         // technically unnecessary sometimes. idk, probably no biggie
         let start = self.tokens.expect(LCurly)?.text.start;
 
@@ -107,7 +107,7 @@ impl<'s> Parser<'_, 's> {
         })
     }
 
-    fn parse_method_decl(&mut self) -> PResult<'s, MethodDecl<'s>> {
+    fn parse_method_decl(&mut self) -> PResult<MethodDecl> {
         let struct_name = self.tokens[0].text;
 
         self.tokens.pop_front(); // name
@@ -124,7 +124,7 @@ impl<'s> Parser<'_, 's> {
         })
     }
 
-    fn parse_decl(&mut self, lhs: SuffixedName<'s>) -> PResult<'s, Declare<'s>> {
+    fn parse_decl(&mut self, lhs: SuffixedName) -> PResult<Declare> {
         self.tokens.pop_front(); // pop ':'
 
         if self.tokens[0].kind == Equal {
@@ -160,7 +160,7 @@ impl<'s> Parser<'_, 's> {
         })
     }
 
-    fn parse_assignment(&mut self, lhs: SuffixedName<'s>) -> PResult<'s, Assign<'s>> {
+    fn parse_assignment(&mut self, lhs: SuffixedName) -> PResult<Assign> {
         self.tokens.pop_front(); // pop '='
 
         let rhs = self.parse_expr()?;
@@ -171,7 +171,7 @@ impl<'s> Parser<'_, 's> {
         })
     }
 
-    fn if_stmt(&mut self) -> PResult<'s, IfStmt<'s>> {
+    fn if_stmt(&mut self) -> PResult<IfStmt> {
         let kw_span = self.tokens.pop_front().text; // pop 'if'
 
         let condition = self.parse_expr()?;
@@ -210,7 +210,7 @@ impl<'s> Parser<'_, 's> {
         })
     }
 
-    fn while_stmt(&mut self) -> PResult<'s, WhileStmt<'s>> {
+    fn while_stmt(&mut self) -> PResult<WhileStmt> {
         let kw_span = self.tokens.pop_front().text; // pop 'while'
 
         let condition = self.parse_expr()?;
@@ -223,7 +223,7 @@ impl<'s> Parser<'_, 's> {
         })
     }
 
-    fn for_stmt(&mut self) -> PResult<'s, Stmt<'s>> {
+    fn for_stmt(&mut self) -> PResult<Stmt> {
         let kw_span = self.tokens.pop_front().text; // pop 'for'
 
         let key_name = self.tokens.pop_name()?;
@@ -273,7 +273,7 @@ impl<'s> Parser<'_, 's> {
         }
     }
 
-    fn parse_expr_stmt(&mut self) -> PResult<'s, Stmt<'s>> {
+    fn parse_expr_stmt(&mut self) -> PResult<Stmt> {
         let sufexpr = self.parse_suffixed_expr()?;
 
         if let Expr::Name(name) = self.expr_pool[sufexpr.val] {
@@ -355,7 +355,7 @@ impl<'s> Parser<'_, 's> {
         Ok(Stmt::ExprStmt(sufexpr))
     }
 
-    fn parse_suffixed_expr(&mut self) -> PResult<'s, SuffixedExpr<'s>> {
+    fn parse_suffixed_expr(&mut self) -> PResult<SuffixedExpr> {
         let val = self.parse_primary_expr()?;
         let mut suffixes = Vec::new();
         loop {
@@ -415,7 +415,7 @@ impl<'s> Parser<'_, 's> {
         }
     }
 
-    fn parse_index(&mut self) -> PResult<'s, Index<'s>> {
+    fn parse_index(&mut self) -> PResult<Index> {
         let start = self.tokens.pop_front().text.start;
 
         let key = self.parse_expr()?;
@@ -428,7 +428,7 @@ impl<'s> Parser<'_, 's> {
         })
     }
 
-    fn parse_expr_list(&mut self) -> PResult<'s, Vec<ExprRef>> {
+    fn parse_expr_list(&mut self) -> PResult<Vec<ExprRef>> {
         let mut result = Vec::new();
         result.push(self.parse_expr()?);
 
@@ -440,7 +440,7 @@ impl<'s> Parser<'_, 's> {
         Ok(result)
     }
 
-    fn parse_func_args(&mut self) -> PResult<'s, Vec<ExprRef>> {
+    fn parse_func_args(&mut self) -> PResult<Vec<ExprRef>> {
         self.tokens.pop_front(); // pop '('
         if self.tokens[0].kind == RParen {
             self.tokens.pop_front();
@@ -460,7 +460,7 @@ impl<'s> Parser<'_, 's> {
         Ok(result)
     }
 
-    fn parse_primary_expr(&mut self) -> PResult<'s, ExprRef> {
+    fn parse_primary_expr(&mut self) -> PResult<ExprRef> {
         match self.tokens[0].kind {
             Name | Elipsis => {
                 let name = self.tokens[0].text;
@@ -484,11 +484,11 @@ impl<'s> Parser<'_, 's> {
         }
     }
 
-    fn parse_expr(&mut self) -> PResult<'s, ExprRef> {
+    fn parse_expr(&mut self) -> PResult<ExprRef> {
         self.expr_impl(0)
     }
 
-    fn expr_impl(&mut self, limit: u8) -> PResult<'s, ExprRef> {
+    fn expr_impl(&mut self, limit: u8) -> PResult<ExprRef> {
         let mut result = if let Some(op) = get_unop(self.tokens[0].kind) {
             let op_span = self.tokens.pop_front().text;
             let val = self.expr_impl(12)?;
@@ -520,7 +520,7 @@ impl<'s> Parser<'_, 's> {
         Ok(result)
     }
 
-    fn simple_expr(&mut self) -> PResult<'s, SimpleExpr<'s>> {
+    fn simple_expr(&mut self) -> PResult<SimpleExpr> {
         let str = self.tokens[0].text;
         match self.tokens[0].kind {
             NumLit => {
@@ -545,7 +545,7 @@ impl<'s> Parser<'_, 's> {
         }
     }
 
-    fn field(&mut self) -> PResult<'s, FieldNode<'s>> {
+    fn field(&mut self) -> PResult<FieldNode> {
         match self.tokens[0].kind {
             LSquare => {
                 self.tokens.pop_front();
@@ -580,7 +580,7 @@ impl<'s> Parser<'_, 's> {
         }
     }
 
-    fn table_constructor(&mut self) -> PResult<'s, TableNode<'s>> {
+    fn table_constructor(&mut self) -> PResult<TableNode> {
         let start = self.tokens.pop_front().text.start;
 
         if self.tokens[0].kind == RCurly {
@@ -611,7 +611,7 @@ impl<'s> Parser<'_, 's> {
         })
     }
 
-    fn member(&mut self) -> PResult<'s, Member<'s>> {
+    fn member(&mut self) -> PResult<Member> {
         let name = self.tokens.pop_name()?;
         self.tokens.expect(Colon)?;
 
@@ -621,7 +621,7 @@ impl<'s> Parser<'_, 's> {
         })
     }
 
-    fn parse_struct_constructor(&mut self) -> PResult<'s, FuncNode<'s>> {
+    fn parse_struct_constructor(&mut self) -> PResult<FuncNode> {
         let start = self.tokens.pop_front().text.start;
         self.tokens.expect(LParen)?;
 
@@ -668,7 +668,7 @@ impl<'s> Parser<'_, 's> {
         })
     }
 
-    fn parse_struct_decl(&mut self) -> PResult<'s, StructDecl<'s>> {
+    fn parse_struct_decl(&mut self) -> PResult<StructDecl> {
         let _start = self.tokens.pop_front().text.start; // pop 'struct'
 
         let name = self.tokens.pop_name()?;
@@ -725,7 +725,7 @@ impl<'s> Parser<'_, 's> {
         }
     }
 
-    fn parse_func_header(&mut self) -> PResult<'s, FunctionType<'s>> {
+    fn parse_func_header(&mut self) -> PResult<FunctionType> {
         let start = self.tokens.pop_front().text.start; // pop 'func'
         self.tokens.expect(LParen)?;
 
@@ -779,7 +779,7 @@ impl<'s> Parser<'_, 's> {
         })
     }
 
-    fn func_constructor(&mut self) -> PResult<'s, FuncNode<'s>> {
+    fn func_constructor(&mut self) -> PResult<FuncNode> {
         let ty = self.parse_func_header()?;
 
         let body = self.parse_block_spanned()?;
@@ -787,7 +787,7 @@ impl<'s> Parser<'_, 's> {
         Ok(FuncNode { ty, body })
     }
 
-    fn parse_return_type(&mut self) -> PResult<'s, Option<ReturnType<'s>>> {
+    fn parse_return_type(&mut self) -> PResult<Option<ReturnType>> {
         if self.tokens[0].kind != Arrow {
             return Ok(None);
         }
@@ -824,7 +824,7 @@ impl<'s> Parser<'_, 's> {
         Ok(Some(ty))
     }
 
-    fn parse_basic_type(&mut self) -> PResult<'s, TypeNode<'s>> {
+    fn parse_basic_type(&mut self) -> PResult<TypeNode> {
         match self.tokens[0].kind {
             Name | Nil => {
                 let name = self.tokens.pop_front().text;
@@ -866,7 +866,7 @@ impl<'s> Parser<'_, 's> {
         }
     }
 
-    fn parse_type(&mut self) -> PResult<'s, TypeNode<'s>> {
+    fn parse_type(&mut self) -> PResult<TypeNode> {
         let mut result = self.parse_basic_type()?;
 
         if self.tokens[0].kind == Question {
@@ -887,11 +887,11 @@ impl<'s> Parser<'_, 's> {
     }
 
     /// expr without concat operator
-    fn parse_range_expr(&mut self) -> PResult<'s, ExprRef> {
+    fn parse_range_expr(&mut self) -> PResult<ExprRef> {
         self.range_expr_impl(0)
     }
 
-    fn range_expr_impl(&mut self, limit: u8) -> PResult<'s, ExprRef> {
+    fn range_expr_impl(&mut self, limit: u8) -> PResult<ExprRef> {
         let mut result = if let Some(op) = get_unop(self.tokens[0].kind) {
             let op_span = self.tokens.pop_front().text;
             let val = self.range_expr_impl(12)?;
