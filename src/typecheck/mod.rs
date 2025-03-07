@@ -314,7 +314,7 @@ impl<'s> TypeChecker<'_, 's> {
         Ok(())
     }
 
-    fn check_expr(&mut self, expr: ExprRef) -> TResult<'s, TypeRef<'s>> {
+    fn check_expr(&mut self, expr: ExprRef) -> TResult<'s, TypeRef> {
         match &self.expr_pool[expr] {
             ast::Expr::BinOp(binop) => self.check_binop(binop),
             ast::Expr::UnOp(unop) => match unop.op {
@@ -355,14 +355,14 @@ impl<'s> TypeChecker<'_, 's> {
         }
     }
 
-    fn check_field(&mut self, field_node: &ast::FieldNode<'s>) -> TResult<'s, TableType<'s>> {
+    fn check_field(&mut self, field_node: &ast::FieldNode<'s>) -> TResult<'s, TableType> {
         Ok(TableType {
             key_type: self.check_field_key(field_node)?,
             val_type: self.check_field_val(field_node)?,
         })
     }
 
-    fn check_field_key(&mut self, field_node: &ast::FieldNode<'s>) -> TResult<'s, TypeRef<'s>> {
+    fn check_field_key(&mut self, field_node: &ast::FieldNode<'s>) -> TResult<'s, TypeRef> {
         match field_node {
             ast::FieldNode::Field { key, .. } => Ok(self.tcx.pool.add(Type {
                 kind: TypeKind::String,
@@ -376,7 +376,7 @@ impl<'s> TypeChecker<'_, 's> {
         }
     }
 
-    fn check_field_val(&mut self, field_node: &ast::FieldNode<'s>) -> TResult<'s, TypeRef<'s>> {
+    fn check_field_val(&mut self, field_node: &ast::FieldNode<'s>) -> TResult<'s, TypeRef> {
         match field_node {
             ast::FieldNode::Field { val, .. }
             | ast::FieldNode::ExprField { val, .. }
@@ -384,7 +384,7 @@ impl<'s> TypeChecker<'_, 's> {
         }
     }
 
-    fn check_table(&mut self, table_node: &ast::TableNode<'s>) -> TResult<'s, TableType<'s>> {
+    fn check_table(&mut self, table_node: &ast::TableNode<'s>) -> TResult<'s, TableType> {
         if table_node.fields.is_empty() {
             return Ok(TableType {
                 key_type: self.tcx.pool.add(TypeKind::Adaptable.into()),
@@ -413,7 +413,7 @@ impl<'s> TypeChecker<'_, 's> {
         Ok(result)
     }
 
-    fn check_simple_expr(&mut self, simple_expr: &ast::SimpleExpr<'s>) -> TResult<'s, TypeRef<'s>> {
+    fn check_simple_expr(&mut self, simple_expr: &ast::SimpleExpr<'s>) -> TResult<'s, TypeRef> {
         match simple_expr {
             ast::SimpleExpr::Num(s) => Ok(self.tcx.pool.add(Type {
                 kind: TypeKind::Number,
@@ -440,7 +440,7 @@ impl<'s> TypeChecker<'_, 's> {
         }
     }
 
-    fn check_func(&mut self, func: &ast::FuncNode<'s>) -> TResult<'s, TypeRef<'s>> {
+    fn check_func(&mut self, func: &ast::FuncNode<'s>) -> TResult<'s, TypeRef> {
         self.with_scope(|this| {
             let func_ty = this.resolve_function_type(&func.ty)?;
             for (name, ty) in &func_ty.params {
@@ -467,7 +467,7 @@ impl<'s> TypeChecker<'_, 's> {
     fn check_func_body(
         &mut self,
         body: &[ast::Stmt<'s>],
-        return_type: TypeRef<'s>,
+        return_type: TypeRef,
     ) -> TResult<'s, bool> {
         self.with_scope(|this| {
             for stmt in body {
@@ -563,7 +563,7 @@ impl<'s> TypeChecker<'_, 's> {
     fn check_suffixed_name(
         &mut self,
         suffixed_name: &ast::SuffixedName<'s>,
-    ) -> TResult<'s, TypeRef<'s>> {
+    ) -> TResult<'s, TypeRef> {
         let mut ty = self
             .tcx
             .value_map
@@ -584,7 +584,7 @@ impl<'s> TypeChecker<'_, 's> {
     fn check_suffixed_expr(
         &mut self,
         suffixed_expr: &ast::SuffixedExpr<'s>,
-    ) -> TResult<'s, TypeRef<'s>> {
+    ) -> TResult<'s, TypeRef> {
         let mut ty = match &self.expr_pool[suffixed_expr.val] {
             ast::Expr::Name(name) => {
                 if name.to_str(self.source) == "debug_print_ctx" {
@@ -620,9 +620,9 @@ impl<'s> TypeChecker<'_, 's> {
 
     fn check_suffix(
         &mut self,
-        mut base: TypeRef<'s>,
+        mut base: TypeRef,
         suffix: &ast::Suffix<'s>,
-    ) -> TResult<'s, TypeRef<'s>> {
+    ) -> TResult<'s, TypeRef> {
         match suffix {
             ast::Suffix::Index(ast::Index { key: _, span }) => match &self.tcx.pool[base].kind {
                 TypeKind::Table(TableType { val_type, .. }) => base = *val_type,
@@ -690,7 +690,7 @@ impl<'s> TypeChecker<'_, 's> {
         Ok(base)
     }
 
-    fn check_call(&mut self, ty: TypeRef<'s>, args: &[ExprRef]) -> TResult<'s, TypeRef<'s>> {
+    fn check_call(&mut self, ty: TypeRef, args: &[ExprRef]) -> TResult<'s, TypeRef> {
         let args = args
             .iter()
             .map(|&arg| self.check_expr(arg))
@@ -733,7 +733,7 @@ impl<'s> TypeChecker<'_, 's> {
         Ok(func_ty.returns)
     }
 
-    fn check_binop(&mut self, binop: &ast::BinOp) -> TResult<'s, TypeRef<'s>> {
+    fn check_binop(&mut self, binop: &ast::BinOp) -> TResult<'s, TypeRef> {
         match binop.op {
             ast::OpKind::Add
             | ast::OpKind::Sub
@@ -892,7 +892,7 @@ impl<'s> TypeChecker<'_, 's> {
 }
 
 impl<'s> TypeChecker<'_, 's> {
-    fn resolve_type_node(&mut self, type_node: &ast::TypeNode<'s>) -> TResult<'s, TypeRef<'s>> {
+    fn resolve_type_node(&mut self, type_node: &ast::TypeNode<'s>) -> TResult<'s, TypeRef> {
         match type_node {
             ast::TypeNode::Name(span) => self
                 .tcx
@@ -960,7 +960,7 @@ impl<'s> TypeChecker<'_, 's> {
         })
     }
 
-    fn resolve_table_type(&mut self, table_type: &ast::TableType<'s>) -> TResult<'s, TypeRef<'s>> {
+    fn resolve_table_type(&mut self, table_type: &ast::TableType<'s>) -> TResult<'s, TypeRef> {
         let key_type = match &table_type.key_type {
             Some(key_type) => self.resolve_type_node(key_type.as_ref())?,
             None => self.tcx.pool.add(Type {
@@ -991,7 +991,7 @@ impl TypeChecker<'_, '_> {
 }
 
 impl<'s> TypeChecker<'_, 's> {
-    fn can_equal(&self, lhs: TypeRef<'s>, rhs: TypeRef<'s>) -> bool {
+    fn can_equal(&self, lhs: TypeRef, rhs: TypeRef) -> bool {
         let lhs = &self.tcx.pool[lhs];
         let rhs = &self.tcx.pool[rhs];
         if let TypeKind::Any | TypeKind::Variadic = lhs.kind {
@@ -1036,7 +1036,7 @@ impl<'s> TypeChecker<'_, 's> {
         true
     }
 
-    fn can_equal_primitive(&self, lhs: TypeRef<'s>, rhs: &TypeKind<'s>) -> bool {
+    fn can_equal_primitive(&self, lhs: TypeRef, rhs: &TypeKind<'s>) -> bool {
         assert!(matches!(
             rhs,
             TypeKind::Nil
@@ -1070,7 +1070,7 @@ impl<'s> TypeChecker<'_, 's> {
         true
     }
 
-    fn comm_eq(&self, lhs: TypeRef<'s>, rhs: TypeRef<'s>) -> bool {
+    fn comm_eq(&self, lhs: TypeRef, rhs: TypeRef) -> bool {
         let lhs = &self.tcx.pool[lhs].kind;
         let rhs = &self.tcx.pool[rhs].kind;
         match (lhs, rhs) {

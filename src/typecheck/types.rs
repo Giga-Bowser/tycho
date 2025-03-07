@@ -7,24 +7,24 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub struct Function<'s> {
-    pub params: Vec<(&'s str, TypeRef<'s>)>,
-    pub returns: TypeRef<'s>,
+    pub params: Vec<(&'s str, TypeRef)>,
+    pub returns: TypeRef,
 }
 
 #[derive(Debug, Clone)]
-pub struct TableType<'s> {
-    pub key_type: TypeRef<'s>,
-    pub val_type: TypeRef<'s>,
+pub struct TableType {
+    pub key_type: TypeRef,
+    pub val_type: TypeRef,
 }
 
 #[derive(Debug, Clone)]
 pub struct Struct<'s> {
     pub name: &'s str,
-    pub fields: Vec<(&'s str, TypeRef<'s>)>,
+    pub fields: Vec<(&'s str, TypeRef)>,
 }
 
-impl<'s> Struct<'s> {
-    pub fn get_field(&self, key: &str) -> Option<TypeRef<'s>> {
+impl Struct<'_> {
+    pub fn get_field(&self, key: &str) -> Option<TypeRef> {
         for field in &self.fields {
             if field.0 == key {
                 return Some(field.1);
@@ -43,12 +43,12 @@ pub enum TypeKind<'s> {
     String,
     Boolean,
     Function(Function<'s>),
-    Table(TableType<'s>),
+    Table(TableType),
     Struct(Struct<'s>),
     Adaptable,
     Variadic,
-    Multiple(Vec<TypeRef<'s>>),
-    Optional(TypeRef<'s>),
+    Multiple(Vec<TypeRef>),
+    Optional(TypeRef),
 }
 
 #[derive(Debug, Clone)]
@@ -57,8 +57,8 @@ pub struct Type<'s> {
     pub span: Option<Span<'s>>,
 }
 
-impl<'s> TypeKind<'s> {
-    pub fn get_field(&self, key: &str) -> Option<TypeRef<'s>> {
+impl TypeKind<'_> {
+    pub fn get_field(&self, key: &str) -> Option<TypeRef> {
         match self {
             Self::Struct(strukt) => strukt.get_field(key),
             _ => None,
@@ -77,13 +77,13 @@ impl<'s> From<TypeKind<'s>> for Type<'s> {
 
 pub struct PooledType<'a, 's> {
     pool: &'a TypePool<'s>,
-    ty: TypeRef<'s>,
+    ty: TypeRef,
     depth: u32,
-    inside: Option<TypeRef<'s>>,
+    inside: Option<TypeRef>,
 }
 
 impl<'a, 's> PooledType<'a, 's> {
-    pub fn new(pool: &'a TypePool<'s>, ty: TypeRef<'s>) -> Self {
+    pub fn new(pool: &'a TypePool<'s>, ty: TypeRef) -> Self {
         PooledType {
             pool,
             ty,
@@ -93,7 +93,7 @@ impl<'a, 's> PooledType<'a, 's> {
     }
 
     #[must_use]
-    pub fn wrap(&self, ty: TypeRef<'s>) -> Self {
+    pub fn wrap(&self, ty: TypeRef) -> Self {
         PooledType {
             pool: self.pool,
             ty,
@@ -103,7 +103,7 @@ impl<'a, 's> PooledType<'a, 's> {
     }
 
     #[must_use]
-    pub fn inside(mut self, ty: TypeRef<'s>) -> Self {
+    pub fn inside(mut self, ty: TypeRef) -> Self {
         self.inside = Some(ty);
         self
     }

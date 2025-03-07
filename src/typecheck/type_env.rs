@@ -3,21 +3,21 @@ use rustc_hash::FxHashMap;
 use crate::typecheck::pool::{TypePool, TypeRef};
 
 #[derive(Debug, Clone, Copy)]
-pub enum Resolved<'s> {
-    Value(TypeRef<'s>),
-    Type(TypeRef<'s>),
+pub enum Resolved {
+    Value(TypeRef),
+    Type(TypeRef),
 }
 
-impl<'s> Resolved<'s> {
+impl Resolved {
     #[inline]
-    pub const fn inner(self) -> TypeRef<'s> {
+    pub const fn inner(self) -> TypeRef {
         match self {
             Resolved::Value(ty) | Resolved::Type(ty) => ty,
         }
     }
 
     #[inline]
-    pub const fn as_value(self) -> Option<TypeRef<'s>> {
+    pub const fn as_value(self) -> Option<TypeRef> {
         match self {
             Resolved::Value(ty) => Some(ty),
             Resolved::Type(_) => None,
@@ -25,7 +25,7 @@ impl<'s> Resolved<'s> {
     }
 
     #[inline]
-    pub const fn as_type(self) -> Option<TypeRef<'s>> {
+    pub const fn as_type(self) -> Option<TypeRef> {
         match self {
             Resolved::Type(ty) => Some(ty),
             Resolved::Value(_) => None,
@@ -33,7 +33,7 @@ impl<'s> Resolved<'s> {
     }
 }
 
-pub type Scope<'s> = FxHashMap<&'s str, Resolved<'s>>;
+pub type Scope<'s> = FxHashMap<&'s str, Resolved>;
 
 #[derive(Debug, Clone)]
 pub struct TypeEnv<'s> {
@@ -62,7 +62,7 @@ impl<'s> TypeEnv<'s> {
         &self.scopes
     }
 
-    pub fn get(&self, key: &str) -> Option<Resolved<'s>> {
+    pub fn get(&self, key: &str) -> Option<Resolved> {
         self.scopes
             .iter()
             .rev()
@@ -70,19 +70,19 @@ impl<'s> TypeEnv<'s> {
             .copied()
     }
 
-    pub fn get_value(&self, key: &str) -> Option<TypeRef<'s>> {
+    pub fn get_value(&self, key: &str) -> Option<TypeRef> {
         self.get(key).and_then(Resolved::as_value)
     }
 
-    pub fn get_type(&self, key: &str) -> Option<TypeRef<'s>> {
+    pub fn get_type(&self, key: &str) -> Option<TypeRef> {
         self.get(key).and_then(Resolved::as_type)
     }
 
-    pub fn get_top(&mut self, key: &str) -> Option<Resolved<'s>> {
+    pub fn get_top(&mut self, key: &str) -> Option<Resolved> {
         self.top_mut().get(key).copied()
     }
 
-    pub fn get_value_top(&mut self, key: &str) -> Option<TypeRef<'s>> {
+    pub fn get_value_top(&mut self, key: &str) -> Option<TypeRef> {
         self.top_mut().get(key).and_then(|it| it.as_value())
     }
 
@@ -90,11 +90,11 @@ impl<'s> TypeEnv<'s> {
         unsafe { self.scopes.last_mut().unwrap_unchecked() }
     }
 
-    pub fn insert_value(&mut self, key: &'s str, val: TypeRef<'s>) {
+    pub fn insert_value(&mut self, key: &'s str, val: TypeRef) {
         self.top_mut().insert(key, Resolved::Value(val));
     }
 
-    pub fn insert_type(&mut self, key: &'s str, val: TypeRef<'s>) {
+    pub fn insert_type(&mut self, key: &'s str, val: TypeRef) {
         self.top_mut().insert(key, Resolved::Type(val));
     }
 

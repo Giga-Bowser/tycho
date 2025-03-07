@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 use crate::{
     mem_size::DeepSize,
     typecheck::types::{PooledType, Type, TypeKind},
@@ -23,33 +21,33 @@ impl<'s> TypePool<'s> {
         }
     }
 
-    pub fn add(&mut self, ty: Type<'s>) -> TypeRef<'s> {
+    pub fn add(&mut self, ty: Type<'s>) -> TypeRef {
         let idx = TypeRef::from(self.vec.len());
         self.vec.push(ty);
         idx
     }
 
-    pub const fn nil(&self) -> TypeRef<'s> {
+    pub const fn nil(&self) -> TypeRef {
         TypeRef::from_usize(0)
     }
 
-    pub const fn any(&self) -> TypeRef<'s> {
+    pub const fn any(&self) -> TypeRef {
         TypeRef::from_usize(1)
     }
 
-    pub const fn number(&self) -> TypeRef<'s> {
+    pub const fn number(&self) -> TypeRef {
         TypeRef::from_usize(2)
     }
 
-    pub const fn string(&self) -> TypeRef<'s> {
+    pub const fn string(&self) -> TypeRef {
         TypeRef::from_usize(3)
     }
 
-    pub const fn boolean(&self) -> TypeRef<'s> {
+    pub const fn boolean(&self) -> TypeRef {
         TypeRef::from_usize(4)
     }
 
-    pub fn wrap(&self, ty: TypeRef<'s>) -> PooledType<'_, 's> {
+    pub fn wrap(&self, ty: TypeRef) -> PooledType<'_, 's> {
         PooledType::new(self, ty)
     }
 }
@@ -64,17 +62,15 @@ type TypeRefInner = usize;
 
 #[derive(Debug, Clone, Copy)]
 #[repr(transparent)]
-pub struct TypeRef<'s> {
+pub struct TypeRef {
     raw: TypeRefInner,
-    _m: PhantomData<Type<'s>>,
 }
 
-impl TypeRef<'_> {
+impl TypeRef {
     #[inline]
     pub const fn from_usize(value: usize) -> Self {
         TypeRef {
             raw: value as TypeRefInner,
-            _m: PhantomData,
         }
     }
 
@@ -84,31 +80,31 @@ impl TypeRef<'_> {
     }
 }
 
-impl From<TypeRef<'_>> for usize {
+impl From<TypeRef> for usize {
     #[inline]
     #[allow(clippy::unnecessary_cast)]
-    fn from(value: TypeRef<'_>) -> Self {
+    fn from(value: TypeRef) -> Self {
         value.raw as usize
     }
 }
 
-impl From<usize> for TypeRef<'_> {
+impl From<usize> for TypeRef {
     #[inline]
     fn from(value: usize) -> Self {
         TypeRef::from_usize(value)
     }
 }
 
-impl<'s> std::ops::Index<TypeRef<'s>> for TypePool<'s> {
+impl<'s> std::ops::Index<TypeRef> for TypePool<'s> {
     type Output = Type<'s>;
 
-    fn index(&self, index: TypeRef<'s>) -> &Self::Output {
+    fn index(&self, index: TypeRef) -> &Self::Output {
         &self.vec[usize::from(index)]
     }
 }
 
-impl<'s> std::ops::IndexMut<TypeRef<'s>> for TypePool<'s> {
-    fn index_mut(&mut self, index: TypeRef<'s>) -> &mut Type<'s> {
+impl<'s> std::ops::IndexMut<TypeRef> for TypePool<'s> {
+    fn index_mut(&mut self, index: TypeRef) -> &mut Type<'s> {
         &mut self.vec[usize::from(index)]
     }
 }

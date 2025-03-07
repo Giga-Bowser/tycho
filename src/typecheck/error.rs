@@ -7,7 +7,7 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub enum CheckErr<'s> {
-    MismatchedTypes(MismatchedTypes<'s>),
+    MismatchedTypes(MismatchedTypes),
     NoReturn(NoReturn<'s>),
     ReturnCount(ReturnCount<'s>),
     MethodOnWrongType(MethodOnWrongType<'s>),
@@ -15,10 +15,10 @@ pub enum CheckErr<'s> {
     NoSuchField(NoSuchField<'s>),
     NoSuchMethod(NoSuchMethod<'s>),
     NotIterable,
-    BadAccess { span: Span<'s>, ty: TypeRef<'s> },
-    BadIndex { span: Span<'s>, ty: TypeRef<'s> },
-    BadNegate { op_span: Span<'s>, ty: TypeRef<'s> },
-    BadNot { op_span: Span<'s>, ty: TypeRef<'s> },
+    BadAccess { span: Span<'s>, ty: TypeRef },
+    BadIndex { span: Span<'s>, ty: TypeRef },
+    BadNegate { op_span: Span<'s>, ty: TypeRef },
+    BadNot { op_span: Span<'s>, ty: TypeRef },
     TooManyArgs,
     TooFewArgs,
 }
@@ -81,13 +81,13 @@ impl<'s> Snippetize<'s> for CheckErr<'s> {
 }
 
 #[derive(Debug, Clone)]
-pub struct MismatchedTypes<'s> {
-    pub expected: TypeRef<'s>,
-    pub recieved: TypeRef<'s>,
+pub struct MismatchedTypes {
+    pub expected: TypeRef,
+    pub recieved: TypeRef,
 }
 
-impl<'s> MismatchedTypes<'s> {
-    pub fn err(expected: TypeRef<'s>, recieved: TypeRef<'s>) -> Box<CheckErr<'s>> {
+impl MismatchedTypes {
+    pub fn err<'s>(expected: TypeRef, recieved: TypeRef) -> Box<CheckErr<'s>> {
         Box::new(CheckErr::MismatchedTypes(MismatchedTypes {
             expected,
             recieved,
@@ -95,7 +95,7 @@ impl<'s> MismatchedTypes<'s> {
     }
 }
 
-impl<'s> Snippetize<'s> for MismatchedTypes<'s> {
+impl<'s> Snippetize<'s> for MismatchedTypes {
     fn snippetize(&self, ctx: &DiagCtx<'_, 's>) -> Diag {
         let mut diag = Diag::new(
             Level::Error,
@@ -237,7 +237,7 @@ impl<'s> Snippetize<'s> for ReturnCount<'s> {
 #[derive(Debug, Clone)]
 pub struct MethodOnWrongType<'s> {
     pub span: Span<'s>,
-    pub ty: TypeRef<'s>,
+    pub ty: TypeRef,
 }
 
 impl<'s> Snippetize<'s> for MethodOnWrongType<'s> {

@@ -274,7 +274,7 @@ mod typecheck {
     use super::DeepSize;
     use crate::typecheck::pool::TypeRef;
 
-    impl DeepSize for TypeRef<'_> {
+    impl DeepSize for TypeRef {
         fn deep_size_of_children(&self) -> usize {
             0
         }
@@ -319,7 +319,7 @@ mod typecheck {
             }
         }
 
-        impl DeepSize for Resolved<'_> {
+        impl DeepSize for Resolved {
             fn deep_size_of_children(&self) -> usize {
                 0
             }
