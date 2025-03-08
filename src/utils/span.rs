@@ -40,6 +40,14 @@ impl Span {
         Self::new(start, end)
     }
 
+    pub fn len(self) -> usize {
+        (self.end - self.start) as usize
+    }
+
+    pub fn is_empty(self) -> bool {
+        self.start == self.end
+    }
+
     #[inline]
     pub fn to_str(self, source: &str) -> &str {
         unsafe { source.get_unchecked(self.to_range()) }
