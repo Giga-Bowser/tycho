@@ -226,7 +226,7 @@ fn compile(pool: &ExprPool, stmts: &[ast::Stmt], source: &str) -> Vec<u8> {
     dump_bc(&Header::default(), &compiler.protos)
 }
 
-pub fn add_defines<'s>(source: &'s str, tcx: &mut TypeContext<'s>) -> Result<(), Diag> {
+pub fn add_defines(source: &str, tcx: &mut TypeContext) -> Result<(), Diag> {
     let tokens = Lexer::lex_all_span(source);
 
     let mut expr_pool = ExprPool::new();

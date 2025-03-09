@@ -9,6 +9,7 @@ rustc-hash = "2.1.1"
 bitflags = "2.8.0"
 ariadne = "0.5.0"
 clap = "4.5"
+indexmap = "2.7.1"
 
 [profile.dev-rel]
 debug = 1

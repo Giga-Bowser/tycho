@@ -30,7 +30,7 @@ impl<'a, 's> Parser<'a, 's> {
         Parser { tokens, expr_pool }
     }
 
-    pub fn into_diag_ctx(self, tcx: &'a TypeContext<'s>) -> DiagCtx<'a, 's> {
+    pub fn into_diag_ctx(self, tcx: &'a TypeContext) -> DiagCtx<'a, 's> {
         DiagCtx {
             tcx,
             expr_pool: self.expr_pool,

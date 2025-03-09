@@ -3,9 +3,12 @@ mod span;
 pub(crate) mod pooled;
 pub(crate) mod spanned;
 
-use std::{fmt::Display, time::Duration};
+use std::{fmt::Display, hash::BuildHasherDefault, time::Duration};
 
-pub(crate) use span::{Span, SrcLoc};
+use rustc_hash::FxHasher;
+pub(crate) use span::*;
+
+pub(crate) type FxIndexSet<V> = indexmap::IndexSet<V, BuildHasherDefault<FxHasher>>;
 
 #[macro_export]
 macro_rules! format_to {

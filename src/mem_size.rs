@@ -70,11 +70,23 @@ impl DeepSize for &str {
     }
 }
 
-mod lexer {
+mod utils {
     use super::DeepSize;
-    use crate::utils::Span;
+    use crate::utils::{Ident, Span, Symbol};
 
     impl DeepSize for Span {
+        fn deep_size_of_children(&self) -> usize {
+            0
+        }
+    }
+
+    impl DeepSize for Symbol {
+        fn deep_size_of_children(&self) -> usize {
+            0
+        }
+    }
+
+    impl DeepSize for Ident {
         fn deep_size_of_children(&self) -> usize {
             0
         }
@@ -284,7 +296,7 @@ mod typecheck {
         use super::DeepSize;
         use crate::typecheck::types::{Function, Struct, Type, TypeKind};
 
-        impl DeepSize for Type<'_> {
+        impl DeepSize for Type {
             fn deep_size_of_children(&self) -> usize {
                 match &self.kind {
                     TypeKind::Function(function) => function.deep_size_of_children(),
@@ -296,13 +308,13 @@ mod typecheck {
             }
         }
 
-        impl DeepSize for Function<'_> {
+        impl DeepSize for Function {
             fn deep_size_of_children(&self) -> usize {
                 self.params.deep_size_of_children() + self.returns.deep_size_of_children()
             }
         }
 
-        impl DeepSize for Struct<'_> {
+        impl DeepSize for Struct {
             fn deep_size_of_children(&self) -> usize {
                 self.fields.deep_size_of_children()
             }
@@ -313,7 +325,7 @@ mod typecheck {
         use super::DeepSize;
         use crate::typecheck::type_env::{Resolved, TypeEnv};
 
-        impl DeepSize for TypeEnv<'_> {
+        impl DeepSize for TypeEnv {
             fn deep_size_of_children(&self) -> usize {
                 self.scopes().deep_size_of_children()
             }

@@ -5,13 +5,13 @@ use rustc_hash::FxHashMap;
 use crate::typecheck::{pool::TypePool, type_env::TypeEnv};
 
 #[derive(Clone)]
-pub struct TypeContext<'s> {
+pub struct TypeContext {
     /// types of values
-    pub value_map: TypeEnv<'s>,
-    pub pool: TypePool<'s>,
+    pub value_map: TypeEnv,
+    pub pool: TypePool,
 }
 
-impl Default for TypeContext<'_> {
+impl Default for TypeContext {
     fn default() -> Self {
         let pool = TypePool::new();
         Self {
@@ -21,7 +21,7 @@ impl Default for TypeContext<'_> {
     }
 }
 
-impl fmt::Debug for TypeContext<'_> {
+impl fmt::Debug for TypeContext {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let entries: Vec<_> = self
             .value_map
@@ -29,7 +29,7 @@ impl fmt::Debug for TypeContext<'_> {
             .iter()
             .map(|it| {
                 it.iter()
-                    .map(|(&k, v)| (k, self.pool.wrap(v.inner())))
+                    .map(|(k, v)| (k, self.pool.wrap(v.inner())))
                     .collect::<FxHashMap<_, _>>()
             })
             .collect();

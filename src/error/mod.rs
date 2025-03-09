@@ -99,7 +99,7 @@ impl Annotation {
 }
 
 pub struct DiagCtx<'a, 's> {
-    pub tcx: &'a TypeContext<'s>,
+    pub tcx: &'a TypeContext,
     pub expr_pool: &'a ExprPool,
     pub source: &'s str,
 }

@@ -1,6 +1,9 @@
 use rustc_hash::FxHashMap;
 
-use crate::typecheck::pool::{TypePool, TypeRef};
+use crate::{
+    typecheck::pool::{TypePool, TypeRef},
+    utils::Ident,
+};
 
 #[derive(Debug, Clone, Copy)]
 pub enum Resolved {
@@ -33,36 +36,36 @@ impl Resolved {
     }
 }
 
-pub type Scope<'s> = FxHashMap<&'s str, Resolved>;
+pub type Scope = FxHashMap<Ident, Resolved>;
 
 #[derive(Debug, Clone)]
-pub struct TypeEnv<'s> {
-    scopes: Vec<Scope<'s>>,
+pub struct TypeEnv {
+    scopes: Vec<Scope>,
 }
 
-impl<'s> TypeEnv<'s> {
+impl TypeEnv {
     pub fn new() -> Self {
         TypeEnv {
             scopes: vec![Scope::default()],
         }
     }
 
-    pub fn with_core(pool: &TypePool<'s>) -> Self {
+    pub fn with_core(pool: &TypePool) -> Self {
         TypeEnv {
             scopes: vec![Scope::from_iter([
-                ("number", Resolved::Type(pool.number())),
-                ("string", Resolved::Type(pool.string())),
-                ("boolean", Resolved::Type(pool.boolean())),
-                ("any", Resolved::Type(pool.any())),
+                (Ident::from_str("number"), Resolved::Type(pool.number())),
+                (Ident::from_str("string"), Resolved::Type(pool.string())),
+                (Ident::from_str("boolean"), Resolved::Type(pool.boolean())),
+                (Ident::from_str("any"), Resolved::Type(pool.any())),
             ])],
         }
     }
 
-    pub fn scopes(&self) -> &[Scope<'s>] {
+    pub fn scopes(&self) -> &[Scope] {
         &self.scopes
     }
 
-    pub fn get(&self, key: &str) -> Option<Resolved> {
+    pub fn get(&self, key: &Ident) -> Option<Resolved> {
         self.scopes
             .iter()
             .rev()
@@ -70,31 +73,31 @@ impl<'s> TypeEnv<'s> {
             .copied()
     }
 
-    pub fn get_value(&self, key: &str) -> Option<TypeRef> {
+    pub fn get_value(&self, key: &Ident) -> Option<TypeRef> {
         self.get(key).and_then(Resolved::as_value)
     }
 
-    pub fn get_type(&self, key: &str) -> Option<TypeRef> {
+    pub fn get_type(&self, key: &Ident) -> Option<TypeRef> {
         self.get(key).and_then(Resolved::as_type)
     }
 
-    pub fn get_top(&mut self, key: &str) -> Option<Resolved> {
+    pub fn get_top(&mut self, key: &Ident) -> Option<Resolved> {
         self.top_mut().get(key).copied()
     }
 
-    pub fn get_value_top(&mut self, key: &str) -> Option<TypeRef> {
+    pub fn get_value_top(&mut self, key: &Ident) -> Option<TypeRef> {
         self.top_mut().get(key).and_then(|it| it.as_value())
     }
 
-    fn top_mut(&mut self) -> &mut Scope<'s> {
+    fn top_mut(&mut self) -> &mut Scope {
         unsafe { self.scopes.last_mut().unwrap_unchecked() }
     }
 
-    pub fn insert_value(&mut self, key: &'s str, val: TypeRef) {
+    pub fn insert_value(&mut self, key: Ident, val: TypeRef) {
         self.top_mut().insert(key, Resolved::Value(val));
     }
 
-    pub fn insert_type(&mut self, key: &'s str, val: TypeRef) {
+    pub fn insert_type(&mut self, key: Ident, val: TypeRef) {
         self.top_mut().insert(key, Resolved::Type(val));
     }
 
@@ -108,7 +111,7 @@ impl<'s> TypeEnv<'s> {
     }
 }
 
-impl Default for TypeEnv<'_> {
+impl Default for TypeEnv {
     fn default() -> Self {
         Self::new()
     }

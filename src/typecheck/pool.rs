@@ -4,11 +4,11 @@ use crate::{
 };
 
 #[derive(Debug, Clone)]
-pub struct TypePool<'s> {
-    vec: Vec<Type<'s>>,
+pub struct TypePool {
+    vec: Vec<Type>,
 }
 
-impl<'s> TypePool<'s> {
+impl TypePool {
     pub fn new() -> Self {
         Self {
             vec: vec![
@@ -21,7 +21,7 @@ impl<'s> TypePool<'s> {
         }
     }
 
-    pub fn add(&mut self, ty: Type<'s>) -> TypeRef {
+    pub fn add(&mut self, ty: Type) -> TypeRef {
         let idx = TypeRef::from(self.vec.len());
         self.vec.push(ty);
         idx
@@ -47,12 +47,12 @@ impl<'s> TypePool<'s> {
         TypeRef::from_usize(4)
     }
 
-    pub fn wrap(&self, ty: TypeRef) -> PooledType<'_, 's> {
+    pub fn wrap(&self, ty: TypeRef) -> PooledType<'_> {
         PooledType::new(self, ty)
     }
 }
 
-impl Default for TypePool<'_> {
+impl Default for TypePool {
     fn default() -> Self {
         TypePool::new()
     }
@@ -95,21 +95,21 @@ impl From<usize> for TypeRef {
     }
 }
 
-impl<'s> std::ops::Index<TypeRef> for TypePool<'s> {
-    type Output = Type<'s>;
+impl std::ops::Index<TypeRef> for TypePool {
+    type Output = Type;
 
     fn index(&self, index: TypeRef) -> &Self::Output {
         &self.vec[usize::from(index)]
     }
 }
 
-impl<'s> std::ops::IndexMut<TypeRef> for TypePool<'s> {
-    fn index_mut(&mut self, index: TypeRef) -> &mut Type<'s> {
+impl std::ops::IndexMut<TypeRef> for TypePool {
+    fn index_mut(&mut self, index: TypeRef) -> &mut Type {
         &mut self.vec[usize::from(index)]
     }
 }
 
-impl DeepSize for TypePool<'_> {
+impl DeepSize for TypePool {
     fn deep_size_of_children(&self) -> usize {
         self.vec.deep_size_of_children()
     }

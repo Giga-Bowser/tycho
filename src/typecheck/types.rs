@@ -2,12 +2,12 @@ use std::fmt;
 
 use crate::{
     typecheck::pool::{TypePool, TypeRef},
-    utils::Span,
+    utils::{Ident, Span, Symbol},
 };
 
 #[derive(Debug, Clone)]
-pub struct Function<'s> {
-    pub params: Vec<(&'s str, TypeRef)>,
+pub struct Function {
+    pub params: Vec<(Span, TypeRef)>,
     pub returns: TypeRef,
 }
 
@@ -18,13 +18,13 @@ pub struct TableType {
 }
 
 #[derive(Debug, Clone)]
-pub struct Struct<'s> {
-    pub name: &'s str,
-    pub fields: Vec<(&'s str, TypeRef)>,
+pub struct Struct {
+    pub name: Ident,
+    pub fields: Vec<(Symbol, TypeRef)>,
 }
 
-impl Struct<'_> {
-    pub fn get_field(&self, key: &str) -> Option<TypeRef> {
+impl Struct {
+    pub fn get_field(&self, key: Symbol) -> Option<TypeRef> {
         for field in &self.fields {
             if field.0 == key {
                 return Some(field.1);
@@ -35,16 +35,16 @@ impl Struct<'_> {
 }
 
 #[derive(Debug, Clone, Default)]
-pub enum TypeKind<'s> {
+pub enum TypeKind {
     #[default]
     Nil,
     Any,
     Number,
     String,
     Boolean,
-    Function(Function<'s>),
+    Function(Function),
     Table(TableType),
-    Struct(Struct<'s>),
+    Struct(Struct),
     Adaptable,
     Variadic,
     Multiple(Vec<TypeRef>),
@@ -52,13 +52,13 @@ pub enum TypeKind<'s> {
 }
 
 #[derive(Debug, Clone)]
-pub struct Type<'s> {
-    pub kind: TypeKind<'s>,
+pub struct Type {
+    pub kind: TypeKind,
     pub span: Option<Span>,
 }
 
-impl TypeKind<'_> {
-    pub fn get_field(&self, key: &str) -> Option<TypeRef> {
+impl TypeKind {
+    pub fn get_field(&self, key: Symbol) -> Option<TypeRef> {
         match self {
             Self::Struct(strukt) => strukt.get_field(key),
             _ => None,
@@ -66,8 +66,8 @@ impl TypeKind<'_> {
     }
 }
 
-impl<'s> From<TypeKind<'s>> for Type<'s> {
-    fn from(value: TypeKind<'s>) -> Self {
+impl From<TypeKind> for Type {
+    fn from(value: TypeKind) -> Self {
         Self {
             kind: value,
             span: None,
@@ -75,15 +75,15 @@ impl<'s> From<TypeKind<'s>> for Type<'s> {
     }
 }
 
-pub struct PooledType<'a, 's> {
-    pool: &'a TypePool<'s>,
+pub struct PooledType<'a> {
+    pool: &'a TypePool,
     ty: TypeRef,
     depth: u32,
     inside: Option<TypeRef>,
 }
 
-impl<'a, 's> PooledType<'a, 's> {
-    pub fn new(pool: &'a TypePool<'s>, ty: TypeRef) -> Self {
+impl<'a> PooledType<'a> {
+    pub fn new(pool: &'a TypePool, ty: TypeRef) -> Self {
         PooledType {
             pool,
             ty,
@@ -109,7 +109,7 @@ impl<'a, 's> PooledType<'a, 's> {
     }
 }
 
-impl fmt::Debug for PooledType<'_, '_> {
+impl fmt::Debug for PooledType<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.depth > 255 {
             return f.write_str("<depth limit>");
@@ -133,7 +133,7 @@ impl fmt::Debug for PooledType<'_, '_> {
                         if name.is_empty() {
                             format!("{ty}")
                         } else {
-                            format!("{name}: {ty}")
+                            format!("{name:?}: {ty}")
                         }
                     })
                     .collect::<Vec<String>>()
@@ -160,14 +160,18 @@ impl fmt::Debug for PooledType<'_, '_> {
                 }
 
                 // TODO: escape the hell that i am in lol
-                if strukt.name == "string" {
+                if strukt.name.symbol == Symbol::intern("string") {
                     return f.write_str("string");
                 }
 
-                let mut s = &mut (f.debug_struct(strukt.name));
+                let mut s =
+                    &mut (f.debug_struct(&strukt.name.symbol.get_string().unwrap_or_default()));
 
                 for (name, ty) in &strukt.fields {
-                    s = s.field(name, &self.wrap(*ty).inside(self.ty));
+                    s = s.field(
+                        &name.get_string().unwrap_or_default(),
+                        &self.wrap(*ty).inside(self.ty),
+                    );
                 }
 
                 s.finish()
@@ -188,7 +192,7 @@ impl fmt::Debug for PooledType<'_, '_> {
     }
 }
 
-impl fmt::Display for PooledType<'_, '_> {
+impl fmt::Display for PooledType<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{self:?}")
     }
