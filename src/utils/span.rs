@@ -9,7 +9,7 @@ use crate::utils::FxIndexSet;
 
 pub(crate) type SrcLoc = u32;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Span {
     pub start: SrcLoc,
     pub end: SrcLoc,
@@ -78,6 +78,12 @@ impl Span {
     }
 }
 
+impl fmt::Debug for Span {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Span({}..{})", self.start, self.end)
+    }
+}
+
 #[derive(Debug, Clone, Eq)]
 pub struct Ident {
     pub symbol: Symbol,
@@ -110,7 +116,7 @@ impl Hash for Ident {
 }
 
 thread_local! {
-    static SYMBOL_INTERNER: RefCell<FxIndexSet<String>> = const {
+    pub static SYMBOL_INTERNER: RefCell<FxIndexSet<String>> = const {
         RefCell::new(FxIndexSet::with_hasher(BuildHasherDefault::new()))
     };
 }
