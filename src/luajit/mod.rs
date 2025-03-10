@@ -4,6 +4,8 @@ mod utils;
 pub mod bytecode;
 pub mod compiler;
 
+use std::error::Error;
+
 use bitflags::bitflags;
 
 use crate::cli;
@@ -13,13 +15,13 @@ use self::{
     funcstate::VarIdx,
 };
 
-pub fn read_main(args: &cli::Read) {
-    let dump = std::fs::read(&args.file).unwrap();
-
+pub fn read_main(args: &cli::Read) -> Result<(), Box<dyn Error>> {
+    let dump = std::fs::read(&args.file)?;
     let (header, protos) = read_dump(&dump);
-
     eprintln!("{header:#?}");
     eprintln!("{protos:#?}");
+
+    Ok(())
 }
 
 #[derive(Debug)]
