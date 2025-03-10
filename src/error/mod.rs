@@ -1,6 +1,6 @@
-use std::ops::Range;
+use std::{error::Error, io::BufWriter, ops::Range};
 
-use ariadne::{Color, ReportKind};
+use ariadne::{Color, Label, Report, ReportKind, Source};
 
 use crate::{
     parser::pool::ExprPool, sourcemap::SourceFile, typecheck::ctx::TypeContext, utils::Span,
@@ -108,4 +108,43 @@ pub struct DiagCtx<'a> {
 
 pub(crate) trait Snippetize {
     fn snippetize(&self, ctx: &DiagCtx<'_>) -> Diag;
+}
+
+pub(crate) fn report_err(
+    err: &impl Snippetize,
+    ctx: &DiagCtx<'_>,
+) -> Result<String, Box<dyn Error>> {
+    report_diag(err.snippetize(ctx), ctx.file)
+}
+
+pub(crate) fn report_diag(diag: Diag, file: &SourceFile) -> Result<String, Box<dyn Error>> {
+    let Diag {
+        title,
+        level,
+        annotations,
+    } = diag;
+    let path = file.path.to_string_lossy();
+
+    let range = annotations
+        .first()
+        .map(|it| it.range.clone())
+        .unwrap_or_default();
+
+    let report = Report::build(level.report_kind(), (&path, range))
+        .with_message(&title)
+        .with_labels(annotations.iter().map(|it| {
+            let mut label = Label::new((&path, it.range.clone())).with_color(it.level.color());
+            if let Some(s) = &it.label {
+                label = label.with_message(s);
+            }
+            label
+        }));
+
+    let mut buf = BufWriter::new(Vec::new());
+    report
+        .finish()
+        .write((&path, Source::from(&file.src)), &mut buf)?;
+
+    let bytes = buf.into_inner()?;
+    Ok(String::from_utf8(bytes)?)
 }
