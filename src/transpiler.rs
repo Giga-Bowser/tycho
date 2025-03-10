@@ -6,23 +6,24 @@ use crate::{
         ast,
         pool::{ExprPool, ExprRef},
     },
+    sourcemap::SourceFile,
     utils::Span,
 };
 
 #[derive(Debug)]
-pub struct Transpiler<'s, 'pool> {
-    pub pool: &'pool ExprPool,
+pub struct Transpiler<'a> {
+    pub file: &'a SourceFile,
+    pub pool: &'a ExprPool,
     pub result: String,
-    pub source: &'s str,
     indent: Cell<usize>,
 }
 
-impl<'s, 'pool> Transpiler<'s, 'pool> {
-    pub fn new(pool: &'pool ExprPool, source: &'s str) -> Self {
+impl<'a> Transpiler<'a> {
+    pub fn new(file: &'a SourceFile, pool: &'a ExprPool) -> Self {
         Self {
+            file,
             pool,
             result: "require(\"lualib.tycho\")\n".to_owned(),
-            source,
             indent: 0.into(),
         }
     }
@@ -66,25 +67,21 @@ impl<'s, 'pool> Transpiler<'s, 'pool> {
     fn transpile_decl(&mut self, decl: &ast::Declare) {
         let Some(val) = decl.val else {
             // no val is assigned, this means this statement is only useful for type checking
-            format_to!(self.result, "local {}", decl.lhs.name.to_str(self.source));
+            format_to!(self.result, "local {}", decl.lhs.name.to_str(self.file));
             return;
         };
 
         if decl.lhs.suffixes.is_empty() {
             if let ast::Expr::Simple(ast::SimpleExpr::FuncNode(func_node)) = &self.pool[val] {
-                self.transpile_local_func(func_node, decl.lhs.name.to_str(self.source));
+                self.transpile_local_func(func_node, decl.lhs.name.to_str(self.file));
             } else {
-                format_to!(
-                    self.result,
-                    "local {} = ",
-                    decl.lhs.name.to_str(self.source)
-                );
+                format_to!(self.result, "local {} = ", decl.lhs.name.to_str(self.file));
                 self.transpile_expr(val);
             }
             return;
         }
 
-        self.result += decl.lhs.name.to_str(self.source);
+        self.result += decl.lhs.name.to_str(self.file);
 
         for suffix in &decl.lhs.suffixes {
             self.transpile_suffix(suffix);
@@ -98,8 +95,8 @@ impl<'s, 'pool> Transpiler<'s, 'pool> {
         let lhs_result = multi_decl
             .lhs_arr
             .iter()
-            .map(|it| it.to_str(self.source))
-            .collect::<Vec<&'s str>>()
+            .map(|it| it.to_str(self.file))
+            .collect::<Vec<&str>>()
             .join(", ");
 
         format_to!(self.result, "local {lhs_result} = ");
@@ -117,13 +114,13 @@ impl<'s, 'pool> Transpiler<'s, 'pool> {
         format_to!(
             self.result,
             "{}.{} = function(self",
-            method_decl.struct_name.to_str(self.source),
-            method_decl.method_name.to_str(self.source)
+            method_decl.struct_name.to_str(self.file),
+            method_decl.method_name.to_str(self.file)
         );
 
         for param in &method_decl.func.ty.params {
             self.result += ", ";
-            self.result += param.name.to_str(self.source);
+            self.result += param.name.to_str(self.file);
         }
 
         self.result.push(')');
@@ -175,7 +172,7 @@ impl<'s, 'pool> Transpiler<'s, 'pool> {
 
     fn transpile_range_for(&mut self, range_for: &ast::RangeFor) {
         self.result += "for ";
-        self.result += range_for.var.to_str(self.source);
+        self.result += range_for.var.to_str(self.file);
         self.result += " = ";
         self.transpile_expr(range_for.range.lhs);
         self.result += ", ";
@@ -189,8 +186,8 @@ impl<'s, 'pool> Transpiler<'s, 'pool> {
         format_to!(
             self.result,
             "for {}, {} in pairs(",
-            keyval_for.key_name.to_str(self.source),
-            keyval_for.val_name.to_str(self.source)
+            keyval_for.key_name.to_str(self.file),
+            keyval_for.val_name.to_str(self.file)
         );
         self.transpile_expr(keyval_for.iter);
         self.result += ") do";
@@ -200,7 +197,7 @@ impl<'s, 'pool> Transpiler<'s, 'pool> {
 
     fn transpile_expr(&mut self, expr: ExprRef) {
         if let Some(jitted) = self.jit_expr(expr) {
-            self.result += jitted.to_str(self.source);
+            self.result += jitted.to_str(self.file);
             return;
         }
 
@@ -224,7 +221,7 @@ impl<'s, 'pool> Transpiler<'s, 'pool> {
                 self.result.push(')');
             }
             ast::Expr::Simple(simple_expr) => self.transpile_simple_expr(simple_expr),
-            ast::Expr::Name(str) => self.result += str.to_str(self.source),
+            ast::Expr::Name(str) => self.result += str.to_str(self.file),
         }
     }
 
@@ -233,7 +230,7 @@ impl<'s, 'pool> Transpiler<'s, 'pool> {
             ast::SimpleExpr::Num(str)
             | ast::SimpleExpr::Str(str)
             | ast::SimpleExpr::Bool(str)
-            | ast::SimpleExpr::Nil(str) => self.result += str.to_str(self.source),
+            | ast::SimpleExpr::Nil(str) => self.result += str.to_str(self.file),
             ast::SimpleExpr::FuncNode(func_node) => self.transpile_func(func_node),
             ast::SimpleExpr::TableNode(table_node) => self.transpile_table(table_node),
             ast::SimpleExpr::SuffixedExpr(suffixed_expr) => {
@@ -247,11 +244,11 @@ impl<'s, 'pool> Transpiler<'s, 'pool> {
         let params = &func_node.ty.params;
 
         if !params.is_empty() {
-            self.result += params[0].name.to_str(self.source);
+            self.result += params[0].name.to_str(self.file);
 
             for param in &params[1..] {
                 self.result += ", ";
-                self.result += param.name.to_str(self.source);
+                self.result += param.name.to_str(self.file);
             }
         }
 
@@ -265,11 +262,11 @@ impl<'s, 'pool> Transpiler<'s, 'pool> {
         let params = &func_node.ty.params;
 
         if !params.is_empty() {
-            self.result += params[0].name.to_str(self.source);
+            self.result += params[0].name.to_str(self.file);
 
             for param in &params[1..] {
                 self.result += ", ";
-                self.result += param.name.to_str(self.source);
+                self.result += param.name.to_str(self.file);
             }
         }
 
@@ -290,7 +287,7 @@ impl<'s, 'pool> Transpiler<'s, 'pool> {
 
     fn transpile_struct_decl(&mut self, struct_decl: &ast::StructDecl) {
         let newline = self.newline();
-        let name = struct_decl.name.to_str(self.source);
+        let name = struct_decl.name.to_str(self.file);
         format_to!(
             self.result,
             "local {name} = {{}}{newline}{name}.__index = {name}"
@@ -301,7 +298,7 @@ impl<'s, 'pool> Transpiler<'s, 'pool> {
             format_to!(self.result, "{name}.new = function(_self");
             for param in &constructor.ty.params {
                 self.result.push_str(", ");
-                self.result += param.name.to_str(self.source);
+                self.result += param.name.to_str(self.file);
             }
             format_to!(self.result, "){newline}\t");
             self.result += "local self = {}";
@@ -321,7 +318,7 @@ impl<'s, 'pool> Transpiler<'s, 'pool> {
 
             match field {
                 ast::FieldNode::Field { key, val } => {
-                    self.result += key.to_str(self.source);
+                    self.result += key.to_str(self.file);
                     self.result += " = ";
                     self.transpile_expr(*val);
                 }
@@ -350,7 +347,7 @@ impl<'s, 'pool> Transpiler<'s, 'pool> {
     }
 
     fn transpile_suffixed_name(&mut self, suffixed_expr: &ast::SuffixedName) {
-        self.result += suffixed_expr.name.to_str(self.source);
+        self.result += suffixed_expr.name.to_str(self.file);
 
         for suffix in &suffixed_expr.suffixes {
             self.transpile_suffix(suffix);
@@ -363,7 +360,7 @@ impl<'s, 'pool> Transpiler<'s, 'pool> {
                 method_name: name,
                 args,
             }) => {
-                format_to!(self.result, ":{}(", name.to_str(self.source));
+                format_to!(self.result, ":{}(", name.to_str(self.file));
                 self.expr_list(args, ", ");
                 self.result.push(')');
             }
@@ -373,7 +370,7 @@ impl<'s, 'pool> Transpiler<'s, 'pool> {
                 self.result.push(')');
             }
             ast::Suffix::Access(ast::Access { field_name }) => {
-                format_to!(self.result, ".{}", field_name.to_str(self.source));
+                format_to!(self.result, ".{}", field_name.to_str(self.file));
             }
             ast::Suffix::Index(ast::Index { key, .. }) => {
                 self.result.push('[');

@@ -8,6 +8,7 @@ use crate::{
         SpanTokens,
         TokenKind::{self, *},
     },
+    sourcemap::SourceFile,
     typecheck::ctx::TypeContext,
     utils::Span,
 };
@@ -20,26 +21,35 @@ use self::{
 
 type PResult<T> = Result<T, Box<ParseError>>;
 
-pub struct Parser<'a, 's> {
-    pub tokens: SpanTokens<'s>,
+pub struct Parser<'a> {
+    pub file: &'a SourceFile,
+    pub tokens: SpanTokens,
     pub expr_pool: &'a mut ExprPool,
 }
 
-impl<'a, 's> Parser<'a, 's> {
-    pub const fn new(tokens: SpanTokens<'s>, expr_pool: &'a mut ExprPool) -> Self {
-        Parser { tokens, expr_pool }
+impl<'a> Parser<'a> {
+    pub const fn new(
+        file: &'a SourceFile,
+        tokens: SpanTokens,
+        expr_pool: &'a mut ExprPool,
+    ) -> Self {
+        Parser {
+            file,
+            tokens,
+            expr_pool,
+        }
     }
 
-    pub fn into_diag_ctx(self, tcx: &'a TypeContext) -> DiagCtx<'a, 's> {
+    pub fn into_diag_ctx(self, tcx: &'a TypeContext) -> DiagCtx<'a> {
         DiagCtx {
             tcx,
             expr_pool: self.expr_pool,
-            source: self.tokens.source,
+            file: self.file,
         }
     }
 }
 
-impl Parser<'_, '_> {
+impl Parser<'_> {
     pub fn parse_stmt(&mut self) -> PResult<Stmt> {
         match self.tokens[0].kind {
             Name => {

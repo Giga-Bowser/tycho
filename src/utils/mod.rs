@@ -6,6 +6,7 @@ pub(crate) mod spanned;
 use std::{fmt::Display, hash::BuildHasherDefault, time::Duration};
 
 use rustc_hash::FxHasher;
+
 pub(crate) use span::*;
 
 pub(crate) type FxIndexSet<V> = indexmap::IndexSet<V, BuildHasherDefault<FxHasher>>;

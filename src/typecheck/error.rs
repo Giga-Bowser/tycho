@@ -23,8 +23,8 @@ pub enum CheckErr {
     TooFewArgs,
 }
 
-impl<'s> Snippetize<'s> for CheckErr {
-    fn snippetize(&self, ctx: &DiagCtx<'_, 's>) -> Diag {
+impl Snippetize for CheckErr {
+    fn snippetize(&self, ctx: &DiagCtx<'_>) -> Diag {
         match self {
             CheckErr::MismatchedTypes(mismatched_types) => mismatched_types.snippetize(ctx),
             CheckErr::NoReturn(no_return) => no_return.snippetize(ctx),
@@ -95,8 +95,8 @@ impl MismatchedTypes {
     }
 }
 
-impl<'s> Snippetize<'s> for MismatchedTypes {
-    fn snippetize(&self, ctx: &DiagCtx<'_, 's>) -> Diag {
+impl Snippetize for MismatchedTypes {
+    fn snippetize(&self, ctx: &DiagCtx<'_>) -> Diag {
         let mut diag = Diag::new(
             Level::Error,
             format!(
@@ -136,9 +136,9 @@ pub struct NoSuchVal {
     pub val_name: Span,
 }
 
-impl<'s> Snippetize<'s> for NoSuchVal {
-    fn snippetize(&self, ctx: &DiagCtx<'_, 's>) -> Diag {
-        let val_str = self.val_name.to_str(ctx.source);
+impl Snippetize for NoSuchVal {
+    fn snippetize(&self, ctx: &DiagCtx<'_>) -> Diag {
+        let val_str = self.val_name.to_str(ctx.file);
 
         Diag::new(
             Level::Error,
@@ -155,9 +155,9 @@ pub struct NoSuchField {
     pub field_name: Span,
 }
 
-impl<'s> Snippetize<'s> for NoSuchField {
-    fn snippetize(&self, ctx: &DiagCtx<'_, 's>) -> Diag {
-        let field_str = self.field_name.to_str(ctx.source);
+impl Snippetize for NoSuchField {
+    fn snippetize(&self, ctx: &DiagCtx<'_>) -> Diag {
+        let field_str = self.field_name.to_str(ctx.file);
 
         Diag::new(
             Level::Error,
@@ -175,9 +175,9 @@ pub struct NoSuchMethod {
     pub method_name: Span,
 }
 
-impl<'s> Snippetize<'s> for NoSuchMethod {
-    fn snippetize(&self, ctx: &DiagCtx<'_, 's>) -> Diag {
-        let method_str = self.method_name.to_str(ctx.source);
+impl Snippetize for NoSuchMethod {
+    fn snippetize(&self, ctx: &DiagCtx<'_>) -> Diag {
+        let method_str = self.method_name.to_str(ctx.file);
 
         Diag::new(
             Level::Error,
@@ -195,8 +195,8 @@ pub struct NoReturn {
     pub func_node: ast::FuncNode,
 }
 
-impl<'s> Snippetize<'s> for NoReturn {
-    fn snippetize(&self, ctx: &DiagCtx<'_, 's>) -> Diag {
+impl Snippetize for NoReturn {
+    fn snippetize(&self, ctx: &DiagCtx<'_>) -> Diag {
         let mut diag = Diag::new(Level::Error, "non-nil function does not return");
 
         if let Some(return_type) = &self.func_node.ty.return_type {
@@ -221,8 +221,8 @@ pub struct ReturnCount {
     pub expected: usize,
 }
 
-impl<'s> Snippetize<'s> for ReturnCount {
-    fn snippetize(&self, ctx: &DiagCtx<'_, 's>) -> Diag {
+impl Snippetize for ReturnCount {
+    fn snippetize(&self, ctx: &DiagCtx<'_>) -> Diag {
         let return_span = ctx.expr_pool.wrap(&self.return_node).span();
         Diag::new(Level::Error, "wrong number of returns").add_annotation(
             Annotation::new_span(Level::Error, return_span).label(format!(
@@ -240,8 +240,8 @@ pub struct MethodOnWrongType {
     pub ty: TypeRef,
 }
 
-impl<'s> Snippetize<'s> for MethodOnWrongType {
-    fn snippetize(&self, ctx: &DiagCtx<'_, 's>) -> Diag {
+impl Snippetize for MethodOnWrongType {
+    fn snippetize(&self, ctx: &DiagCtx<'_>) -> Diag {
         Diag::new(
             Level::Error,
             format!(

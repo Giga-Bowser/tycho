@@ -10,6 +10,7 @@ use crate::{
         ast,
         pool::{ExprPool, ExprRef},
     },
+    sourcemap::SourceFile,
     utils::{spanned::Spanned, Ident, Span, Symbol},
 };
 
@@ -27,31 +28,35 @@ use self::{
 type TResult<T> = Result<T, Box<CheckErr>>;
 type TRVec<T> = TResult<Vec<T>>;
 
-pub struct TypeChecker<'a, 's> {
+pub struct TypeChecker<'a> {
+    pub file: &'a SourceFile,
     pub tcx: &'a mut TypeContext,
     pub expr_pool: &'a ExprPool,
-    pub source: &'s str,
 }
 
-impl<'a, 's> TypeChecker<'a, 's> {
-    pub const fn new(tcx: &'a mut TypeContext, expr_pool: &'a ExprPool, source: &'s str) -> Self {
+impl<'a> TypeChecker<'a> {
+    pub const fn new(
+        file: &'a SourceFile,
+        tcx: &'a mut TypeContext,
+        expr_pool: &'a ExprPool,
+    ) -> Self {
         TypeChecker {
+            file,
             tcx,
             expr_pool,
-            source,
         }
     }
 
-    pub fn into_diag_ctx(self) -> DiagCtx<'a, 's> {
+    pub fn into_diag_ctx(self) -> DiagCtx<'a> {
         DiagCtx {
             tcx: self.tcx,
             expr_pool: self.expr_pool,
-            source: self.source,
+            file: self.file,
         }
     }
 }
 
-impl TypeChecker<'_, '_> {
+impl TypeChecker<'_> {
     pub fn check_stmt(&mut self, stmt: &ast::Stmt) -> TResult<()> {
         match stmt {
             ast::Stmt::Declare(decl) => self.check_decl(decl),
@@ -93,7 +98,7 @@ impl TypeChecker<'_, '_> {
             } else {
                 self.tcx
                     .value_map
-                    .insert_value(decl.lhs.name.ident(self.source), val_type);
+                    .insert_value(decl.lhs.name.ident(self.file), val_type);
                 return Ok(());
             };
 
@@ -103,7 +108,7 @@ impl TypeChecker<'_, '_> {
 
             self.tcx
                 .value_map
-                .insert_value(decl.lhs.name.ident(self.source), decl_ty);
+                .insert_value(decl.lhs.name.ident(self.file), decl_ty);
             Ok(())
         } else {
             let decl_ty = match &decl.ty {
@@ -116,14 +121,14 @@ impl TypeChecker<'_, '_> {
             if decl.lhs.suffixes.is_empty() {
                 self.tcx
                     .value_map
-                    .insert_value(decl.lhs.name.ident(self.source), decl_ty);
+                    .insert_value(decl.lhs.name.ident(self.file), decl_ty);
                 return Ok(());
             }
 
             let mut ty = self
                 .tcx
                 .value_map
-                .get_top(&decl.lhs.name.ident(self.source))
+                .get_top(&decl.lhs.name.ident(self.file))
                 .ok_or_else(|| {
                     Box::new(CheckErr::NoSuchVal(NoSuchVal {
                         val_name: decl.lhs.name,
@@ -135,7 +140,7 @@ impl TypeChecker<'_, '_> {
                 match suffix {
                     ast::Suffix::Access(ast::Access { field_name: name }) => {
                         if let Some(field) =
-                            self.tcx.pool[ty].kind.get_field(name.symbol(self.source))
+                            self.tcx.pool[ty].kind.get_field(name.symbol(self.file))
                         {
                             ty = field;
                         } else {
@@ -154,9 +159,7 @@ impl TypeChecker<'_, '_> {
                 match &mut self.tcx.pool[ty].kind {
                     TypeKind::Table(_) => Ok(()),
                     TypeKind::Struct(strukt) => {
-                        strukt
-                            .fields
-                            .push((field_name.symbol(self.source), decl_ty));
+                        strukt.fields.push((field_name.symbol(self.file), decl_ty));
                         Ok(())
                     }
                     _ => Err(Box::new(CheckErr::BadAccess {
@@ -174,7 +177,7 @@ impl TypeChecker<'_, '_> {
         let ty = self
             .tcx
             .value_map
-            .get_type(&method_decl.struct_name.ident(self.source))
+            .get_type(&method_decl.struct_name.ident(self.file))
             .unwrap();
 
         let TypeKind::Struct(_) = self.tcx.pool[ty].kind else {
@@ -190,9 +193,7 @@ impl TypeChecker<'_, '_> {
             let func_ty = this.resolve_function_type(&func.ty)?;
             for (name, ty) in &func_ty.params {
                 if !name.is_empty() {
-                    this.tcx
-                        .value_map
-                        .insert_value(name.ident(this.source), *ty);
+                    this.tcx.value_map.insert_value(name.ident(this.file), *ty);
                 }
             }
 
@@ -215,14 +216,14 @@ impl TypeChecker<'_, '_> {
         let TypeKind::Struct(Struct { fields, name: _ }) = &mut self.tcx.pool[self
             .tcx
             .value_map
-            .get_type(&method_decl.struct_name.ident(self.source))
+            .get_type(&method_decl.struct_name.ident(self.file))
             .unwrap()]
         .kind
         else {
             unreachable!()
         };
 
-        fields.push((method_decl.method_name.symbol(self.source), method_type));
+        fields.push((method_decl.method_name.symbol(self.file), method_type));
 
         Ok(())
     }
@@ -247,13 +248,13 @@ impl TypeChecker<'_, '_> {
             if i < types.len() {
                 self.tcx
                     .value_map
-                    .insert_value(name.ident(self.source), types[i]);
+                    .insert_value(name.ident(self.file), types[i]);
             } else {
                 let ty = self.tcx.pool.add(Type {
                     kind: TypeKind::Nil,
                     span: None,
                 });
-                self.tcx.value_map.insert_value(name.ident(self.source), ty);
+                self.tcx.value_map.insert_value(name.ident(self.file), ty);
             }
         }
 
@@ -261,11 +262,11 @@ impl TypeChecker<'_, '_> {
     }
 
     fn check_struct_decl(&mut self, struct_decl: &ast::StructDecl) -> TResult<()> {
-        let name = struct_decl.name.ident(self.source);
+        let name = struct_decl.name.ident(self.file);
         let fields = struct_decl
             .members
             .iter()
-            .map(|it| Ok((it.name.symbol(self.source), self.resolve_type_node(&it.ty)?)))
+            .map(|it| Ok((it.name.symbol(self.file), self.resolve_type_node(&it.ty)?)))
             .collect::<TRVec<_>>()?;
         let ty = Type {
             kind: TypeKind::Struct(Struct {
@@ -349,7 +350,7 @@ impl TypeChecker<'_, '_> {
             ast::Expr::Name(span) => self
                 .tcx
                 .value_map
-                .get_value(&span.ident(self.source))
+                .get_value(&span.ident(self.file))
                 .ok_or_else(|| Box::new(CheckErr::NoSuchVal(NoSuchVal { val_name: *span }))),
         }
     }
@@ -443,9 +444,7 @@ impl TypeChecker<'_, '_> {
         self.with_scope(|this| {
             let func_ty = this.resolve_function_type(&func.ty)?;
             for (name, ty) in &func_ty.params {
-                this.tcx
-                    .value_map
-                    .insert_value(name.ident(this.source), *ty);
+                this.tcx.value_map.insert_value(name.ident(this.file), *ty);
             }
 
             if let TypeKind::Nil = this.tcx.pool[func_ty.returns].kind {
@@ -561,7 +560,7 @@ impl TypeChecker<'_, '_> {
         let mut ty = self
             .tcx
             .value_map
-            .get_value(&suffixed_name.name.ident(self.source))
+            .get_value(&suffixed_name.name.ident(self.file))
             .ok_or_else(|| {
                 Box::new(CheckErr::NoSuchVal(NoSuchVal {
                     val_name: suffixed_name.name,
@@ -578,7 +577,7 @@ impl TypeChecker<'_, '_> {
     fn check_suffixed_expr(&mut self, suffixed_expr: &ast::SuffixedExpr) -> TResult<TypeRef> {
         let mut ty = match &self.expr_pool[suffixed_expr.val] {
             ast::Expr::Name(name) => {
-                if name.to_str(self.source) == "debug_print_ctx" {
+                if name.to_str(self.file) == "debug_print_ctx" {
                     eprintln!("{:#?}", self.tcx);
                     return Ok(self.tcx.pool.nil());
                 }
@@ -586,7 +585,7 @@ impl TypeChecker<'_, '_> {
                 let res = self
                     .tcx
                     .value_map
-                    .get(&name.ident(self.source))
+                    .get(&name.ident(self.file))
                     .ok_or_else(|| Box::new(CheckErr::NoSuchVal(NoSuchVal { val_name: *name })))?;
 
                 if let Resolved::Type(_) = res {
@@ -623,7 +622,7 @@ impl TypeChecker<'_, '_> {
             },
             ast::Suffix::Access(ast::Access { field_name }) => match self.tcx.pool[base].kind {
                 TypeKind::Struct(ref strukt) => {
-                    if let Some(field) = strukt.get_field(field_name.symbol(self.source)) {
+                    if let Some(field) = strukt.get_field(field_name.symbol(self.file)) {
                         base = field;
                     } else {
                         return Err(Box::new(CheckErr::NoSuchField(NoSuchField {
@@ -656,7 +655,7 @@ impl TypeChecker<'_, '_> {
                 base = self.check_call(base, args)?;
             }
             ast::Suffix::Method(ast::Method { method_name, args }) => {
-                let method_str = method_name.to_str(self.source);
+                let method_str = method_name.to_str(self.file);
                 if method_str == "new" {
                     return Ok(base);
                 }
@@ -847,7 +846,7 @@ impl TypeChecker<'_, '_> {
         self.with_scope(|this| {
             this.tcx
                 .value_map
-                .insert_value(range_for.var.ident(this.source), this.tcx.pool.number());
+                .insert_value(range_for.var.ident(this.file), this.tcx.pool.number());
 
             for stmt in &range_for.body {
                 this.check_stmt(stmt)?;
@@ -864,10 +863,10 @@ impl TypeChecker<'_, '_> {
             self.with_scope(|this| {
                 this.tcx
                     .value_map
-                    .insert_value(keyval_for.key_name.ident(this.source), key_type);
+                    .insert_value(keyval_for.key_name.ident(this.file), key_type);
                 this.tcx
                     .value_map
-                    .insert_value(keyval_for.val_name.ident(this.source), val_type);
+                    .insert_value(keyval_for.val_name.ident(this.file), val_type);
 
                 for stmt in &keyval_for.body {
                     this.check_stmt(stmt)?;
@@ -881,13 +880,13 @@ impl TypeChecker<'_, '_> {
     }
 }
 
-impl TypeChecker<'_, '_> {
+impl TypeChecker<'_> {
     fn resolve_type_node(&mut self, type_node: &ast::TypeNode) -> TResult<TypeRef> {
         match type_node {
             ast::TypeNode::Name(span) => self
                 .tcx
                 .value_map
-                .get_type(&span.ident(self.source))
+                .get_type(&span.ident(self.file))
                 .ok_or(Box::new(CheckErr::NoSuchVal(NoSuchVal { val_name: *span }))),
             ast::TypeNode::Nil(span) => Ok(self.tcx.pool.add(Type {
                 kind: TypeKind::Nil,
@@ -968,7 +967,7 @@ impl TypeChecker<'_, '_> {
     }
 }
 
-impl TypeChecker<'_, '_> {
+impl TypeChecker<'_> {
     fn with_scope<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
         self.tcx.value_map.push_scope();
         let res = f(self);
@@ -977,7 +976,7 @@ impl TypeChecker<'_, '_> {
     }
 }
 
-impl TypeChecker<'_, '_> {
+impl TypeChecker<'_> {
     fn can_equal(&self, lhs: TypeRef, rhs: TypeRef) -> bool {
         let lhs = &self.tcx.pool[lhs];
         let rhs = &self.tcx.pool[rhs];

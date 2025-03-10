@@ -26,15 +26,15 @@ impl From<UnexpectedToken> for ParseError {
     }
 }
 
-impl<'s> Snippetize<'s> for ParseError {
-    fn snippetize(&self, ctx: &DiagCtx<'_, 's>) -> Diag {
+impl Snippetize for ParseError {
+    fn snippetize(&self, ctx: &DiagCtx<'_>) -> Diag {
         match self {
             ParseError::EmptyError => Diag::new(Level::Error, "oh no, empty error"),
             ParseError::NoSuchType(val_name) => Diag::new(
                 Level::Error,
                 format!(
                     "cannot find type `{}` in this scope",
-                    val_name.to_str(ctx.source)
+                    val_name.to_str(ctx.file)
                 ),
             )
             .add_annotation(
@@ -52,7 +52,7 @@ impl<'s> Snippetize<'s> for ParseError {
                 );
 
                 if let ast::Expr::Name(name) = &ctx.expr_pool[suffixed_expr.val] {
-                    let name_str = name.to_str(ctx.source);
+                    let name_str = name.to_str(ctx.file);
                     if let "local" | "let" = name_str {
                         diag = diag.add_annotation(
                             Annotation::new_span(Level::Help, *name)
@@ -67,11 +67,11 @@ impl<'s> Snippetize<'s> for ParseError {
     }
 }
 
-impl<'s> Snippetize<'s> for UnexpectedToken {
-    fn snippetize(&self, ctx: &DiagCtx<'_, 's>) -> Diag {
+impl Snippetize for UnexpectedToken {
+    fn snippetize(&self, ctx: &DiagCtx<'_>) -> Diag {
         let mut diag = Diag::new(
             Level::Error,
-            format!("unexpected token: `{}`", self.token.text.to_str(ctx.source)),
+            format!("unexpected token: `{}`", self.token.text.to_str(ctx.file)),
         )
         .add_annotation(Annotation::new_span(Level::Error, self.token.text).label("token here"));
 

@@ -1,9 +1,4 @@
-use std::{
-    error::Error,
-    io::BufWriter,
-    path::{Path, PathBuf},
-    time::Instant,
-};
+use std::{error::Error, io::BufWriter, path::PathBuf, time::Instant};
 
 use ariadne::{Label, Report, Source};
 
@@ -17,6 +12,7 @@ use crate::{
     },
     mem_size::DeepSize,
     parser::{ast, pool::ExprPool, Parser},
+    sourcemap::{SourceFile, SourceMap},
     transpiler::Transpiler,
     typecheck::{ctx::TypeContext, TypeChecker},
     utils::{duration_fmt, ByteFmt},
@@ -35,18 +31,19 @@ pub fn main(args: &cli::Build) -> Result<(), Box<dyn Error>> {
 }
 
 fn build(args: &cli::Build) -> Result<(), Box<dyn Error>> {
+    let mut source_map = SourceMap::new();
     let mut tcx = TypeContext::default();
-    full_includes(&args.includes, &mut tcx)?;
-    let source = std::fs::read_to_string(args.file.clone())?;
-    let tokens = run_lexer(&source);
-    let (expr_pool, stmts) = run_parser(&args.file, &tcx, tokens)?;
-    run_typechecker(&args.file, tcx, &source, &expr_pool, &stmts)?;
+    full_includes(&args.includes, &mut source_map, &mut tcx)?;
+    let file = source_map.load_file(&args.file).unwrap();
+    let tokens = run_lexer(&file);
+    let (expr_pool, stmts) = run_parser(&file, &tcx, tokens)?;
+    run_typechecker(&file, tcx, &expr_pool, &stmts)?;
 
     let result = if args.bc {
-        let protos = run_compiler(&expr_pool, &stmts, &source);
+        let protos = run_compiler(&file, &expr_pool, &stmts);
         dump_bc(&Header::default(), &protos)
     } else {
-        run_transpiler(&expr_pool, &stmts, &source)
+        run_transpiler(&file, &expr_pool, &stmts)
     };
 
     let mut output: Box<dyn std::io::Write> = match &args.output {
@@ -60,27 +57,33 @@ fn build(args: &cli::Build) -> Result<(), Box<dyn Error>> {
 }
 
 pub fn print_main(args: &cli::Print) -> Result<(), Box<dyn Error>> {
+    let mut source_map = SourceMap::new();
     let mut tcx = TypeContext::default();
-    full_includes(&args.includes, &mut tcx)?;
-    let source = std::fs::read_to_string(args.file.clone())?;
-    let tokens = run_lexer(&source);
-    let (expr_pool, stmts) = run_parser(&args.file, &tcx, tokens)?;
-    run_typechecker(&args.file, tcx, &source, &expr_pool, &stmts)?;
-    let protos = run_compiler(&expr_pool, &stmts, &source);
+    full_includes(&args.includes, &mut source_map, &mut tcx)?;
+    let file = source_map.load_file(&args.file).unwrap();
+    let tokens = run_lexer(&file);
+    let (expr_pool, stmts) = run_parser(&file, &tcx, tokens)?;
+    run_typechecker(&file, tcx, &expr_pool, &stmts)?;
+    let protos = run_compiler(&file, &expr_pool, &stmts);
     eprintln!("{protos:#?}");
 
     Ok(())
 }
 
-fn full_includes(includes: &[PathBuf], tcx: &mut TypeContext) -> Result<(), Box<dyn Error>> {
+pub fn full_includes(
+    includes: &[PathBuf],
+    source_map: &mut SourceMap,
+    tcx: &mut TypeContext,
+) -> Result<(), Box<dyn Error>> {
     let include_timer = Instant::now();
 
-    let include_files = define_sources(includes.to_vec());
+    let include_files = includes.to_vec();
+    source_map.add_sources(include_files)?;
 
-    for (path, source) in &include_files {
-        match add_defines(source, tcx) {
+    for file in &source_map.files {
+        match add_defines(file, tcx) {
             Ok(()) => (),
-            Err(diag) => return Err(report_diag(diag, source, path)?.into()),
+            Err(diag) => return Err(report_diag(diag, file)?.into()),
         }
     }
 
@@ -91,10 +94,10 @@ fn full_includes(includes: &[PathBuf], tcx: &mut TypeContext) -> Result<(), Box<
     Ok(())
 }
 
-fn run_lexer(source: &str) -> SpanTokens<'_> {
+pub fn run_lexer(file: &SourceFile) -> SpanTokens {
     let lex_timer = Instant::now();
 
-    let tokens = Lexer::lex_all_span(source);
+    let tokens = Lexer::new(file).lex_all();
 
     if cli::verbose() {
         eprintln!("lexing done: {}", duration_fmt(lex_timer.elapsed()));
@@ -107,22 +110,22 @@ fn run_lexer(source: &str) -> SpanTokens<'_> {
     tokens
 }
 
-fn run_parser(
-    file: &Path,
+pub fn run_parser(
+    file: &SourceFile,
     tcx: &TypeContext,
-    tokens: SpanTokens<'_>,
+    tokens: SpanTokens,
 ) -> Result<(ExprPool, Vec<ast::Stmt>), Box<dyn Error>> {
     let parse_timer = Instant::now();
 
     let mut expr_pool = ExprPool::new();
-    let mut parser = Parser::new(tokens, &mut expr_pool);
+    let mut parser = Parser::new(file, tokens, &mut expr_pool);
 
     let mut stmts = Vec::new();
     while parser.tokens[0].kind != TokenKind::EndOfFile {
         match parser.parse_stmt() {
             Ok(stmt) => stmts.push(stmt),
             Err(e) => {
-                return Err(report_err(e.as_ref(), &parser.into_diag_ctx(tcx), file)?.into());
+                return Err(report_err(e.as_ref(), &parser.into_diag_ctx(tcx))?.into());
             }
         }
     }
@@ -136,19 +139,18 @@ fn run_parser(
     Ok((expr_pool, stmts))
 }
 
-fn run_typechecker(
-    file: &Path,
+pub fn run_typechecker(
+    file: &SourceFile,
     mut tcx: TypeContext,
-    source: &str,
     expr_pool: &ExprPool,
     stmts: &[ast::Stmt],
 ) -> Result<(), Box<dyn Error>> {
     let check_timer = Instant::now();
 
-    let mut typechecker = TypeChecker::new(&mut tcx, expr_pool, source);
+    let mut typechecker = TypeChecker::new(file, &mut tcx, expr_pool);
     for stmt in stmts {
         if let Err(e) = typechecker.check_stmt(stmt) {
-            return Err(report_err(e.as_ref(), &typechecker.into_diag_ctx(), file)?.into());
+            return Err(report_err(e.as_ref(), &typechecker.into_diag_ctx())?.into());
         }
     }
 
@@ -161,10 +163,10 @@ fn run_typechecker(
     Ok(())
 }
 
-fn run_transpiler(pool: &ExprPool, stmts: &[ast::Stmt], source: &str) -> Vec<u8> {
+pub fn run_transpiler(file: &SourceFile, pool: &ExprPool, stmts: &[ast::Stmt]) -> Vec<u8> {
     let transpile_timer = Instant::now();
 
-    let mut transpiler = Transpiler::new(pool, source);
+    let mut transpiler = Transpiler::new(file, pool);
     for stmt in stmts {
         transpiler.transpile_stmt(stmt);
         transpiler.result.push('\n');
@@ -181,10 +183,10 @@ fn run_transpiler(pool: &ExprPool, stmts: &[ast::Stmt], source: &str) -> Vec<u8>
     res
 }
 
-fn run_compiler(pool: &ExprPool, stmts: &[ast::Stmt], source: &str) -> Vec<Proto> {
+pub fn run_compiler(file: &SourceFile, pool: &ExprPool, stmts: &[ast::Stmt]) -> Vec<Proto> {
     let compile_timer = Instant::now();
 
-    let mut compiler = LJCompiler::new(pool, source);
+    let mut compiler = LJCompiler::new(file, pool);
     compiler.compile_chunk(stmts);
     compiler.fs_finish();
 
@@ -195,11 +197,11 @@ fn run_compiler(pool: &ExprPool, stmts: &[ast::Stmt], source: &str) -> Vec<Proto
     compiler.protos
 }
 
-pub fn add_defines(source: &str, tcx: &mut TypeContext) -> Result<(), Diag> {
-    let tokens = Lexer::lex_all_span(source);
+pub fn add_defines(file: &SourceFile, tcx: &mut TypeContext) -> Result<(), Diag> {
+    let tokens = Lexer::new(file).lex_all();
 
     let mut expr_pool = ExprPool::new();
-    let mut parser = Parser::new(tokens, &mut expr_pool);
+    let mut parser = Parser::new(file, tokens, &mut expr_pool);
 
     let mut stmts = Vec::new();
     while parser.tokens[0].kind != TokenKind::EndOfFile {
@@ -210,7 +212,7 @@ pub fn add_defines(source: &str, tcx: &mut TypeContext) -> Result<(), Diag> {
         stmts.push(stmt);
     }
 
-    let mut typechecker = TypeChecker::new(tcx, &expr_pool, source);
+    let mut typechecker = TypeChecker::new(file, tcx, &expr_pool);
 
     for stmt in stmts {
         match typechecker.check_stmt(&stmt) {
@@ -224,41 +226,17 @@ pub fn add_defines(source: &str, tcx: &mut TypeContext) -> Result<(), Diag> {
     Ok(())
 }
 
-pub fn define_sources(mut include_files: Vec<PathBuf>) -> Vec<(PathBuf, String)> {
-    let mut include_sources = Vec::new();
-
-    while let Some(cur) = include_files.pop() {
-        if cur.is_dir() {
-            include_files.extend(
-                std::fs::read_dir(cur)
-                    .unwrap()
-                    .filter_map(|entry| entry.map(|it| it.path()).ok()),
-            );
-        } else {
-            let contents = std::fs::read_to_string(&cur)
-                .unwrap_or_else(|_| panic!("Sould have been able to read file {}", cur.display()));
-            include_sources.push((cur, contents));
-        }
-    }
-
-    include_sources
+fn report_err(err: &impl Snippetize, ctx: &DiagCtx<'_>) -> Result<String, Box<dyn Error>> {
+    report_diag(err.snippetize(ctx), ctx.file)
 }
 
-fn report_err<'s>(
-    err: &impl Snippetize<'s>,
-    ctx: &DiagCtx<'_, 's>,
-    path: &Path,
-) -> Result<String, Box<dyn Error>> {
-    report_diag(err.snippetize(ctx), ctx.source, path)
-}
-
-fn report_diag(diag: Diag, source: &str, path: &Path) -> Result<String, Box<dyn Error>> {
+fn report_diag(diag: Diag, file: &SourceFile) -> Result<String, Box<dyn Error>> {
     let Diag {
         title,
         level,
         annotations,
     } = diag;
-    let path = path.to_string_lossy();
+    let path = file.path.to_string_lossy();
 
     let range = annotations
         .first()
@@ -278,7 +256,7 @@ fn report_diag(diag: Diag, source: &str, path: &Path) -> Result<String, Box<dyn 
     let mut buf = BufWriter::new(Vec::new());
     report
         .finish()
-        .write((&path, Source::from(source)), &mut buf)?;
+        .write((&path, Source::from(&file.src)), &mut buf)?;
 
     let bytes = buf.into_inner()?;
     Ok(String::from_utf8(bytes)?)

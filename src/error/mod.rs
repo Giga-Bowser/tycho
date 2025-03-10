@@ -2,7 +2,9 @@ use std::ops::Range;
 
 use ariadne::{Color, ReportKind};
 
-use crate::{parser::pool::ExprPool, typecheck::ctx::TypeContext, utils::Span};
+use crate::{
+    parser::pool::ExprPool, sourcemap::SourceFile, typecheck::ctx::TypeContext, utils::Span,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Level {
@@ -98,12 +100,12 @@ impl Annotation {
     }
 }
 
-pub struct DiagCtx<'a, 's> {
+pub struct DiagCtx<'a> {
     pub tcx: &'a TypeContext,
     pub expr_pool: &'a ExprPool,
-    pub source: &'s str,
+    pub file: &'a SourceFile,
 }
 
-pub(crate) trait Snippetize<'s> {
-    fn snippetize(&self, ctx: &DiagCtx<'_, 's>) -> Diag;
+pub(crate) trait Snippetize {
+    fn snippetize(&self, ctx: &DiagCtx<'_>) -> Diag;
 }

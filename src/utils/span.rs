@@ -5,7 +5,7 @@ use std::{
     ops::Range,
 };
 
-use crate::utils::FxIndexSet;
+use crate::{sourcemap::SourceFile, utils::FxIndexSet};
 
 pub(crate) type SrcLoc = u32;
 
@@ -58,8 +58,10 @@ impl Span {
     }
 
     #[inline]
-    pub fn to_str(self, source: &str) -> &str {
-        unsafe { source.get_unchecked(self.to_range()) }
+    pub fn to_str(self, source: &SourceFile) -> &str {
+        let start = (self.start - source.start_pos) as usize;
+        let end = (self.end - source.start_pos) as usize;
+        unsafe { source.src.get_unchecked(start..end) }
     }
 
     #[inline]
@@ -68,12 +70,12 @@ impl Span {
     }
 
     #[inline]
-    pub fn symbol(self, source: &str) -> Symbol {
+    pub fn symbol(self, source: &SourceFile) -> Symbol {
         Symbol::intern(self.to_str(source))
     }
 
     #[inline]
-    pub fn ident(self, source: &str) -> Ident {
+    pub fn ident(self, source: &SourceFile) -> Ident {
         Ident::new(self.symbol(source), self)
     }
 }

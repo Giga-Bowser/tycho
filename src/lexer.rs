@@ -2,6 +2,7 @@ use std::{collections::VecDeque, mem::ManuallyDrop, ops::Index};
 
 use crate::{
     parser::error::{ParseError, UnexpectedToken},
+    sourcemap::SourceFile,
     utils::{Span, SrcLoc},
 };
 
@@ -59,56 +60,53 @@ pub enum TokenKind {
 }
 
 #[derive(Clone)]
-pub struct Lexer<'s> {
-    source: &'s str,
+pub struct Lexer<'a> {
+    file: &'a SourceFile,
 
     token: ManuallyDrop<Option<TokenKind>>,
-
     token_start: usize,
     token_end: usize,
 }
 
-impl<'s> Lexer<'s> {
-    pub fn new(source: &'s str) -> Self {
+impl<'a> Lexer<'a> {
+    pub fn new(file: &'a SourceFile) -> Self {
         Lexer {
-            source,
+            file,
             token: ManuallyDrop::default(),
             token_start: 0,
             token_end: 0,
         }
     }
 
-    pub fn lex_all_span(source: &'s str) -> SpanTokens<'s> {
-        let mut lexer = Self::new(source);
-
+    pub fn lex_all(&mut self) -> SpanTokens {
         let mut dq = VecDeque::new();
 
         loop {
-            lexer.token_start = lexer.token_end;
+            self.token_start = self.token_end;
 
-            lexer.lex();
+            self.lex();
 
             // This basically treats self.token as a temporary field.
             // Since we always immediately return a newly set token here,
             // we don't have to replace it with `None` or manually drop
             // it later.
 
-            let kind = unsafe { ManuallyDrop::take(&mut lexer.token) };
-            let token = SpanToken::new(kind.unwrap_or(TokenKind::EndOfFile), lexer.span());
+            let kind = unsafe { ManuallyDrop::take(&mut self.token) };
+            let token = SpanToken::new(kind.unwrap_or(TokenKind::EndOfFile), self.span());
             dq.push_back(token);
             if kind.is_none() {
                 break;
             }
         }
 
-        SpanTokens { source, dq }
+        SpanTokens { dq }
     }
 
     #[inline]
-    fn source_read<C: Chunk<'s>>(&self, offset: usize) -> Option<C> {
-        if offset + (C::SIZE - 1) < self.source.len() {
+    fn source_read<C: Chunk>(&self, offset: usize) -> Option<C> {
+        if offset + (C::SIZE - 1) < self.file.src.len() {
             // # Safety: we just performed a bounds check.
-            Some(unsafe { Chunk::from_ptr(self.source.as_ptr().add(offset)) })
+            Some(unsafe { Chunk::from_ptr(self.file.src.as_ptr().add(offset)) })
         } else {
             None
         }
@@ -116,7 +114,7 @@ impl<'s> Lexer<'s> {
 
     #[inline]
     fn source_find_boundary(&self, mut index: usize) -> usize {
-        while !self.source.is_char_boundary(index) {
+        while !self.file.src.is_char_boundary(index) {
             index += 1;
         }
 
@@ -124,19 +122,19 @@ impl<'s> Lexer<'s> {
     }
 
     #[inline]
-    fn read<C: Chunk<'s>>(&self) -> Option<C> {
+    fn read<C: Chunk>(&self) -> Option<C> {
         self.source_read(self.token_end)
     }
 
     /// Read a `Chunk` at a position offset by `n`.
     #[inline]
-    fn read_at<C: Chunk<'s>>(&self, n: usize) -> Option<C> {
+    fn read_at<C: Chunk>(&self, n: usize) -> Option<C> {
         self.source_read(self.token_end + n)
     }
 
     /// Test a chunk at current position with a closure.
     #[inline]
-    fn test<T: Chunk<'s>, F: FnOnce(T) -> bool>(&self, test: F) -> bool {
+    fn test<T: Chunk, F: FnOnce(T) -> bool>(&self, test: F) -> bool {
         match self.source_read::<T>(self.token_end) {
             Some(chunk) => test(chunk),
             None => false,
@@ -147,7 +145,7 @@ impl<'s> Lexer<'s> {
     #[inline]
     fn bump_unchecked(&mut self, size: usize) {
         debug_assert!(
-            self.token_end + size <= self.source.len(),
+            self.token_end + size <= self.file.src.len(),
             "Bumping out of bounds!"
         );
 
@@ -178,32 +176,20 @@ impl<'s> Lexer<'s> {
     }
 
     #[inline]
-    fn text(&self) -> &'s str {
-        unsafe { self.source.get_unchecked(self.token_start..self.token_end) }
+    fn text(&self) -> &str {
+        unsafe {
+            self.file
+                .src
+                .get_unchecked(self.token_start..self.token_end)
+        }
     }
 
     #[inline]
     fn span(&self) -> Span {
-        Span::new(self.token_start as SrcLoc, self.token_end as SrcLoc)
-    }
-}
-
-impl Iterator for Lexer<'_> {
-    type Item = SpanToken;
-
-    #[inline]
-    fn next(&mut self) -> Option<Self::Item> {
-        self.token_start = self.token_end;
-
-        self.lex();
-
-        // This basically treats self.token as a temporary field.
-        // Since we always immediately return a newly set token here,
-        // we don't have to replace it with `None` or manually drop
-        // it later.
-
-        let kind = unsafe { ManuallyDrop::take(&mut self.token) };
-        kind.map(|kind| SpanToken::new(kind, self.span()))
+        Span::new(
+            self.file.start_pos + self.token_start as SrcLoc,
+            self.file.start_pos + self.token_end as SrcLoc,
+        )
     }
 }
 
@@ -220,12 +206,11 @@ impl SpanToken {
 }
 
 #[derive(Debug, Clone)]
-pub struct SpanTokens<'s> {
-    pub source: &'s str,
+pub struct SpanTokens {
     pub dq: VecDeque<SpanToken>,
 }
 
-impl Index<usize> for SpanTokens<'_> {
+impl Index<usize> for SpanTokens {
     type Output = SpanToken;
 
     #[inline]
@@ -234,7 +219,7 @@ impl Index<usize> for SpanTokens<'_> {
     }
 }
 
-impl SpanTokens<'_> {
+impl SpanTokens {
     #[inline]
     pub fn pop_front(&mut self) -> SpanToken {
         self.dq.pop_front().unwrap()
@@ -263,7 +248,7 @@ impl SpanTokens<'_> {
     }
 }
 
-pub trait Chunk<'s>: Sized + Copy + PartialEq + Eq {
+pub trait Chunk: Sized + Copy + PartialEq + Eq {
     const SIZE: usize;
 
     /// # Safety
@@ -272,7 +257,7 @@ pub trait Chunk<'s>: Sized + Copy + PartialEq + Eq {
     unsafe fn from_ptr(ptr: *const u8) -> Self;
 }
 
-impl Chunk<'_> for u8 {
+impl Chunk for u8 {
     const SIZE: usize = 1;
 
     #[inline]
@@ -281,7 +266,7 @@ impl Chunk<'_> for u8 {
     }
 }
 
-impl<'s, const N: usize> Chunk<'s> for &'s [u8; N] {
+impl<const N: usize> Chunk for &[u8; N] {
     const SIZE: usize = N;
 
     #[inline]
