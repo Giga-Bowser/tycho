@@ -192,7 +192,7 @@ impl TypeChecker<'_, '_> {
                 if !name.is_empty() {
                     this.tcx
                         .value_map
-                        .insert_value(name.ident(self.source), *ty);
+                        .insert_value(name.ident(this.source), *ty);
                 }
             }
 
@@ -445,7 +445,7 @@ impl TypeChecker<'_, '_> {
             for (name, ty) in &func_ty.params {
                 this.tcx
                     .value_map
-                    .insert_value(name.ident(self.source), *ty);
+                    .insert_value(name.ident(this.source), *ty);
             }
 
             if let TypeKind::Nil = this.tcx.pool[func_ty.returns].kind {
@@ -864,10 +864,10 @@ impl TypeChecker<'_, '_> {
             self.with_scope(|this| {
                 this.tcx
                     .value_map
-                    .insert_value(keyval_for.key_name.ident(self.source), key_type);
+                    .insert_value(keyval_for.key_name.ident(this.source), key_type);
                 this.tcx
                     .value_map
-                    .insert_value(keyval_for.val_name.ident(self.source), val_type);
+                    .insert_value(keyval_for.val_name.ident(this.source), val_type);
 
                 for stmt in &keyval_for.body {
                     this.check_stmt(stmt)?;
