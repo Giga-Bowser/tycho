@@ -4,7 +4,7 @@ use std::{
     rc::Rc,
 };
 
-use crate::utils::SrcLoc;
+use crate::utils::{Span, SrcLoc};
 
 #[derive(Debug, Clone)]
 pub struct SourceFile {
@@ -57,5 +57,11 @@ impl SourceMap {
         }
 
         Ok(())
+    }
+
+    pub fn span_file(&self, span: Span) -> Option<&Rc<SourceFile>> {
+        self.files.iter().find(|file| {
+            file.start_pos <= span.start && (file.start_pos + file.src.len() as SrcLoc) >= span.end
+        })
     }
 }

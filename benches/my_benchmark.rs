@@ -78,7 +78,7 @@ fn benchmark_typechecker(c: &mut Criterion) {
     .unwrap();
     let file = source_map.load_file("test/test.ty").unwrap();
     let tokens = run_lexer(&file);
-    let (expr_pool, stmts) = run_parser(&file, &tcx, tokens).unwrap();
+    let (expr_pool, stmts) = run_parser(&file, &source_map, &tcx, tokens).unwrap();
 
     c.bench_function("typecheck", |b| {
         b.iter_custom(|iters| {
@@ -109,7 +109,7 @@ fn benchmark_compiler(c: &mut Criterion) {
     let tcx = TypeContext::default();
     let file = source_map.load_file("test/test.ty").unwrap();
     let tokens = run_lexer(&file);
-    let (expr_pool, stmts) = run_parser(&file, &tcx, tokens).unwrap();
+    let (expr_pool, stmts) = run_parser(&file, &source_map, &tcx, tokens).unwrap();
 
     c.bench_function("compile", |b| {
         b.iter_custom(|iters| {
@@ -132,7 +132,7 @@ fn benchmark_transpiler(c: &mut Criterion) {
     let tcx = TypeContext::default();
     let file = source_map.load_file("test/test.ty").unwrap();
     let tokens = run_lexer(&file);
-    let (expr_pool, stmts) = run_parser(&file, &tcx, tokens).unwrap();
+    let (expr_pool, stmts) = run_parser(&file, &source_map, &tcx, tokens).unwrap();
 
     c.bench_function("transpile", |b| {
         b.iter_custom(|iters| {

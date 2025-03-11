@@ -34,8 +34,8 @@ fn build(args: &cli::Build) -> Result<(), Box<dyn Error>> {
     full_includes(&args.includes, &mut source_map, &mut tcx)?;
     let file = source_map.load_file(&args.file).unwrap();
     let tokens = run_lexer(&file);
-    let (expr_pool, stmts) = run_parser(&file, &tcx, tokens)?;
-    run_typechecker(&file, tcx, &expr_pool, &stmts)?;
+    let (expr_pool, stmts) = run_parser(&file, &source_map, &tcx, tokens)?;
+    run_typechecker(&file, &source_map, tcx, &expr_pool, &stmts)?;
 
     let result = if args.bc {
         let protos = run_compiler(&file, &expr_pool, &stmts);
@@ -60,8 +60,8 @@ pub fn print_main(args: &cli::Print) -> Result<(), Box<dyn Error>> {
     full_includes(&args.includes, &mut source_map, &mut tcx)?;
     let file = source_map.load_file(&args.file).unwrap();
     let tokens = run_lexer(&file);
-    let (expr_pool, stmts) = run_parser(&file, &tcx, tokens)?;
-    run_typechecker(&file, tcx, &expr_pool, &stmts)?;
+    let (expr_pool, stmts) = run_parser(&file, &source_map, &tcx, tokens)?;
+    run_typechecker(&file, &source_map, tcx, &expr_pool, &stmts)?;
     let protos = run_compiler(&file, &expr_pool, &stmts);
     eprintln!("{protos:#?}");
 
@@ -81,7 +81,7 @@ pub fn full_includes(
     for file in &source_map.files {
         match add_defines(file, tcx) {
             Ok(()) => (),
-            Err(diag) => return Err(report_diag(diag, file)?.into()),
+            Err(diag) => return Err(report_diag(diag, source_map)?.into()),
         }
     }
 
@@ -110,6 +110,7 @@ pub fn run_lexer(file: &SourceFile) -> SpanTokens {
 
 pub fn run_parser(
     file: &SourceFile,
+    map: &SourceMap,
     tcx: &TypeContext,
     tokens: SpanTokens,
 ) -> Result<(ExprPool, Vec<ast::Stmt>), Box<dyn Error>> {
@@ -123,7 +124,7 @@ pub fn run_parser(
         match parser.parse_stmt() {
             Ok(stmt) => stmts.push(stmt),
             Err(e) => {
-                return Err(report_err(e.as_ref(), &parser.into_diag_ctx(tcx))?.into());
+                return Err(report_err(e.as_ref(), &parser.into_diag_ctx(tcx), map)?.into());
             }
         }
     }
@@ -139,6 +140,7 @@ pub fn run_parser(
 
 pub fn run_typechecker(
     file: &SourceFile,
+    map: &SourceMap,
     mut tcx: TypeContext,
     expr_pool: &ExprPool,
     stmts: &[ast::Stmt],
@@ -148,7 +150,7 @@ pub fn run_typechecker(
     let mut typechecker = TypeChecker::new(file, &mut tcx, expr_pool);
     for stmt in stmts {
         if let Err(e) = typechecker.check_stmt(stmt) {
-            return Err(report_err(e.as_ref(), &typechecker.into_diag_ctx())?.into());
+            return Err(report_err(e.as_ref(), &typechecker.into_diag_ctx(), map)?.into());
         }
     }
 

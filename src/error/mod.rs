@@ -1,19 +1,24 @@
 use std::{error::Error, fmt, io::BufWriter, path::Path, rc::Rc};
 
 use ariadne::{Color, Label, Report, ReportKind, Source};
+use rustc_hash::FxHashMap;
 
 use crate::{
-    parser::pool::ExprPool, sourcemap::SourceFile, typecheck::ctx::TypeContext, utils::Span,
+    parser::pool::ExprPool,
+    sourcemap::{SourceFile, SourceMap},
+    typecheck::ctx::TypeContext,
+    utils::Span,
 };
 
 pub(crate) fn report_err(
     err: &impl Snippetize,
     ctx: &DiagCtx<'_>,
+    map: &SourceMap,
 ) -> Result<String, Box<dyn Error>> {
-    report_diag(err.snippetize(ctx), ctx.file)
+    report_diag(err.snippetize(ctx), map)
 }
 
-pub(crate) fn report_diag(diag: Diag, file: &SourceFile) -> Result<String, Box<dyn Error>> {
+pub(crate) fn report_diag(diag: Diag, map: &SourceMap) -> Result<String, Box<dyn Error>> {
     let Diag {
         title,
         level,
@@ -22,11 +27,10 @@ pub(crate) fn report_diag(diag: Diag, file: &SourceFile) -> Result<String, Box<d
 
     let span = annotations.first().map(|it| it.span).unwrap_or_default();
 
-    let report = Report::build(level.report_kind(), WrappedSpan::new(file, span))
+    let report = Report::build(level.report_kind(), WrappedSpan::new(map, span))
         .with_message(&title)
         .with_labels(annotations.iter().map(|it| {
-            let mut label =
-                Label::new(WrappedSpan::new(file, it.span)).with_color(it.level.color());
+            let mut label = Label::new(WrappedSpan::new(map, it.span)).with_color(it.level.color());
             if let Some(s) = &it.label {
                 label = label.with_message(s);
             }
@@ -34,7 +38,7 @@ pub(crate) fn report_diag(diag: Diag, file: &SourceFile) -> Result<String, Box<d
         }));
 
     let mut buf = BufWriter::new(Vec::new());
-    report.finish().write(SourceCache::new(file), &mut buf)?;
+    report.finish().write(SourceCache::new(map), &mut buf)?;
 
     let bytes = buf.into_inner()?;
     Ok(String::from_utf8(bytes)?)
@@ -142,7 +146,8 @@ pub(crate) struct WrappedSpan<'a> {
 }
 
 impl<'a> WrappedSpan<'a> {
-    pub(crate) const fn new(file: &'a SourceFile, span: Span) -> Self {
+    pub(crate) fn new(map: &'a SourceMap, span: Span) -> Self {
+        let file = map.span_file(span).unwrap();
         WrappedSpan { file, span }
     }
 }
@@ -163,29 +168,31 @@ impl ariadne::Span for WrappedSpan<'_> {
     }
 }
 
-pub(crate) struct SourceCache<'a> {
-    file: &'a SourceFile,
-    source: Source<Rc<str>>,
+pub(crate) struct SourceCache {
+    map: FxHashMap<Box<Path>, Source<Rc<str>>>,
 }
 
-impl<'a> SourceCache<'a> {
-    pub(crate) fn new(file: &'a SourceFile) -> Self {
-        SourceCache {
-            file,
-            source: Source::from(file.src.clone()),
-        }
+impl SourceCache {
+    pub(crate) fn new(map: &SourceMap) -> Self {
+        let map = map
+            .files
+            .iter()
+            .map(|file| (file.path.clone(), Source::from(file.src.clone())))
+            .collect();
+        SourceCache { map }
     }
 }
 
-impl ariadne::Cache<Path> for SourceCache<'_> {
+impl ariadne::Cache<Path> for SourceCache {
     type Storage = Rc<str>;
 
-    fn fetch(&mut self, id: &Path) -> Result<&Source<Self::Storage>, Box<dyn fmt::Debug + '_>> {
-        assert_eq!(id, self.file.path.as_ref()); // idk if this even means anything?
-        Ok(&self.source)
+    fn fetch(&mut self, path: &Path) -> Result<&Source<Self::Storage>, Box<dyn fmt::Debug + '_>> {
+        self.map
+            .get(path)
+            .ok_or_else(|| Box::new(format!("{} not found in source map", path.display())) as _)
     }
 
-    fn display<'a>(&self, id: &'a Path) -> Option<Box<dyn fmt::Display + 'a>> {
-        Some(Box::new(id.display()))
+    fn display<'a>(&self, path: &'a Path) -> Option<Box<dyn fmt::Display + 'a>> {
+        Some(Box::new(path.display()))
     }
 }
