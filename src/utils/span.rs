@@ -57,8 +57,20 @@ impl Span {
         self.start == self.end
     }
 
+    pub const fn const_eq(self, rhs: Self) -> bool {
+        self.start == rhs.start && self.end == rhs.end
+    }
+
+    pub const fn is_dummy(self) -> bool {
+        self.const_eq(Self::DUMMY)
+    }
+
     #[inline]
     pub const fn to_range(self, source: &SourceFile) -> Range<usize> {
+        if self.is_dummy() {
+            return 0..0;
+        }
+
         let start = (self.start - source.start_pos) as usize;
         let end = (self.end - source.start_pos) as usize;
         start..end
