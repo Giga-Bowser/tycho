@@ -438,7 +438,7 @@ impl TypeChecker<'_> {
                 this.tcx.value_map.insert_value(Ident::from_str("self"), ty);
             }
 
-            let func_ty = this.resolve_function_type(&func.ty)?;
+            let func_ty = this.resolve_function_type(&func.ty, self_ty)?;
             for (name, ty) in &func_ty.params {
                 this.tcx.value_map.insert_value(name.ident(this.file), *ty);
             }
@@ -648,15 +648,16 @@ impl TypeChecker<'_> {
                 }
             },
             ast::Suffix::Call(ast::Call { args }) => {
-                base = self.check_call(base, args)?;
+                base = self.check_call(base, args, None)?;
             }
             ast::Suffix::Method(ast::Method { method_name, args }) => {
+                let self_ty = base;
                 let method_str = method_name.to_str(self.file);
                 if method_str == "new" {
-                    return Ok(base);
+                    return Ok(self_ty);
                 }
 
-                match self.tcx.pool[base]
+                match self.tcx.pool[self_ty]
                     .kind
                     .get_field(Symbol::intern(method_str))
                 {
@@ -668,18 +669,30 @@ impl TypeChecker<'_> {
                     }
                 }
 
-                base = self.check_call(base, args)?;
+                base = self.check_call(base, args, Some(self_ty))?;
             }
         }
 
         Ok(base)
     }
 
-    fn check_call(&mut self, ty: TypeRef, args: &[ExprRef]) -> TResult<TypeRef> {
-        let args = args
-            .iter()
-            .map(|&arg| self.check_expr(arg))
-            .collect::<TRVec<_>>()?;
+    fn check_call(
+        &mut self,
+        ty: TypeRef,
+        args: &[ExprRef],
+        self_ty: Option<TypeRef>,
+    ) -> TResult<TypeRef> {
+        let mut arg_types;
+        if let Some(self_ty) = self_ty {
+            arg_types = Vec::with_capacity(args.len() + 1);
+            arg_types.push(self_ty);
+        } else {
+            arg_types = Vec::with_capacity(args.len());
+        }
+
+        for arg in args {
+            arg_types.push(self.check_expr(*arg)?);
+        }
 
         let TypeKind::Function(func_ty) = &self.tcx.pool[ty].kind else {
             // TODO: should probably be it's own error
@@ -691,17 +704,22 @@ impl TypeChecker<'_> {
             return Err(MismatchedTypes::err(self.tcx.pool.add(expected), ty));
         };
 
-        if args.len() > func_ty.params.len() {
-            let last_param = func_ty
-                .params
-                .last()
-                .ok_or_else(|| Box::new(CheckErr::TooManyArgs))?;
+        if arg_types.len() > func_ty.params.len() {
+            let last_param = func_ty.params.last().ok_or_else(|| {
+                Box::new(CheckErr::TooManyArgs {
+                    expected: func_ty.params.len(),
+                    recieved: arg_types.len(),
+                })
+            })?;
             let TypeKind::Variadic = self.tcx.pool[last_param.1].kind else {
-                return Err(Box::new(CheckErr::TooManyArgs));
+                return Err(Box::new(CheckErr::TooManyArgs {
+                    expected: func_ty.params.len(),
+                    recieved: arg_types.len(),
+                }));
             };
         }
 
-        for (arg_ty, (_, param_ty)) in args.iter().zip(&func_ty.params) {
+        for (arg_ty, (_, param_ty)) in arg_types.iter().zip(&func_ty.params) {
             if !self.can_equal(*param_ty, *arg_ty) {
                 return Err(MismatchedTypes::err(*param_ty, *arg_ty));
             }
@@ -709,7 +727,7 @@ impl TypeChecker<'_> {
 
         // ensure remaining params can be skipped
         // should we allow skipping non-optional nil params?
-        for (_, param_ty) in func_ty.params.iter().skip(args.len()) {
+        for (_, param_ty) in func_ty.params.iter().skip(arg_types.len()) {
             if !self.can_equal(*param_ty, TypePool::nil()) {
                 return Err(MismatchedTypes::err(*param_ty, TypePool::nil()));
             }
@@ -884,7 +902,7 @@ impl TypeChecker<'_> {
             })),
             ast::TypeNode::FunctionType(func_ty) => {
                 let span = func_ty.span();
-                let func_ty = self.resolve_function_type(func_ty)?;
+                let func_ty = self.resolve_function_type(func_ty, None)?;
                 Ok(self.tcx.pool.add(Type {
                     kind: TypeKind::Function(func_ty),
                     span: Some(span),
@@ -906,7 +924,11 @@ impl TypeChecker<'_> {
         }
     }
 
-    fn resolve_function_type(&mut self, function_type: &ast::FunctionType) -> TResult<Function> {
+    fn resolve_function_type(
+        &mut self,
+        function_type: &ast::FunctionType,
+        self_ty: Option<TypeRef>,
+    ) -> TResult<Function> {
         let returns = match function_type.return_type.as_ref().map(AsRef::as_ref) {
             Some(ast::ReturnType::Single(ty)) => self.resolve_type_node(ty)?,
             Some(ast::ReturnType::Multiple(ast::MultipleType { types, span })) => {
@@ -926,14 +948,19 @@ impl TypeChecker<'_> {
             }),
         };
 
-        Ok(Function {
-            params: function_type
-                .params
-                .iter()
-                .map(|it| Ok((it.name, self.resolve_type_node(&it.ty)?)))
-                .collect::<TRVec<_>>()?,
-            returns,
-        })
+        let mut params = if let Some(self_ty) = self_ty {
+            let mut v = Vec::with_capacity(function_type.params.len() + 1);
+            v.push((Span::DUMMY, self_ty));
+            v
+        } else {
+            Vec::with_capacity(function_type.params.len())
+        };
+
+        for param in &function_type.params {
+            params.push((param.name, self.resolve_type_node(&param.ty)?));
+        }
+
+        Ok(Function { params, returns })
     }
 
     fn resolve_table_type(&mut self, table_type: &ast::TableType) -> TResult<TypeRef> {

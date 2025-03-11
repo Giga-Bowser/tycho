@@ -19,7 +19,7 @@ pub enum CheckErr {
     BadIndex { span: Span, ty: TypeRef },
     BadNegate { op_span: Span, ty: TypeRef },
     BadNot { op_span: Span, ty: TypeRef },
-    TooManyArgs,
+    TooManyArgs { expected: usize, recieved: usize },
     TooFewArgs,
 }
 
@@ -74,7 +74,10 @@ impl Snippetize for CheckErr {
                 "cannot perform access on value of type `{}`",
                 ctx.tcx.pool.wrap(*ty)
             ))),
-            CheckErr::TooManyArgs => Diag::new(Level::Error, "too many args for function"),
+            CheckErr::TooManyArgs { expected, recieved } => Diag::new(
+                Level::Error,
+                format!("expected {expected} args, found {recieved}"),
+            ),
             CheckErr::TooFewArgs => Diag::new(Level::Error, "too few args for function"),
         }
     }
