@@ -1,5 +1,6 @@
 pub mod ctx;
 pub mod error;
+pub mod func_ctx;
 pub mod pool;
 pub mod type_env;
 pub mod types;
@@ -11,7 +12,7 @@ use crate::{
         pool::{ExprPool, ExprRef},
     },
     sourcemap::SourceFile,
-    typecheck::pool::TypePool,
+    typecheck::{func_ctx::FuncCtxStack, pool::TypePool},
     utils::{spanned::Spanned, Ident, Span, Symbol},
 };
 
@@ -19,7 +20,7 @@ use self::{
     ctx::TypeContext,
     error::{
         CheckErr, MethodOnWrongType, MismatchedTypes, NoReturn, NoSuchField, NoSuchMethod,
-        NoSuchVal, ReturnCount,
+        NoSuchVal,
     },
     pool::TypeRef,
     type_env::Resolved,
@@ -33,18 +34,16 @@ pub struct TypeChecker<'a> {
     pub file: &'a SourceFile,
     pub tcx: &'a mut TypeContext,
     pub expr_pool: &'a ExprPool,
+    pub func_ctx: FuncCtxStack,
 }
 
 impl<'a> TypeChecker<'a> {
-    pub const fn new(
-        file: &'a SourceFile,
-        tcx: &'a mut TypeContext,
-        expr_pool: &'a ExprPool,
-    ) -> Self {
+    pub fn new(file: &'a SourceFile, tcx: &'a mut TypeContext, expr_pool: &'a ExprPool) -> Self {
         TypeChecker {
             file,
             tcx,
             expr_pool,
+            func_ctx: FuncCtxStack::new(),
         }
     }
 
@@ -86,22 +85,136 @@ impl TypeChecker<'_> {
                 Ok(())
             }),
             ast::Stmt::StructDecl(struct_decl) => self.check_struct_decl(struct_decl),
-            _ => Ok(()),
+            ast::Stmt::Return(return_stmt) => self.check_return(return_stmt),
+            ast::Stmt::Break(_) => Ok(()), // TODO: actually handle this
         }
     }
 
     fn check_decl(&mut self, decl: &ast::Declare) -> TResult<()> {
-        if let Some(val) = decl.val {
+        match (decl.val, &decl.ty) {
+            (Some(val), Some(type_node)) => {
+                self.check_decl_with_both(decl.lhs.name, val, type_node)
+            }
+            (None, Some(type_node)) => self.check_decl_with_type(&decl.lhs, type_node),
+            (Some(val), None) => self.check_decl_with_val(decl.lhs.name, val),
+            (None, None) => unreachable!(),
+        }
+        // .map_err(|e| e.while_checking(self.expr_pool.wrap(decl)))
+    }
+
+    fn check_decl_with_val(&mut self, name: Span, val: ExprRef) -> TResult<()> {
+        if let ast::Expr::Simple(ast::SimpleExpr::FuncNode(func_node)) = &self.expr_pool[val] {
+            let func_ty = self.resolve_function_type(&func_node.ty, None)?;
+            let func_ty = self.tcx.pool.add(Type {
+                kind: TypeKind::Function(func_ty),
+                span: Some(func_node.ty.span()),
+            });
+
+            self.tcx
+                .value_map
+                .insert_value(name.ident(self.file), func_ty);
+
             let val_type = self.check_expr(val)?;
 
-            let decl_ty = if let Some(ty) = &decl.ty {
-                self.resolve_type_node(ty)?
-            } else {
-                self.tcx
-                    .value_map
-                    .insert_value(decl.lhs.name.ident(self.file), val_type);
-                return Ok(());
-            };
+            if !self.can_equal(func_ty, val_type) {
+                return Err(MismatchedTypes::err(func_ty, val_type));
+            }
+        } else {
+            let val_type = self.check_expr(val)?;
+
+            self.tcx
+                .value_map
+                .insert_value(name.ident(self.file), val_type);
+        }
+
+        Ok(())
+    }
+
+    fn check_decl_with_type(
+        &mut self,
+        lhs: &ast::SuffixedName,
+        type_node: &ast::TypeNode,
+    ) -> TResult<()> {
+        let decl_ty = self.resolve_type_node(type_node)?;
+
+        if lhs.suffixes.is_empty() {
+            self.tcx
+                .value_map
+                .insert_value(lhs.name.ident(self.file), decl_ty);
+            return Ok(());
+        }
+
+        let mut ty = self
+            .tcx
+            .value_map
+            .get_top(&lhs.name.ident(self.file))
+            .ok_or_else(|| Box::new(CheckErr::NoSuchVal(NoSuchVal { val_name: lhs.name })))?
+            .inner();
+
+        for suffix in &mut lhs.suffixes.iter().take(lhs.suffixes.len() - 1) {
+            match suffix {
+                ast::Suffix::Access(ast::Access { field_name: name }) => {
+                    if let Some(field) = self.tcx.pool[ty].kind.get_field(name.symbol(self.file)) {
+                        ty = field;
+                    } else {
+                        return Err(Box::new(CheckErr::NoSuchField(NoSuchField {
+                            field_name: *name,
+                        })));
+                    }
+                }
+                _ => unreachable!(),
+            }
+        }
+
+        let last = lhs.suffixes.last().unwrap();
+
+        if let ast::Suffix::Access(ast::Access { field_name }) = last {
+            match &mut self.tcx.pool[ty].kind {
+                TypeKind::Table(_) => Ok(()),
+                TypeKind::Struct(strukt) => {
+                    strukt.fields.push((field_name.symbol(self.file), decl_ty));
+                    Ok(())
+                }
+                _ => Err(Box::new(CheckErr::BadAccess {
+                    span: *field_name,
+                    ty,
+                })),
+            }
+        } else {
+            unreachable!()
+        }
+    }
+
+    fn check_decl_with_both(
+        &mut self,
+        name: Span,
+        val: ExprRef,
+        type_node: &ast::TypeNode,
+    ) -> TResult<()> {
+        let decl_ty = self.resolve_type_node(type_node)?;
+
+        if let ast::Expr::Simple(ast::SimpleExpr::FuncNode(func_node)) = &self.expr_pool[val] {
+            let func_ty = self.resolve_function_type(&func_node.ty, None)?;
+            let func_ty = self.tcx.pool.add(Type {
+                kind: TypeKind::Function(func_ty),
+                span: Some(func_node.ty.span()),
+            });
+
+            if !self.can_equal(decl_ty, func_ty) {
+                return Err(MismatchedTypes::err(decl_ty, func_ty));
+            }
+
+            self.tcx
+                .value_map
+                .insert_value(name.ident(self.file), func_ty);
+
+            let val_type = self.check_expr(val)?;
+
+            if !self.can_equal(func_ty, val_type) {
+                return Err(MismatchedTypes::err(func_ty, val_type));
+            }
+        } else {
+            let val_type = self.check_expr(val)?;
 
             if !self.can_equal(decl_ty, val_type) {
                 return Err(MismatchedTypes::err(decl_ty, val_type));
@@ -109,69 +222,10 @@ impl TypeChecker<'_> {
 
             self.tcx
                 .value_map
-                .insert_value(decl.lhs.name.ident(self.file), decl_ty);
-            Ok(())
-        } else {
-            let decl_ty = match &decl.ty {
-                Some(ty) => self.resolve_type_node(ty)?,
-                None => {
-                    unreachable!("decl without type or value? that's just a name")
-                }
-            };
-
-            if decl.lhs.suffixes.is_empty() {
-                self.tcx
-                    .value_map
-                    .insert_value(decl.lhs.name.ident(self.file), decl_ty);
-                return Ok(());
-            }
-
-            let mut ty = self
-                .tcx
-                .value_map
-                .get_top(&decl.lhs.name.ident(self.file))
-                .ok_or_else(|| {
-                    Box::new(CheckErr::NoSuchVal(NoSuchVal {
-                        val_name: decl.lhs.name,
-                    }))
-                })?
-                .inner();
-
-            for suffix in &mut decl.lhs.suffixes.iter().take(decl.lhs.suffixes.len() - 1) {
-                match suffix {
-                    ast::Suffix::Access(ast::Access { field_name: name }) => {
-                        if let Some(field) =
-                            self.tcx.pool[ty].kind.get_field(name.symbol(self.file))
-                        {
-                            ty = field;
-                        } else {
-                            return Err(Box::new(CheckErr::NoSuchField(NoSuchField {
-                                field_name: *name,
-                            })));
-                        }
-                    }
-                    _ => unreachable!(),
-                }
-            }
-
-            let last = decl.lhs.suffixes.last().unwrap();
-
-            if let ast::Suffix::Access(ast::Access { field_name }) = last {
-                match &mut self.tcx.pool[ty].kind {
-                    TypeKind::Table(_) => Ok(()),
-                    TypeKind::Struct(strukt) => {
-                        strukt.fields.push((field_name.symbol(self.file), decl_ty));
-                        Ok(())
-                    }
-                    _ => Err(Box::new(CheckErr::BadAccess {
-                        span: *field_name,
-                        ty,
-                    })),
-                }
-            } else {
-                unreachable!()
-            }
+                .insert_value(name.ident(self.file), decl_ty);
         }
+
+        Ok(())
     }
 
     fn check_method_decl(&mut self, method_decl: &ast::MethodDecl) -> TResult<()> {
@@ -443,113 +497,43 @@ impl TypeChecker<'_> {
                 this.tcx.value_map.insert_value(name.ident(this.file), *ty);
             }
 
-            if let TypeKind::Nil = this.tcx.pool[func_ty.returns].kind {
-                // TODO: this is obviously bad
-                return Ok(this.tcx.pool.add(TypeKind::Function(func_ty).into()));
+            this.func_ctx.push(func_ty.returns);
+
+            for stmt in &func.body {
+                this.check_stmt(stmt)?;
             }
 
-            let has_return = this.check_func_body(&func.body, func_ty.returns)?;
-
-            if !has_return {
+            if this.needs_return(func_ty.returns) && !this.func_ctx.has_return() {
                 return Err(Box::new(CheckErr::NoReturn(NoReturn {
                     func_node: func.clone(),
                 })));
             }
 
+            this.func_ctx.pop();
+
             Ok(this.tcx.pool.add(TypeKind::Function(func_ty).into()))
         })
     }
 
-    fn check_func_body(&mut self, body: &[ast::Stmt], return_type: TypeRef) -> TResult<bool> {
-        self.with_scope(|this| {
-            for stmt in body {
-                match stmt {
-                    ast::Stmt::IfStmt(ast::IfStmt { body: if_body, .. }) => {
-                        if this.check_func_body(if_body, return_type)? {
-                            return Ok(true);
-                        }
-                    }
-                    ast::Stmt::WhileStmt(ast::WhileStmt {
-                        body: while_body, ..
-                    }) => {
-                        if this.check_func_body(while_body, return_type)? {
-                            return Ok(true);
-                        }
-                    }
-                    ast::Stmt::RangeFor(ast::RangeFor { body, .. }) => {
-                        if this.check_func_body(body, return_type)? {
-                            return Ok(true);
-                        }
-                    }
-                    ast::Stmt::KeyValFor(ast::KeyValFor { body, .. }) => {
-                        if this.check_func_body(body, return_type)? {
-                            return Ok(true);
-                        }
-                    }
-                    ast::Stmt::Return(node @ ast::ReturnStmt { vals, .. }) => {
-                        if vals.is_empty() {
-                            return match &this.tcx.pool[return_type].kind {
-                                TypeKind::Nil | TypeKind::Variadic => Ok(true),
-                                TypeKind::Multiple(types) => {
-                                    if types.is_empty() {
-                                        Ok(true)
-                                    } else {
-                                        Err(Box::new(CheckErr::ReturnCount(ReturnCount {
-                                            return_node: node.clone(),
-                                            expected: types.len(),
-                                        })))
-                                    }
-                                }
-                                _ => Err(Box::new(CheckErr::ReturnCount(ReturnCount {
-                                    return_node: node.clone(),
-                                    expected: 1,
-                                }))),
-                            };
-                        }
+    fn check_return(&mut self, return_stmt: &ast::ReturnStmt) -> TResult<()> {
+        let ret_types = return_stmt
+            .vals
+            .iter()
+            .map(|it| self.check_expr(*it))
+            .collect::<TRVec<_>>()?;
 
-                        let returned_types = vals
-                            .iter()
-                            .map(|it| this.check_expr(*it))
-                            .collect::<TRVec<_>>()?;
+        let ret_type = match ret_types.as_slice() {
+            [] => TypePool::nil(),
+            [single] => *single,
+            _ => self.tcx.pool.add(TypeKind::Multiple(ret_types).into()),
+        };
 
-                        if let TypeKind::Multiple(types) = &this.tcx.pool[return_type].kind {
-                            if types.len() != vals.len() {
-                                return Err(Box::new(CheckErr::ReturnCount(ReturnCount {
-                                    return_node: node.clone(),
-                                    expected: types.len(),
-                                })));
-                            }
-
-                            for (lhs, rhs) in types.iter().zip(returned_types.iter()) {
-                                if !this.can_equal(*lhs, *rhs) {
-                                    return Err(MismatchedTypes::err(*lhs, *rhs));
-                                }
-                            }
-                        } else {
-                            if vals.len() != 1 {
-                                return Err(Box::new(CheckErr::ReturnCount(ReturnCount {
-                                    return_node: node.clone(),
-                                    expected: 1,
-                                })));
-                            }
-
-                            let return_val = this.check_expr(vals[0])?;
-                            return if this.can_equal(return_type, return_val) {
-                                Ok(true)
-                            } else {
-                                Err(MismatchedTypes::err(return_type, return_val))
-                            };
-                        }
-
-                        return Ok(true);
-                    }
-                    _ => (),
-                }
-                this.check_stmt(stmt)?;
-            }
-
-            Ok(false)
-        })
+        if self.can_equal(self.func_ctx.ret_ty(), ret_type) {
+            self.func_ctx.set_return(true);
+            Ok(())
+        } else {
+            Err(MismatchedTypes::err(self.func_ctx.ret_ty(), ret_type))
+        }
     }
 
     fn check_suffixed_name(&mut self, suffixed_name: &ast::SuffixedName) -> TResult<TypeRef> {
@@ -1118,5 +1102,19 @@ impl TypeChecker<'_> {
         }
 
         true
+    }
+
+    fn needs_return(&self, return_ty: TypeRef) -> bool {
+        match &self.tcx.pool[return_ty].kind {
+            TypeKind::Nil
+            | TypeKind::Any
+            | TypeKind::Optional(_)
+            | TypeKind::Variadic
+            | TypeKind::Adaptable => false,
+
+            TypeKind::Multiple(type_refs) => type_refs.iter().any(|it| self.needs_return(*it)),
+
+            _ => true,
+        }
     }
 }
