@@ -175,44 +175,21 @@ impl TypeChecker<'_> {
     }
 
     fn check_method_decl(&mut self, method_decl: &ast::MethodDecl) -> TResult<()> {
-        let ty = self
+        let self_ty = self
             .tcx
             .value_map
             .get_type(&method_decl.struct_name.ident(self.file))
             .unwrap();
 
-        let TypeKind::Struct(_) = self.tcx.pool[ty].kind else {
+        let TypeKind::Struct(_) = self.tcx.pool[self_ty].kind else {
             return Err(Box::new(CheckErr::MethodOnWrongType(MethodOnWrongType {
                 span: Span::cover(method_decl.struct_name, method_decl.method_name),
-                ty,
+                ty: self_ty,
             })));
         };
 
         let func: &ast::FuncNode = &method_decl.func;
-        let method_type = self.with_scope(|this| {
-            this.tcx.value_map.insert_value(Ident::from_str("self"), ty);
-            let func_ty = this.resolve_function_type(&func.ty)?;
-            for (name, ty) in &func_ty.params {
-                if !name.is_empty() {
-                    this.tcx.value_map.insert_value(name.ident(this.file), *ty);
-                }
-            }
-
-            if let TypeKind::Nil = this.tcx.pool[func_ty.returns].kind {
-                // TODO: this is obviously bad
-                return Ok(this.tcx.pool.add(TypeKind::Function(func_ty).into()));
-            }
-
-            let has_return = this.check_func_body(&func.body, func_ty.returns)?;
-
-            if !has_return {
-                return Err(Box::new(CheckErr::NoReturn(NoReturn {
-                    func_node: func.clone(),
-                })));
-            }
-
-            Ok(this.tcx.pool.add(TypeKind::Function(func_ty).into()))
-        })?;
+        let method_type = self.check_method_func(func, self_ty)?;
 
         let TypeKind::Struct(Struct { fields, name: _ }) = &mut self.tcx.pool[self
             .tcx
@@ -441,8 +418,26 @@ impl TypeChecker<'_> {
         }
     }
 
+    /// returns the function type
     fn check_func(&mut self, func: &ast::FuncNode) -> TResult<TypeRef> {
+        self.check_func_inner(func, None)
+    }
+
+    /// returns the function type
+    fn check_method_func(&mut self, func: &ast::FuncNode, self_ty: TypeRef) -> TResult<TypeRef> {
+        self.check_func_inner(func, Some(self_ty))
+    }
+
+    fn check_func_inner(
+        &mut self,
+        func: &ast::FuncNode,
+        self_ty: Option<TypeRef>,
+    ) -> TResult<TypeRef> {
         self.with_scope(|this| {
+            if let Some(ty) = self_ty {
+                this.tcx.value_map.insert_value(Ident::from_str("self"), ty);
+            }
+
             let func_ty = this.resolve_function_type(&func.ty)?;
             for (name, ty) in &func_ty.params {
                 this.tcx.value_map.insert_value(name.ident(this.file), *ty);
