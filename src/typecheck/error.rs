@@ -38,7 +38,7 @@ impl Snippetize for CheckErr {
             CheckErr::NotIterable => Diag::new(Level::Error, "can't iterate over non-iterable"),
             CheckErr::BadNegate { op_span, ty } => {
                 Diag::new(Level::Error, "cannot unary negate non-number type").add_annotation(
-                    Annotation::new_span(Level::Error, *op_span).label(format!(
+                    Annotation::new(Level::Error, *op_span).label(format!(
                         "expected `number` for this operator, found `{}`",
                         ctx.tcx.pool.wrap(*ty)
                     )),
@@ -46,7 +46,7 @@ impl Snippetize for CheckErr {
             }
             CheckErr::BadNot { op_span, ty } => {
                 Diag::new(Level::Error, "cannot unary not non-boolean type").add_annotation(
-                    Annotation::new_span(Level::Error, *op_span).label(format!(
+                    Annotation::new(Level::Error, *op_span).label(format!(
                         "expected `boolean` for this operator, found `{}`",
                         ctx.tcx.pool.wrap(*ty)
                     )),
@@ -59,7 +59,7 @@ impl Snippetize for CheckErr {
                     ctx.tcx.pool.wrap(*ty)
                 ),
             )
-            .add_annotation(Annotation::new_span(Level::Error, *span).label(format!(
+            .add_annotation(Annotation::new(Level::Error, *span).label(format!(
                 "cannot index into value of type `{}`",
                 ctx.tcx.pool.wrap(*ty)
             ))),
@@ -70,7 +70,7 @@ impl Snippetize for CheckErr {
                     ctx.tcx.pool.wrap(*ty)
                 ),
             )
-            .add_annotation(Annotation::new_span(Level::Error, *span).label(format!(
+            .add_annotation(Annotation::new(Level::Error, *span).label(format!(
                 "cannot perform access on value of type `{}`",
                 ctx.tcx.pool.wrap(*ty)
             ))),
@@ -113,18 +113,16 @@ impl Snippetize for MismatchedTypes {
 
         if let Some(expected_span) = expected_span {
             diag = diag.add_annotation(
-                Annotation::new_span(Level::Info, expected_span).label("expected due to this"),
+                Annotation::new(Level::Info, expected_span).label("expected due to this"),
             );
         }
 
         if let Some(recieved_str) = recieved_span {
-            diag = diag.add_annotation(Annotation::new_span(Level::Error, recieved_str).label(
-                format!(
-                    "expected `{}`, found `{}`",
-                    ctx.tcx.pool.wrap(self.expected),
-                    ctx.tcx.pool.wrap(self.recieved)
-                ),
-            ));
+            diag = diag.add_annotation(Annotation::new(Level::Error, recieved_str).label(format!(
+                "expected `{}`, found `{}`",
+                ctx.tcx.pool.wrap(self.expected),
+                ctx.tcx.pool.wrap(self.recieved)
+            )));
         }
 
         diag
@@ -145,7 +143,7 @@ impl Snippetize for NoSuchVal {
             format!("cannot find value `{val_str}` in this scope"),
         )
         .add_annotation(
-            Annotation::new_span(Level::Error, self.val_name).label("not found in this scope"),
+            Annotation::new(Level::Error, self.val_name).label("not found in this scope"),
         )
     }
 }
@@ -164,8 +162,7 @@ impl Snippetize for NoSuchField {
             format!("cannot find field `{field_str}` on this type"),
         )
         .add_annotation(
-            Annotation::new_span(Level::Error, self.field_name)
-                .label("field not found on this type"),
+            Annotation::new(Level::Error, self.field_name).label("field not found on this type"),
         )
     }
 }
@@ -184,8 +181,7 @@ impl Snippetize for NoSuchMethod {
             format!("cannot find method `{method_str}` on this type"),
         )
         .add_annotation(
-            Annotation::new_span(Level::Error, self.method_name)
-                .label("method not found on this type"),
+            Annotation::new(Level::Error, self.method_name).label("method not found on this type"),
         )
     }
 }
@@ -201,13 +197,12 @@ impl Snippetize for NoReturn {
 
         if let Some(return_type) = &self.func_node.ty.return_type {
             diag = diag.add_annotation(
-                Annotation::new_span(Level::Error, return_type.span())
-                    .label("expected return type"),
+                Annotation::new(Level::Error, return_type.span()).label("expected return type"),
             );
         }
 
         diag = diag.add_annotation(
-            Annotation::new_span(Level::Info, ctx.expr_pool.wrap(&self.func_node).span())
+            Annotation::new(Level::Info, ctx.expr_pool.wrap(&self.func_node).span())
                 .label("function here"),
         );
 
@@ -225,7 +220,7 @@ impl Snippetize for ReturnCount {
     fn snippetize(&self, ctx: &DiagCtx<'_>) -> Diag {
         let return_span = ctx.expr_pool.wrap(&self.return_node).span();
         Diag::new(Level::Error, "wrong number of returns").add_annotation(
-            Annotation::new_span(Level::Error, return_span).label(format!(
+            Annotation::new(Level::Error, return_span).label(format!(
                 "expected `{}` return values here, recieved `{}`",
                 self.expected,
                 self.return_node.vals.len()
@@ -249,8 +244,6 @@ impl Snippetize for MethodOnWrongType {
                 ctx.tcx.pool.wrap(self.ty)
             ),
         )
-        .add_annotation(
-            Annotation::new_span(Level::Error, self.span).label("method declaration here"),
-        )
+        .add_annotation(Annotation::new(Level::Error, self.span).label("method declaration here"))
     }
 }

@@ -1,4 +1,4 @@
-use std::{error::Error, io::BufWriter, ops::Range};
+use std::{error::Error, fmt, io::BufWriter, path::Path, rc::Rc};
 
 use ariadne::{Color, Label, Report, ReportKind, Source};
 
@@ -6,37 +6,48 @@ use crate::{
     parser::pool::ExprPool, sourcemap::SourceFile, typecheck::ctx::TypeContext, utils::Span,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Level {
-    Error,
-    Warning,
-    Info,
-    Note,
-    Help,
+pub(crate) fn report_err(
+    err: &impl Snippetize,
+    ctx: &DiagCtx<'_>,
+) -> Result<String, Box<dyn Error>> {
+    report_diag(err.snippetize(ctx), ctx.file)
 }
 
-impl Level {
-    pub fn color(self) -> Color {
-        match self {
-            Level::Error => Color::Red,
-            Level::Warning => Color::Yellow,
-            Level::Info => Color::BrightBlue,
-            Level::Note => Color::BrightGreen,
-            Level::Help => Color::BrightCyan,
-        }
-    }
+pub(crate) fn report_diag(diag: Diag, file: &SourceFile) -> Result<String, Box<dyn Error>> {
+    let Diag {
+        title,
+        level,
+        annotations,
+    } = diag;
 
-    pub fn report_kind(self) -> ReportKind<'static> {
-        let s = match self {
-            Level::Error => "error",
-            Level::Warning => "warning",
-            Level::Info => "info",
-            Level::Note => "note",
-            Level::Help => "help",
-        };
+    let span = annotations.first().map(|it| it.span).unwrap_or_default();
 
-        ReportKind::Custom(s, self.color())
-    }
+    let report = Report::build(level.report_kind(), WrappedSpan::new(file, span))
+        .with_message(&title)
+        .with_labels(annotations.iter().map(|it| {
+            let mut label =
+                Label::new(WrappedSpan::new(file, it.span)).with_color(it.level.color());
+            if let Some(s) = &it.label {
+                label = label.with_message(s);
+            }
+            label
+        }));
+
+    let mut buf = BufWriter::new(Vec::new());
+    report.finish().write(SourceCache::new(file), &mut buf)?;
+
+    let bytes = buf.into_inner()?;
+    Ok(String::from_utf8(bytes)?)
+}
+
+pub struct DiagCtx<'a> {
+    pub tcx: &'a TypeContext,
+    pub expr_pool: &'a ExprPool,
+    pub file: &'a SourceFile,
+}
+
+pub(crate) trait Snippetize {
+    fn snippetize(&self, ctx: &DiagCtx<'_>) -> Diag;
 }
 
 #[derive(Debug)]
@@ -73,23 +84,15 @@ impl Diag {
 #[derive(Debug, Clone)]
 pub struct Annotation {
     pub level: Level,
-    pub range: Range<usize>,
+    pub span: Span,
     pub label: Option<String>,
 }
 
 impl Annotation {
-    pub fn new(level: Level, range: Range<usize>) -> Self {
+    pub fn new(level: Level, span: Span) -> Self {
         Annotation {
             level,
-            range,
-            label: None,
-        }
-    }
-
-    pub fn new_span(level: Level, span: Span) -> Self {
-        Annotation {
-            level,
-            range: span.to_range(),
+            span,
             label: None,
         }
     }
@@ -100,51 +103,89 @@ impl Annotation {
     }
 }
 
-pub struct DiagCtx<'a> {
-    pub tcx: &'a TypeContext,
-    pub expr_pool: &'a ExprPool,
-    pub file: &'a SourceFile,
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Level {
+    Error,
+    Warning,
+    Info,
+    Note,
+    Help,
 }
 
-pub(crate) trait Snippetize {
-    fn snippetize(&self, ctx: &DiagCtx<'_>) -> Diag;
+impl Level {
+    pub fn color(self) -> Color {
+        match self {
+            Level::Error => Color::Red,
+            Level::Warning => Color::Yellow,
+            Level::Info => Color::BrightBlue,
+            Level::Note => Color::BrightGreen,
+            Level::Help => Color::BrightCyan,
+        }
+    }
+
+    pub fn report_kind(self) -> ReportKind<'static> {
+        let s = match self {
+            Level::Error => "error",
+            Level::Warning => "warning",
+            Level::Info => "info",
+            Level::Note => "note",
+            Level::Help => "help",
+        };
+
+        ReportKind::Custom(s, self.color())
+    }
 }
 
-pub(crate) fn report_err(
-    err: &impl Snippetize,
-    ctx: &DiagCtx<'_>,
-) -> Result<String, Box<dyn Error>> {
-    report_diag(err.snippetize(ctx), ctx.file)
+pub(crate) struct WrappedSpan<'a> {
+    file: &'a SourceFile,
+    span: Span,
 }
 
-pub(crate) fn report_diag(diag: Diag, file: &SourceFile) -> Result<String, Box<dyn Error>> {
-    let Diag {
-        title,
-        level,
-        annotations,
-    } = diag;
-    let path = file.path.to_string_lossy();
+impl<'a> WrappedSpan<'a> {
+    pub(crate) const fn new(file: &'a SourceFile, span: Span) -> Self {
+        WrappedSpan { file, span }
+    }
+}
 
-    let range = annotations
-        .first()
-        .map(|it| it.range.clone())
-        .unwrap_or_default();
+impl ariadne::Span for WrappedSpan<'_> {
+    type SourceId = Path;
 
-    let report = Report::build(level.report_kind(), (&path, range))
-        .with_message(&title)
-        .with_labels(annotations.iter().map(|it| {
-            let mut label = Label::new((&path, it.range.clone())).with_color(it.level.color());
-            if let Some(s) = &it.label {
-                label = label.with_message(s);
-            }
-            label
-        }));
+    fn source(&self) -> &Self::SourceId {
+        &self.file.path
+    }
 
-    let mut buf = BufWriter::new(Vec::new());
-    report
-        .finish()
-        .write((&path, Source::from(&file.src)), &mut buf)?;
+    fn start(&self) -> usize {
+        self.span.to_range(self.file).start
+    }
 
-    let bytes = buf.into_inner()?;
-    Ok(String::from_utf8(bytes)?)
+    fn end(&self) -> usize {
+        self.span.to_range(self.file).end
+    }
+}
+
+pub(crate) struct SourceCache<'a> {
+    file: &'a SourceFile,
+    source: Source<Rc<str>>,
+}
+
+impl<'a> SourceCache<'a> {
+    pub(crate) fn new(file: &'a SourceFile) -> Self {
+        SourceCache {
+            file,
+            source: Source::from(file.src.clone()),
+        }
+    }
+}
+
+impl ariadne::Cache<Path> for SourceCache<'_> {
+    type Storage = Rc<str>;
+
+    fn fetch(&mut self, id: &Path) -> Result<&Source<Self::Storage>, Box<dyn fmt::Debug + '_>> {
+        assert_eq!(id, self.file.path.as_ref()); // idk if this even means anything?
+        Ok(&self.source)
+    }
+
+    fn display<'a>(&self, id: &'a Path) -> Option<Box<dyn fmt::Display + 'a>> {
+        Some(Box::new(id.display()))
+    }
 }

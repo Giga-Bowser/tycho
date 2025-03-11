@@ -38,7 +38,7 @@ impl Snippetize for ParseError {
                 ),
             )
             .add_annotation(
-                Annotation::new_span(Level::Error, *val_name).label("not found in this scope"),
+                Annotation::new(Level::Error, *val_name).label("not found in this scope"),
             ),
             ParseError::UnexpectedToken(unexpected_token) => unexpected_token.snippetize(ctx),
             ParseError::BadExprStmt(suffixed_expr) => {
@@ -47,7 +47,7 @@ impl Snippetize for ParseError {
                     format!("bad expression statement: `{suffixed_expr:?}`"),
                 )
                 .add_annotation(
-                    Annotation::new_span(Level::Error, ctx.expr_pool.wrap(suffixed_expr).span())
+                    Annotation::new(Level::Error, ctx.expr_pool.wrap(suffixed_expr).span())
                         .label("expression statement here".to_owned()),
                 );
 
@@ -55,7 +55,7 @@ impl Snippetize for ParseError {
                     let name_str = name.to_str(ctx.file);
                     if let "local" | "let" = name_str {
                         diag = diag.add_annotation(
-                            Annotation::new_span(Level::Help, *name)
+                            Annotation::new(Level::Help, *name)
                                 .label(format!("tycho does not have `{name_str}` statements.")),
                         );
                     }
@@ -73,7 +73,7 @@ impl Snippetize for UnexpectedToken {
             Level::Error,
             format!("unexpected token: `{}`", self.token.text.to_str(ctx.file)),
         )
-        .add_annotation(Annotation::new_span(Level::Error, self.token.text).label("token here"));
+        .add_annotation(Annotation::new(Level::Error, self.token.text).label("token here"));
 
         if !self.expected_kinds.is_empty() {
             let kinds = self
@@ -84,8 +84,7 @@ impl Snippetize for UnexpectedToken {
                 .join(", ");
 
             diag = diag.add_annotation(
-                Annotation::new_span(Level::Info, self.token.text)
-                    .label(format!("expected: {kinds}")),
+                Annotation::new(Level::Info, self.token.text).label(format!("expected: {kinds}")),
             );
         }
 

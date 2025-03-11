@@ -58,15 +58,15 @@ impl Span {
     }
 
     #[inline]
-    pub fn to_str(self, source: &SourceFile) -> &str {
+    pub const fn to_range(self, source: &SourceFile) -> Range<usize> {
         let start = (self.start - source.start_pos) as usize;
         let end = (self.end - source.start_pos) as usize;
-        unsafe { source.src.get_unchecked(start..end) }
+        start..end
     }
 
     #[inline]
-    pub const fn to_range(self) -> Range<usize> {
-        (self.start as usize)..(self.end as usize)
+    pub fn to_str(self, source: &SourceFile) -> &str {
+        unsafe { source.src.get_unchecked(self.to_range(source)) }
     }
 
     #[inline]

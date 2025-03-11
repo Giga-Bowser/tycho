@@ -9,13 +9,13 @@ use crate::utils::SrcLoc;
 #[derive(Debug, Clone)]
 pub struct SourceFile {
     pub path: Box<Path>,
-    pub src: Box<str>,
+    pub src: Rc<str>,
     pub start_pos: SrcLoc,
 }
 
 impl SourceFile {
     pub fn read(path: &Path, start_pos: SrcLoc) -> io::Result<Self> {
-        let src = fs::read_to_string(path)?.into_boxed_str();
+        let src = fs::read_to_string(path)?.into();
         Ok(Self {
             path: Box::from(path),
             src,
