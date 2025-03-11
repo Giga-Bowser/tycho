@@ -11,6 +11,7 @@ use crate::{
         pool::{ExprPool, ExprRef},
     },
     sourcemap::SourceFile,
+    typecheck::pool::TypePool,
     utils::{spanned::Spanned, Ident, Span, Symbol},
 };
 
@@ -397,7 +398,7 @@ impl TypeChecker<'_> {
         for field in table_node.fields.iter().skip(1) {
             let key = self.check_field_key(field)?;
             if !self.can_equal(result.key_type, key) {
-                result.key_type = self.tcx.pool.any();
+                result.key_type = TypePool::any();
                 break;
             }
         }
@@ -405,7 +406,7 @@ impl TypeChecker<'_> {
         for field in table_node.fields.iter().skip(1) {
             let val = self.check_field_val(field)?;
             if !self.can_equal(result.val_type, val) {
-                result.val_type = self.tcx.pool.any();
+                result.val_type = TypePool::any();
                 break;
             }
         }
@@ -579,7 +580,7 @@ impl TypeChecker<'_> {
             ast::Expr::Name(name) => {
                 if name.to_str(self.file) == "debug_print_ctx" {
                     eprintln!("{:#?}", self.tcx);
-                    return Ok(self.tcx.pool.nil());
+                    return Ok(TypePool::nil());
                 }
 
                 let res = self
@@ -631,7 +632,7 @@ impl TypeChecker<'_> {
                     }
                 }
                 TypeKind::Table(TableType { key_type, val_type }) => {
-                    let string_ty = self.tcx.pool.string();
+                    let string_ty = TypePool::string();
                     if self.can_equal(string_ty, key_type) {
                         base = val_type;
                     } else {
@@ -689,7 +690,7 @@ impl TypeChecker<'_> {
             // TODO: should probably be it's own error
             let expected = TypeKind::Function(Function {
                 params: Vec::new(),
-                returns: self.tcx.pool.nil(),
+                returns: TypePool::nil(),
             })
             .into();
             return Err(MismatchedTypes::err(self.tcx.pool.add(expected), ty));
@@ -714,8 +715,8 @@ impl TypeChecker<'_> {
         // ensure remaining params can be skipped
         // should we allow skipping non-optional nil params?
         for (_, param_ty) in func_ty.params.iter().skip(args.len()) {
-            if !self.can_equal(*param_ty, self.tcx.pool.nil()) {
-                return Err(MismatchedTypes::err(*param_ty, self.tcx.pool.nil()));
+            if !self.can_equal(*param_ty, TypePool::nil()) {
+                return Err(MismatchedTypes::err(*param_ty, TypePool::nil()));
             }
         }
 
@@ -758,7 +759,7 @@ impl TypeChecker<'_> {
                 let rhs_type = self.check_expr(binop.rhs)?;
 
                 if self.comm_eq(lhs_type, rhs_type) {
-                    Ok(self.tcx.pool.boolean())
+                    Ok(TypePool::boolean())
                 } else {
                     Err(MismatchedTypes::err(lhs_type, rhs_type))
                 }
@@ -767,14 +768,14 @@ impl TypeChecker<'_> {
                 let lhs_type = self.check_expr(binop.lhs)?;
                 let rhs_type = self.check_expr(binop.rhs)?;
 
-                if self.can_equal(lhs_type, self.tcx.pool.string()) {
-                    if self.can_equal(rhs_type, self.tcx.pool.string()) {
-                        Ok(self.tcx.pool.string())
+                if self.can_equal(lhs_type, TypePool::string()) {
+                    if self.can_equal(rhs_type, TypePool::string()) {
+                        Ok(TypePool::string())
                     } else {
-                        Err(MismatchedTypes::err(self.tcx.pool.string(), rhs_type))
+                        Err(MismatchedTypes::err(TypePool::string(), rhs_type))
                     }
                 } else {
-                    Err(MismatchedTypes::err(self.tcx.pool.string(), lhs_type))
+                    Err(MismatchedTypes::err(TypePool::string(), lhs_type))
                 }
             }
         }
@@ -783,10 +784,7 @@ impl TypeChecker<'_> {
     fn check_if_stmt(&mut self, if_stmt: &ast::IfStmt) -> TResult<()> {
         let condition_type = self.check_expr(if_stmt.condition)?;
         if !self.can_equal_primitive(condition_type, &TypeKind::Boolean) {
-            return Err(MismatchedTypes::err(
-                self.tcx.pool.boolean(),
-                condition_type,
-            ));
+            return Err(MismatchedTypes::err(TypePool::boolean(), condition_type));
         }
 
         self.with_scope::<TResult<()>>(|this| {
@@ -815,10 +813,7 @@ impl TypeChecker<'_> {
     fn check_while_stmt(&mut self, while_stmt: &ast::WhileStmt) -> TResult<()> {
         let condition_type = self.check_expr(while_stmt.condition)?;
         if !self.can_equal_primitive(condition_type, &TypeKind::Boolean) {
-            return Err(MismatchedTypes::err(
-                self.tcx.pool.boolean(),
-                condition_type,
-            ));
+            return Err(MismatchedTypes::err(TypePool::boolean(), condition_type));
         }
 
         self.with_scope(|this| {
@@ -833,7 +828,7 @@ impl TypeChecker<'_> {
     fn check_range_for(&mut self, range_for: &ast::RangeFor) -> TResult<()> {
         let lhs_type = self.check_expr(range_for.range.lhs)?;
         let rhs_type = self.check_expr(range_for.range.rhs)?;
-        let number_type = self.tcx.pool.number();
+        let number_type = TypePool::number();
 
         if !self.can_equal(lhs_type, number_type) {
             return Err(MismatchedTypes::err(number_type, lhs_type));
@@ -846,7 +841,7 @@ impl TypeChecker<'_> {
         self.with_scope(|this| {
             this.tcx
                 .value_map
-                .insert_value(range_for.var.ident(this.file), this.tcx.pool.number());
+                .insert_value(range_for.var.ident(this.file), TypePool::number());
 
             for stmt in &range_for.body {
                 this.check_stmt(stmt)?;

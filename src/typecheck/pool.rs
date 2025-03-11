@@ -27,23 +27,23 @@ impl TypePool {
         idx
     }
 
-    pub const fn nil(&self) -> TypeRef {
+    pub const fn nil() -> TypeRef {
         TypeRef::from_usize(0)
     }
 
-    pub const fn any(&self) -> TypeRef {
+    pub const fn any() -> TypeRef {
         TypeRef::from_usize(1)
     }
 
-    pub const fn number(&self) -> TypeRef {
+    pub const fn number() -> TypeRef {
         TypeRef::from_usize(2)
     }
 
-    pub const fn string(&self) -> TypeRef {
+    pub const fn string() -> TypeRef {
         TypeRef::from_usize(3)
     }
 
-    pub const fn boolean(&self) -> TypeRef {
+    pub const fn boolean() -> TypeRef {
         TypeRef::from_usize(4)
     }
 

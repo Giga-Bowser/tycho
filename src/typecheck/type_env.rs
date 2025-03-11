@@ -50,13 +50,22 @@ impl TypeEnv {
         }
     }
 
-    pub fn with_core(pool: &TypePool) -> Self {
+    pub fn with_core() -> Self {
         TypeEnv {
             scopes: vec![Scope::from_iter([
-                (Ident::from_str("number"), Resolved::Type(pool.number())),
-                (Ident::from_str("string"), Resolved::Type(pool.string())),
-                (Ident::from_str("boolean"), Resolved::Type(pool.boolean())),
-                (Ident::from_str("any"), Resolved::Type(pool.any())),
+                (
+                    Ident::from_str("number"),
+                    Resolved::Type(TypePool::number()),
+                ),
+                (
+                    Ident::from_str("string"),
+                    Resolved::Type(TypePool::string()),
+                ),
+                (
+                    Ident::from_str("boolean"),
+                    Resolved::Type(TypePool::boolean()),
+                ),
+                (Ident::from_str("any"), Resolved::Type(TypePool::any())),
             ])],
         }
     }

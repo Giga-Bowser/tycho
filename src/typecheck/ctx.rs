@@ -15,7 +15,7 @@ impl Default for TypeContext {
     fn default() -> Self {
         let pool = TypePool::new();
         Self {
-            value_map: TypeEnv::with_core(&pool),
+            value_map: TypeEnv::with_core(),
             pool,
         }
     }
