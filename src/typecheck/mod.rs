@@ -718,27 +718,25 @@ impl TypeChecker<'_> {
     }
 
     fn check_binop(&mut self, binop: &ast::BinOp) -> TResult<TypeRef> {
+        let lhs_type = self.check_expr(binop.lhs)?;
+        let rhs_type = self.check_expr(binop.rhs)?;
         match binop.op {
             ast::OpKind::Add
             | ast::OpKind::Sub
             | ast::OpKind::Mul
             | ast::OpKind::Div
             | ast::OpKind::Mod
-            | ast::OpKind::Pow => {
-                let lhs_type = self.check_expr(binop.lhs)?;
-                let rhs_type = self.check_expr(binop.rhs)?;
+            | ast::OpKind::Pow
+            | ast::OpKind::Or => {
                 if self.comm_eq(lhs_type, rhs_type) {
                     Ok(lhs_type)
                 } else {
                     Err(MismatchedTypes::err(lhs_type, rhs_type))
                 }
             }
-            ast::OpKind::And | ast::OpKind::Or => {
-                let lhs_type = self.check_expr(binop.lhs)?;
-                let rhs_type = self.check_expr(binop.rhs)?;
-
+            ast::OpKind::And => {
                 if self.comm_eq(lhs_type, rhs_type) {
-                    Ok(lhs_type)
+                    Ok(rhs_type)
                 } else {
                     Err(MismatchedTypes::err(lhs_type, rhs_type))
                 }
@@ -749,9 +747,6 @@ impl TypeChecker<'_> {
             | ast::OpKind::Grq
             | ast::OpKind::Les
             | ast::OpKind::Leq => {
-                let lhs_type = self.check_expr(binop.lhs)?;
-                let rhs_type = self.check_expr(binop.rhs)?;
-
                 if self.comm_eq(lhs_type, rhs_type) {
                     Ok(TypePool::boolean())
                 } else {
@@ -759,9 +754,6 @@ impl TypeChecker<'_> {
                 }
             }
             ast::OpKind::Cat => {
-                let lhs_type = self.check_expr(binop.lhs)?;
-                let rhs_type = self.check_expr(binop.rhs)?;
-
                 if self.can_equal(lhs_type, TypePool::string()) {
                     if self.can_equal(rhs_type, TypePool::string()) {
                         Ok(TypePool::string())
