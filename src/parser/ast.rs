@@ -160,6 +160,9 @@ pub struct RangeFor {
 pub struct RangeExpr {
     pub lhs: ExprRef,
     pub rhs: ExprRef,
+
+    // for diagnostics
+    pub op_span: Span,
 }
 
 #[derive(Debug, Clone)]

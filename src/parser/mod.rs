@@ -264,7 +264,7 @@ impl Parser<'_> {
 
                 let lhs = self.parse_range_expr()?;
 
-                self.tokens.expect(DotDot)?;
+                let op_span = self.tokens.expect(DotDot)?.text;
 
                 let rhs = self.parse_range_expr()?;
 
@@ -272,7 +272,7 @@ impl Parser<'_> {
 
                 Ok(Stmt::RangeFor(RangeFor {
                     var: key_name,
-                    range: Box::new(RangeExpr { lhs, rhs }),
+                    range: Box::new(RangeExpr { lhs, rhs, op_span }),
                     body,
                     kw_span,
                 }))
