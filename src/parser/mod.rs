@@ -186,7 +186,7 @@ impl Parser<'_> {
         let kw_span = self.tokens.pop_front().text; // pop 'if'
 
         let condition = self.parse_expr()?;
-        let body = self.parse_block()?;
+        let body = self.parse_block_spanned()?;
 
         if self.tokens[0].kind != Else {
             return Ok(IfStmt {
@@ -210,7 +210,7 @@ impl Parser<'_> {
             });
         }
 
-        let else_body = self.parse_block()?;
+        let else_body = self.parse_block_spanned()?;
         let else_ = Some(Box::new(ElseBranch::Else(else_body)));
 
         Ok(IfStmt {

@@ -124,7 +124,7 @@ pub struct ReturnStmt {
 #[derive(Debug, Clone)]
 pub struct IfStmt {
     pub condition: ExprRef,
-    pub body: Block,
+    pub body: SpannedBlock,
     pub else_: Option<Box<ElseBranch>>,
 
     // for diagnostics
@@ -133,7 +133,7 @@ pub struct IfStmt {
 
 #[derive(Debug, Clone)]
 pub enum ElseBranch {
-    Else(Block),
+    Else(SpannedBlock),
     ElseIf(IfStmt),
 }
 
