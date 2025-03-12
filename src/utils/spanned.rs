@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use crate::utils::Span;
 
 pub(crate) trait Spanned {
@@ -15,6 +17,12 @@ impl<T: Iterator<Item = Span>> Covering for T {}
 impl Spanned for Span {
     fn span(&self) -> Span {
         *self
+    }
+}
+
+impl<T: Spanned, D: Deref<Target = T>> Spanned for D {
+    fn span(&self) -> Span {
+        self.deref().span()
     }
 }
 
