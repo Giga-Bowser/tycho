@@ -208,6 +208,30 @@ pub struct BinOp {
     pub op_start: SrcLoc,
 }
 
+impl BinOp {
+    pub const fn op_span(&self) -> Span {
+        let len = match self.op {
+            OpKind::Add
+            | OpKind::Sub
+            | OpKind::Mul
+            | OpKind::Div
+            | OpKind::Mod
+            | OpKind::Pow
+            | OpKind::Les
+            | OpKind::Gre => 1,
+            OpKind::Cat
+            | OpKind::Neq
+            | OpKind::Equ
+            | OpKind::Grq
+            | OpKind::Leq
+            | OpKind::And
+            | OpKind::Or => 2,
+        };
+
+        Span::offset_len(self.op_start, len)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct UnOp {
     pub op: UnOpKind,
