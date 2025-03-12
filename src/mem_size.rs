@@ -150,9 +150,8 @@ mod parser {
     impl DeepSize for Suffix {
         fn deep_size_of_children(&self) -> usize {
             match self {
-                Suffix::Call(Call { args }) | Suffix::Method(Method { args, .. }) => {
-                    args.deep_size_of_children()
-                }
+                Suffix::Call(Call { args, .. }) => args.deep_size_of_children(),
+                Suffix::Method(Method { args, .. }) => args.deep_size_of_children(),
                 _ => 0,
             }
         }

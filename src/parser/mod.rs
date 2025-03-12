@@ -412,9 +412,8 @@ impl Parser<'_> {
                     suffixes.push(Suffix::Index(self.parse_index()?));
                 }
                 LParen => {
-                    suffixes.push(Suffix::Call(Call {
-                        args: self.parse_func_args()?,
-                    }));
+                    let (args, span) = self.parse_func_args_spanned()?;
+                    suffixes.push(Suffix::Call(Call { args, span }));
                 }
                 _ => {
                     return Ok(SuffixedExpr {
@@ -469,6 +468,26 @@ impl Parser<'_> {
         self.tokens.expect(RParen)?;
 
         Ok(result)
+    }
+
+    fn parse_func_args_spanned(&mut self) -> PResult<(Box<[ExprRef]>, Span)> {
+        let start = self.tokens.pop_front().text.start; // pop '('
+        if self.tokens[0].kind == RParen {
+            let end = self.tokens.pop_front().text.end;
+            return Ok((Box::default(), Span::new(start, end)));
+        }
+
+        let mut result = Vec::new();
+        result.push(self.parse_expr()?);
+
+        while self.tokens[0].kind == Comma {
+            self.tokens.pop_front();
+            result.push(self.parse_expr()?);
+        }
+
+        let end = self.tokens.expect(RParen)?.text.end;
+
+        Ok((result.into_boxed_slice(), Span::new(start, end)))
     }
 
     fn parse_primary_expr(&mut self) -> PResult<ExprRef> {

@@ -1295,7 +1295,7 @@ impl<'a> LJCompiler<'a> {
                 base = self.bcemit_method(base, method_name.to_str(self.file));
                 base = self.compile_args(&base, args);
             }
-            ast::Suffix::Call(ast::Call { args }) => {
+            ast::Suffix::Call(ast::Call { args, .. }) => {
                 self.func_state.expr_tonextreg(&mut base);
                 if LJ_FR2 {
                     self.func_state.bcreg_reserve(1);

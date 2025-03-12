@@ -364,7 +364,7 @@ impl<'a> Transpiler<'a> {
                 self.expr_list(args, ", ");
                 self.result.push(')');
             }
-            ast::Suffix::Call(ast::Call { args }) => {
+            ast::Suffix::Call(ast::Call { args, .. }) => {
                 format_to!(self.result, "(");
                 self.expr_list(args, ", ");
                 self.result.push(')');

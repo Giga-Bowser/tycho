@@ -313,7 +313,10 @@ pub struct Access {
 
 #[derive(Debug, Clone)]
 pub struct Call {
-    pub args: Vec<ExprRef>,
+    pub args: Box<[ExprRef]>,
+
+    // for diagnostics
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]

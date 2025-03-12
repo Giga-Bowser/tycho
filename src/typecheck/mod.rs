@@ -628,7 +628,7 @@ impl TypeChecker<'_> {
                     }));
                 }
             },
-            ast::Suffix::Call(ast::Call { args }) => {
+            ast::Suffix::Call(ast::Call { args, .. }) => {
                 base = self.check_call(base, args, None)?;
             }
             ast::Suffix::Method(ast::Method { method_name, args }) => {
