@@ -451,10 +451,7 @@ impl TypeChecker<'_> {
                 kind: TypeKind::Number,
                 span: Some(*s),
             })),
-            ast::SimpleExpr::Str(s) => Ok(self.tcx.pool.add(Type {
-                kind: TypeKind::String,
-                span: Some(*s),
-            })),
+            ast::SimpleExpr::Str(_) => Ok(TypePool::string()),
             ast::SimpleExpr::Bool(s) => Ok(self.tcx.pool.add(Type {
                 kind: TypeKind::Boolean,
                 span: Some(*s),
