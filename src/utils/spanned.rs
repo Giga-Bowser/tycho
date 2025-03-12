@@ -12,6 +12,12 @@ pub(crate) trait Covering: Iterator<Item = Span> + Sized {
 
 impl<T: Iterator<Item = Span>> Covering for T {}
 
+impl Spanned for Span {
+    fn span(&self) -> Span {
+        *self
+    }
+}
+
 mod ast {
     use super::*;
     use crate::{
