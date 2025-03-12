@@ -5,8 +5,8 @@ pub mod pool;
 use crate::{
     error::DiagCtx,
     lexer::{
-        SpanTokens,
         TokenKind::{self, *},
+        Tokens,
     },
     sourcemap::SourceFile,
     typecheck::ctx::TypeContext,
@@ -23,16 +23,12 @@ type PResult<T> = Result<T, Box<ParseError>>;
 
 pub struct Parser<'a> {
     pub file: &'a SourceFile,
-    pub tokens: SpanTokens,
+    pub tokens: Tokens,
     pub expr_pool: &'a mut ExprPool,
 }
 
 impl<'a> Parser<'a> {
-    pub const fn new(
-        file: &'a SourceFile,
-        tokens: SpanTokens,
-        expr_pool: &'a mut ExprPool,
-    ) -> Self {
+    pub const fn new(file: &'a SourceFile, tokens: Tokens, expr_pool: &'a mut ExprPool) -> Self {
         Parser {
             file,
             tokens,
@@ -66,7 +62,7 @@ impl Parser<'_> {
             While => Ok(Stmt::WhileStmt(self.while_stmt()?)),
             For => self.for_stmt(),
             Return => {
-                let kw_span = self.tokens.pop_front().text;
+                let kw_span = self.tokens.pop_front().span;
                 let vals = match self.tokens[0].kind {
                     RCurly | EndOfFile => Vec::new(),
                     _ => self.parse_expr_list()?,
@@ -74,7 +70,7 @@ impl Parser<'_> {
                 Ok(Stmt::Return(ReturnStmt { vals, kw_span }))
             }
             Break => {
-                let span = self.tokens.pop_front().text;
+                let span = self.tokens.pop_front().span;
                 Ok(Stmt::Break(span))
             }
             Struct => Ok(Stmt::StructDecl(self.parse_struct_decl()?)),
@@ -85,14 +81,14 @@ impl Parser<'_> {
 
     fn parse_block(&mut self) -> PResult<Block> {
         // technically unnecessary sometimes. idk, probably no biggie
-        let start = self.tokens.expect(LCurly)?.text.start;
+        let start = self.tokens.expect(LCurly)?.span.start;
 
         let mut stmts = Vec::new();
         while self.tokens[0].kind != RCurly {
             stmts.push(self.parse_stmt()?);
         }
 
-        let end = self.tokens.pop_front().text.end;
+        let end = self.tokens.pop_front().span.end;
 
         if stmts.is_empty() {
             Ok(Block::None(Span::new(start, end)))
@@ -103,14 +99,14 @@ impl Parser<'_> {
 
     fn parse_block_spanned(&mut self) -> PResult<SpannedBlock> {
         // technically unnecessary sometimes. idk, probably no biggie
-        let start = self.tokens.expect(LCurly)?.text.start;
+        let start = self.tokens.expect(LCurly)?.span.start;
 
         let mut stmts = Vec::new();
         while self.tokens[0].kind != RCurly {
             stmts.push(self.parse_stmt()?);
         }
 
-        let end = self.tokens.pop_front().text.end;
+        let end = self.tokens.pop_front().span.end;
 
         Ok(SpannedBlock {
             stmts: stmts.into_boxed_slice(),
@@ -119,11 +115,11 @@ impl Parser<'_> {
     }
 
     fn parse_method_decl(&mut self) -> PResult<MethodDecl> {
-        let struct_name = self.tokens[0].text;
+        let struct_name = self.tokens[0].span;
 
         self.tokens.pop_front(); // name
         self.tokens.pop_front(); // colon
-        let method_name = self.tokens[0].text;
+        let method_name = self.tokens[0].span;
 
         self.tokens.pop_front(); // method name
         self.tokens.pop_front(); // colon
@@ -183,7 +179,7 @@ impl Parser<'_> {
     }
 
     fn if_stmt(&mut self) -> PResult<IfStmt> {
-        let kw_span = self.tokens.pop_front().text; // pop 'if'
+        let kw_span = self.tokens.pop_front().span; // pop 'if'
 
         let condition = self.parse_expr()?;
         let body = self.parse_block_spanned()?;
@@ -222,7 +218,7 @@ impl Parser<'_> {
     }
 
     fn while_stmt(&mut self) -> PResult<WhileStmt> {
-        let kw_span = self.tokens.pop_front().text; // pop 'while'
+        let kw_span = self.tokens.pop_front().span; // pop 'while'
 
         let condition = self.parse_expr()?;
         let body = self.parse_block()?;
@@ -235,7 +231,7 @@ impl Parser<'_> {
     }
 
     fn for_stmt(&mut self) -> PResult<Stmt> {
-        let kw_span = self.tokens.pop_front().text; // pop 'for'
+        let kw_span = self.tokens.pop_front().span; // pop 'for'
 
         let key_name = self.tokens.pop_name()?;
 
@@ -264,7 +260,7 @@ impl Parser<'_> {
 
                 let lhs = self.parse_range_expr()?;
 
-                let op_span = self.tokens.expect(DotDot)?.text;
+                let op_span = self.tokens.expect(DotDot)?.span;
 
                 let rhs = self.parse_range_expr()?;
 
@@ -387,7 +383,7 @@ impl Parser<'_> {
 
                     if self.tokens[1].kind == Name && self.tokens[2].kind == LParen {
                         self.tokens.pop_front(); // ':'
-                        let name = self.tokens[0].text;
+                        let name = self.tokens[0].span;
                         self.tokens.pop_front(); // name
 
                         if self.tokens[0].kind != LParen {
@@ -426,11 +422,11 @@ impl Parser<'_> {
     }
 
     fn parse_index(&mut self) -> PResult<Index> {
-        let start = self.tokens.pop_front().text.start;
+        let start = self.tokens.pop_front().span.start;
 
         let key = self.parse_expr()?;
 
-        let end = self.tokens.expect(RSquare)?.text.end;
+        let end = self.tokens.expect(RSquare)?.span.end;
 
         Ok(Index {
             key,
@@ -471,9 +467,9 @@ impl Parser<'_> {
     }
 
     fn parse_func_args_spanned(&mut self) -> PResult<(Box<[ExprRef]>, Span)> {
-        let start = self.tokens.pop_front().text.start; // pop '('
+        let start = self.tokens.pop_front().span.start; // pop '('
         if self.tokens[0].kind == RParen {
-            let end = self.tokens.pop_front().text.end;
+            let end = self.tokens.pop_front().span.end;
             return Ok((Box::default(), Span::new(start, end)));
         }
 
@@ -485,7 +481,7 @@ impl Parser<'_> {
             result.push(self.parse_expr()?);
         }
 
-        let end = self.tokens.expect(RParen)?.text.end;
+        let end = self.tokens.expect(RParen)?.span.end;
 
         Ok((result.into_boxed_slice(), Span::new(start, end)))
     }
@@ -493,14 +489,14 @@ impl Parser<'_> {
     fn parse_primary_expr(&mut self) -> PResult<ExprRef> {
         match self.tokens[0].kind {
             Name | Elipsis => {
-                let name = self.tokens[0].text;
+                let name = self.tokens[0].span;
                 self.tokens.pop_front();
                 Ok(self.expr_pool.add(Expr::Name(name)))
             }
             LParen => {
-                let start = self.tokens.pop_front().text.start;
+                let start = self.tokens.pop_front().span.start;
                 let val = self.parse_expr()?;
-                let end = self.tokens.expect(RParen)?.text.end;
+                let end = self.tokens.expect(RParen)?.span.end;
 
                 Ok(self.expr_pool.add(Expr::Paren(ParenExpr {
                     val,
@@ -520,7 +516,7 @@ impl Parser<'_> {
 
     fn expr_impl(&mut self, limit: u8) -> PResult<ExprRef> {
         let mut result = if let Some(op) = get_unop(self.tokens[0].kind) {
-            let op_span = self.tokens.pop_front().text;
+            let op_span = self.tokens.pop_front().span;
             let val = self.expr_impl(12)?;
 
             self.expr_pool.add(Expr::UnOp(UnOp { op, val, op_span }))
@@ -535,7 +531,7 @@ impl Parser<'_> {
                 break;
             }
 
-            let op_start = self.tokens.pop_front().text.start;
+            let op_start = self.tokens.pop_front().span.start;
 
             let rhs = self.expr_impl(prec.right)?;
 
@@ -551,7 +547,7 @@ impl Parser<'_> {
     }
 
     fn simple_expr(&mut self) -> PResult<SimpleExpr> {
-        let str = self.tokens[0].text;
+        let str = self.tokens[0].span;
         match self.tokens[0].kind {
             NumLit => {
                 self.tokens.pop_front();
@@ -590,7 +586,7 @@ impl Parser<'_> {
             Name => {
                 if self.tokens[1].kind == Equal {
                     // key = val
-                    let key = self.tokens[0].text;
+                    let key = self.tokens[0].span;
                     self.tokens.pop_front(); // pop name;
                     self.tokens.pop_front(); // pop '=' now
                     Ok(FieldNode::Field {
@@ -611,10 +607,10 @@ impl Parser<'_> {
     }
 
     fn table_constructor(&mut self) -> PResult<TableNode> {
-        let start = self.tokens.pop_front().text.start;
+        let start = self.tokens.pop_front().span.start;
 
         if self.tokens[0].kind == RCurly {
-            let end = self.tokens.pop_front().text.end;
+            let end = self.tokens.pop_front().span.end;
             return Ok(TableNode {
                 fields: Box::default(),
                 span: Span::new(start, end),
@@ -633,7 +629,7 @@ impl Parser<'_> {
             }
         }
 
-        let end = self.tokens.expect(RCurly)?.text.end;
+        let end = self.tokens.expect(RCurly)?.span.end;
 
         Ok(TableNode {
             fields: fields.into_boxed_slice(),
@@ -652,17 +648,17 @@ impl Parser<'_> {
     }
 
     fn parse_struct_constructor(&mut self) -> PResult<FuncNode> {
-        let start = self.tokens.pop_front().text.start;
+        let start = self.tokens.pop_front().span.start;
         self.tokens.expect(LParen)?;
 
         let mut params = Vec::new();
 
         let end = if self.tokens[0].kind == RParen {
-            self.tokens.pop_front().text.end
+            self.tokens.pop_front().span.end
         } else {
             loop {
                 if self.tokens[0].kind == Name && self.tokens[1].kind == Colon {
-                    let argname = self.tokens[0].text;
+                    let argname = self.tokens[0].span;
                     self.tokens.pop_front();
                     self.tokens.pop_front();
 
@@ -671,7 +667,7 @@ impl Parser<'_> {
                         ty: self.parse_type()?,
                     });
                 } else {
-                    let offset = self.tokens[0].text.start;
+                    let offset = self.tokens[0].span.start;
                     params.push(Param {
                         name: Span::empty(offset),
                         ty: self.parse_type()?,
@@ -679,7 +675,7 @@ impl Parser<'_> {
                 }
 
                 if self.tokens[0].kind == RParen {
-                    break self.tokens.pop_front().text.end;
+                    break self.tokens.pop_front().span.end;
                 }
 
                 self.tokens.expect(Comma)?;
@@ -699,7 +695,7 @@ impl Parser<'_> {
     }
 
     fn parse_struct_decl(&mut self) -> PResult<StructDecl> {
-        let _start = self.tokens.pop_front().text.start; // pop 'struct'
+        let _start = self.tokens.pop_front().span.start; // pop 'struct'
 
         let name = self.tokens.pop_name()?;
 
@@ -708,7 +704,7 @@ impl Parser<'_> {
         let mut members = Vec::new();
 
         if self.tokens[0].kind == RCurly {
-            let end_loc = self.tokens.pop_front().text.end;
+            let end_loc = self.tokens.pop_front().span.end;
             return Ok(StructDecl {
                 name,
                 members,
@@ -730,7 +726,7 @@ impl Parser<'_> {
 
         match self.tokens[0].kind {
             RCurly => {
-                let end_loc = self.tokens.pop_front().text.end;
+                let end_loc = self.tokens.pop_front().span.end;
                 Ok(StructDecl {
                     name,
                     members,
@@ -740,7 +736,7 @@ impl Parser<'_> {
             }
             Constructor => {
                 let constructor = Some(Box::new(self.parse_struct_constructor()?));
-                let end_loc = self.tokens.expect(RCurly)?.text.end;
+                let end_loc = self.tokens.expect(RCurly)?.span.end;
                 Ok(StructDecl {
                     name,
                     members,
@@ -756,27 +752,27 @@ impl Parser<'_> {
     }
 
     fn parse_func_header(&mut self) -> PResult<FunctionType> {
-        let start = self.tokens.pop_front().text.start; // pop 'func'
+        let start = self.tokens.pop_front().span.start; // pop 'func'
         self.tokens.expect(LParen)?;
 
         let mut params = Vec::new();
 
         let end = if self.tokens[0].kind == RParen {
-            self.tokens.pop_front().text.end
+            self.tokens.pop_front().span.end
         } else {
             loop {
                 if self.tokens[0].kind == Elipsis {
-                    let span = self.tokens.pop_front().text;
+                    let span = self.tokens.pop_front().span;
                     params.push(Param {
                         name: Span::empty(span.start),
                         ty: TypeNode::VariadicType(span),
                     });
-                    break self.tokens.expect(RParen)?.text.end;
+                    break self.tokens.expect(RParen)?.span.end;
                     // TODO: diagnostic here for params after variadic
                 }
 
                 if self.tokens[0].kind == Name && self.tokens[1].kind == Colon {
-                    let name = self.tokens[0].text;
+                    let name = self.tokens[0].span;
                     self.tokens.pop_front();
                     self.tokens.pop_front();
 
@@ -785,7 +781,7 @@ impl Parser<'_> {
                         ty: self.parse_type()?,
                     });
                 } else {
-                    let offset = self.tokens[0].text.start;
+                    let offset = self.tokens[0].span.start;
                     params.push(Param {
                         name: Span::empty(offset),
                         ty: self.parse_type()?,
@@ -793,7 +789,7 @@ impl Parser<'_> {
                 }
 
                 if self.tokens[0].kind == RParen {
-                    break self.tokens.pop_front().text.end;
+                    break self.tokens.pop_front().span.end;
                 }
 
                 self.tokens.expect(Comma)?;
@@ -823,7 +819,7 @@ impl Parser<'_> {
         }
 
         self.tokens.pop_front(); // pop '->'
-        let ty_start = self.tokens[0].text.start;
+        let ty_start = self.tokens[0].span.start;
         let ty = match self.tokens[0].kind {
             LParen => {
                 self.tokens.pop_front();
@@ -835,7 +831,7 @@ impl Parser<'_> {
                     types.push(self.parse_type()?);
                 }
 
-                let ty_end = self.tokens.expect(RParen)?.text.end;
+                let ty_end = self.tokens.expect(RParen)?.span.end;
 
                 ReturnType::Multiple(MultipleType {
                     types,
@@ -845,7 +841,7 @@ impl Parser<'_> {
             Elipsis => {
                 // NOTE: should this be it's own variant on ReturnType?
 
-                let span = self.tokens.pop_front().text;
+                let span = self.tokens.pop_front().span;
                 ReturnType::Single(TypeNode::VariadicType(span))
             }
             _ => ReturnType::Single(self.parse_type()?),
@@ -857,11 +853,11 @@ impl Parser<'_> {
     fn parse_basic_type(&mut self) -> PResult<TypeNode> {
         match self.tokens[0].kind {
             Name | Nil => {
-                let name = self.tokens.pop_front().text;
+                let name = self.tokens.pop_front().span;
                 Ok(TypeNode::Name(name))
             }
             LSquare => {
-                let start = self.tokens.pop_front().text.start;
+                let start = self.tokens.pop_front().span.start;
 
                 if self.tokens[0].kind == RSquare {
                     self.tokens.pop_front();
@@ -875,7 +871,7 @@ impl Parser<'_> {
 
                 let key_type = self.parse_type()?;
 
-                let end = self.tokens.expect(RSquare)?.text.end;
+                let end = self.tokens.expect(RSquare)?.span.end;
 
                 let val_type = self.parse_type()?;
 
@@ -900,7 +896,7 @@ impl Parser<'_> {
         let mut result = self.parse_basic_type()?;
 
         if self.tokens[0].kind == Question {
-            let question = self.tokens.pop_front().text;
+            let question = self.tokens.pop_front().span;
 
             // let span = match result.span {
             //     Some(span) => Span::cover(span, question),
@@ -923,7 +919,7 @@ impl Parser<'_> {
 
     fn range_expr_impl(&mut self, limit: u8) -> PResult<ExprRef> {
         let mut result = if let Some(op) = get_unop(self.tokens[0].kind) {
-            let op_span = self.tokens.pop_front().text;
+            let op_span = self.tokens.pop_front().span;
             let val = self.range_expr_impl(12)?;
 
             self.expr_pool.add(Expr::UnOp(UnOp { op, val, op_span }))
@@ -942,7 +938,7 @@ impl Parser<'_> {
                 break;
             }
 
-            let op_start = self.tokens.pop_front().text.start;
+            let op_start = self.tokens.pop_front().span.start;
 
             let rhs = self.range_expr_impl(prec.right)?;
 

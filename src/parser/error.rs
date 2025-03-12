@@ -1,6 +1,6 @@
 use crate::{
     error::{Annotation, Diag, DiagCtx, Level, Snippetize},
-    lexer::{SpanToken, TokenKind},
+    lexer::{Token, TokenKind},
     parser::ast,
     utils::{spanned::Spanned, Span},
 };
@@ -16,7 +16,7 @@ pub enum ParseError {
 
 #[derive(Debug)]
 pub struct UnexpectedToken {
-    pub token: SpanToken,
+    pub token: Token,
     pub expected_kinds: Vec<TokenKind>,
 }
 
@@ -71,9 +71,9 @@ impl Snippetize for UnexpectedToken {
     fn snippetize(&self, ctx: &DiagCtx<'_>) -> Diag {
         let mut diag = Diag::new(
             Level::Error,
-            format!("unexpected token: `{}`", self.token.text.to_str(ctx.file)),
+            format!("unexpected token: `{}`", self.token.span.to_str(ctx.file)),
         )
-        .add_annotation(Annotation::new(Level::Error, self.token.text).label("token here"));
+        .add_annotation(Annotation::new(Level::Error, self.token.span).label("token here"));
 
         if !self.expected_kinds.is_empty() {
             let kinds = self
@@ -84,7 +84,7 @@ impl Snippetize for UnexpectedToken {
                 .join(", ");
 
             diag = diag.add_annotation(
-                Annotation::new(Level::Info, self.token.text).label(format!("expected: {kinds}")),
+                Annotation::new(Level::Info, self.token.span).label(format!("expected: {kinds}")),
             );
         }
 

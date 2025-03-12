@@ -3,7 +3,7 @@ use std::{error::Error, path::PathBuf, time::Instant};
 use crate::{
     cli::{self},
     error::{report_diag, report_err, Diag, Snippetize},
-    lexer::{Lexer, SpanToken, SpanTokens, TokenKind},
+    lexer::{Lexer, Token, TokenKind, Tokens},
     luajit::{
         bytecode::{dump_bc, Header, Proto},
         compiler::LJCompiler,
@@ -92,7 +92,7 @@ pub fn full_includes(
     Ok(())
 }
 
-pub fn run_lexer(file: &SourceFile) -> SpanTokens {
+pub fn run_lexer(file: &SourceFile) -> Tokens {
     let lex_timer = Instant::now();
 
     let tokens = Lexer::new(file).lex_all();
@@ -101,7 +101,7 @@ pub fn run_lexer(file: &SourceFile) -> SpanTokens {
         eprintln!("lexing done: {}", duration_fmt(lex_timer.elapsed()));
         eprintln!(
             "tokens memory: {}",
-            ByteFmt(tokens.dq.len() * size_of::<SpanToken>())
+            ByteFmt(tokens.dq.len() * size_of::<Token>())
         );
     }
 
@@ -112,7 +112,7 @@ pub fn run_parser(
     file: &SourceFile,
     map: &SourceMap,
     tcx: &TypeContext,
-    tokens: SpanTokens,
+    tokens: Tokens,
 ) -> Result<(ExprPool, Vec<ast::Stmt>), Box<dyn Error>> {
     let parse_timer = Instant::now();
 

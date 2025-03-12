@@ -78,7 +78,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    pub fn lex_all(&mut self) -> SpanTokens {
+    pub fn lex_all(&mut self) -> Tokens {
         let mut dq = VecDeque::new();
 
         loop {
@@ -92,14 +92,14 @@ impl<'a> Lexer<'a> {
             // it later.
 
             let kind = unsafe { ManuallyDrop::take(&mut self.token) };
-            let token = SpanToken::new(kind.unwrap_or(TokenKind::EndOfFile), self.span());
+            let token = Token::new(kind.unwrap_or(TokenKind::EndOfFile), self.span());
             dq.push_back(token);
             if kind.is_none() {
                 break;
             }
         }
 
-        SpanTokens { dq }
+        Tokens { dq }
     }
 
     #[inline]
@@ -162,7 +162,12 @@ impl<'a> Lexer<'a> {
     #[inline]
     fn error(&mut self) {
         self.token_end = self.source_find_boundary(self.token_end);
-        panic!("bad token: {}", self.text());
+        let text = unsafe {
+            self.file
+                .src
+                .get_unchecked(self.token_start..self.token_end)
+        };
+        panic!("bad token: {text}");
     }
 
     #[inline]
@@ -176,15 +181,6 @@ impl<'a> Lexer<'a> {
     }
 
     #[inline]
-    fn text(&self) -> &str {
-        unsafe {
-            self.file
-                .src
-                .get_unchecked(self.token_start..self.token_end)
-        }
-    }
-
-    #[inline]
     fn span(&self) -> Span {
         Span::new(
             self.file.start_pos + self.token_start as SrcLoc,
@@ -194,24 +190,24 @@ impl<'a> Lexer<'a> {
 }
 
 #[derive(Debug, Clone)]
-pub struct SpanToken {
+pub struct Token {
     pub kind: TokenKind,
-    pub text: Span,
+    pub span: Span,
 }
 
-impl SpanToken {
+impl Token {
     pub fn new(kind: TokenKind, span: Span) -> Self {
-        Self { kind, text: span }
+        Self { kind, span }
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct SpanTokens {
-    pub dq: VecDeque<SpanToken>,
+pub struct Tokens {
+    pub dq: VecDeque<Token>,
 }
 
-impl Index<usize> for SpanTokens {
-    type Output = SpanToken;
+impl Index<usize> for Tokens {
+    type Output = Token;
 
     #[inline]
     fn index(&self, index: usize) -> &Self::Output {
@@ -219,9 +215,9 @@ impl Index<usize> for SpanTokens {
     }
 }
 
-impl SpanTokens {
+impl Tokens {
     #[inline]
-    pub fn pop_front(&mut self) -> SpanToken {
+    pub fn pop_front(&mut self) -> Token {
         self.dq.pop_front().unwrap()
     }
 
@@ -233,10 +229,10 @@ impl SpanTokens {
             })));
         }
 
-        Ok(self.pop_front().text)
+        Ok(self.pop_front().span)
     }
 
-    pub fn expect(&mut self, expected_kind: TokenKind) -> Result<SpanToken, Box<ParseError>> {
+    pub fn expect(&mut self, expected_kind: TokenKind) -> Result<Token, Box<ParseError>> {
         if self.dq[0].kind == expected_kind {
             Ok(self.pop_front())
         } else {
