@@ -67,10 +67,11 @@ impl Parser<'_> {
             For => self.for_stmt(),
             Return => {
                 let kw_span = self.tokens.pop_front().text;
-                Ok(Stmt::Return(ReturnStmt {
-                    vals: self.parse_expr_list()?,
-                    kw_span,
-                }))
+                let vals = match self.tokens[0].kind {
+                    RCurly | EndOfFile => Vec::new(),
+                    _ => self.parse_expr_list()?,
+                };
+                Ok(Stmt::Return(ReturnStmt { vals, kw_span }))
             }
             Break => {
                 let span = self.tokens.pop_front().text;
