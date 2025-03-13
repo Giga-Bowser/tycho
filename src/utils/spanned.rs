@@ -201,9 +201,9 @@ mod ast {
     }
 
     // expr nodes
-    impl Spanned for Pooled<'_, ExprRef, ExprPool> {
+    impl Spanned for Pooled<'_, &ast::Expr, ExprPool> {
         fn span(&self) -> Span {
-            match &self.pool[self.val] {
+            match &self.val {
                 ast::Expr::BinOp(bin_op) => {
                     Span::cover(self.wrap(bin_op.lhs).span(), self.wrap(bin_op.rhs).span())
                 }
@@ -212,6 +212,12 @@ mod ast {
                 ast::Expr::Simple(simple_expr) => self.wrap(simple_expr).span(),
                 ast::Expr::Name(span) => *span,
             }
+        }
+    }
+
+    impl Spanned for Pooled<'_, ExprRef, ExprPool> {
+        fn span(&self) -> Span {
+            self.wrap(&self.pool[self.val]).span()
         }
     }
 
