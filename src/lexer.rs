@@ -59,6 +59,130 @@ pub enum TokenKind {
     EndOfFile,
 }
 
+#[macro_export]
+macro_rules! token_pat {
+    (LITERAL) => {
+        TokenKind::NumLit | TokenKind::StrLit | TokenKind::True | TokenKind::False | TokenKind::Nil
+    };
+    (KEYWORD) => {
+        TokenKind::Break
+            | TokenKind::Return
+            | TokenKind::Struct
+            | TokenKind::If
+            | TokenKind::Else
+            | TokenKind::For
+            | TokenKind::While
+            | TokenKind::In
+            | TokenKind::Func
+            | TokenKind::Constructor
+    };
+    (PUNCT) => {
+        TokenKind::Arrow
+            | TokenKind::DotDot
+            | TokenKind::And
+            | TokenKind::Or
+            | TokenKind::Not
+            | TokenKind::Equality
+            | TokenKind::Inequality
+            | TokenKind::GreterEqual
+            | TokenKind::LessEqual
+            | TokenKind::Elipsis
+            | TokenKind::Octothorpe
+            | TokenKind::Percent
+            | TokenKind::BitAnd
+            | TokenKind::LParen
+            | TokenKind::RParen
+            | TokenKind::Asterisk
+            | TokenKind::Plus
+            | TokenKind::Comma
+            | TokenKind::Minus
+            | TokenKind::Dot
+            | TokenKind::Slash
+            | TokenKind::Colon
+            | TokenKind::Less
+            | TokenKind::Equal
+            | TokenKind::Greater
+            | TokenKind::Question
+            | TokenKind::LSquare
+            | TokenKind::RSquare
+            | TokenKind::Caret
+            | TokenKind::LCurly
+            | TokenKind::BitOr
+            | TokenKind::RCurly
+    };
+}
+
+impl TokenKind {
+    pub const fn is_literal(self) -> bool {
+        matches!(self, token_pat!(LITERAL))
+    }
+
+    pub const fn is_keyword(self) -> bool {
+        matches!(self, token_pat!(KEYWORD))
+    }
+
+    pub const fn is_punct(self) -> bool {
+        matches!(self, token_pat!(PUNCT))
+    }
+
+    pub const fn text(self) -> Option<&'static str> {
+        let s = match self {
+            TokenKind::Break => "break",
+            TokenKind::Return => "return",
+            TokenKind::True => "true",
+            TokenKind::False => "false",
+            TokenKind::Struct => "struct",
+            TokenKind::If => "if",
+            TokenKind::Else => "else",
+            TokenKind::For => "for",
+            TokenKind::While => "while",
+            TokenKind::In => "in",
+            TokenKind::Func => "func",
+            TokenKind::Constructor => "constructor",
+            TokenKind::Nil => "nil",
+
+            TokenKind::Arrow => "->",
+            TokenKind::DotDot => "..",
+            TokenKind::And => "&&",
+            TokenKind::Or => "||",
+            TokenKind::Not => "!",
+            TokenKind::Equality => "==",
+            TokenKind::Inequality => "!=",
+            TokenKind::GreterEqual => ">=",
+            TokenKind::LessEqual => "<=",
+            TokenKind::Elipsis => "...",
+            TokenKind::Octothorpe => "#",
+            TokenKind::Percent => "%",
+            TokenKind::BitAnd => "&",
+            TokenKind::LParen => "(",
+            TokenKind::RParen => ")",
+            TokenKind::Asterisk => "*",
+            TokenKind::Plus => "+",
+            TokenKind::Comma => ",",
+            TokenKind::Minus => "-",
+            TokenKind::Dot => ".",
+            TokenKind::Slash => "/",
+            TokenKind::Colon => ":",
+            TokenKind::Less => "<",
+            TokenKind::Equal => "=",
+            TokenKind::Greater => ">",
+            TokenKind::Question => "?",
+            TokenKind::LSquare => "[",
+            TokenKind::RSquare => "]",
+            TokenKind::Caret => "^",
+            TokenKind::LCurly => "{",
+            TokenKind::BitOr => "|",
+            TokenKind::RCurly => "}",
+
+            TokenKind::StrLit | TokenKind::Name | TokenKind::NumLit | TokenKind::EndOfFile => {
+                return None
+            }
+        };
+
+        Some(s)
+    }
+}
+
 #[derive(Clone)]
 pub struct Lexer<'a> {
     file: &'a SourceFile,
