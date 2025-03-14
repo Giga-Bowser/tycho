@@ -739,8 +739,8 @@ impl TypeChecker<'_> {
         let lhs_type = self.check_expr(binop.lhs)?;
         let rhs_type = self.check_expr(binop.rhs)?;
         if let ast::OpKind::Cat = binop.op {
-            return if self.can_equal(lhs_type, TypePool::string()) {
-                if self.can_equal(rhs_type, TypePool::string()) {
+            return if self.can_equal(TypePool::string(), lhs_type) {
+                if self.can_equal(TypePool::string(), rhs_type) {
                     Ok(TypePool::string())
                 } else {
                     Err(MismatchedTypes::full(
@@ -1001,9 +1001,16 @@ impl TypeChecker<'_> {
 }
 
 impl TypeChecker<'_> {
-    fn can_equal(&self, lhs: TypeRef, rhs: TypeRef) -> bool {
-        let lhs = &self.tcx.pool[lhs];
-        let rhs = &self.tcx.pool[rhs];
+    fn can_equal(&self, lhs_ref: TypeRef, rhs_ref: TypeRef) -> bool {
+        let lhs = &self.tcx.pool[lhs_ref];
+        let mut rhs = &self.tcx.pool[rhs_ref];
+        if let TypeKind::Multiple(m) = &rhs.kind {
+            rhs = match m.first() {
+                Some(ty) => &self.tcx.pool[*ty],
+                None => &self.tcx.pool[TypePool::nil()],
+            };
+        }
+
         if let TypeKind::Any | TypeKind::Variadic = lhs.kind {
             return true;
         }
