@@ -128,18 +128,18 @@ impl Snippetize for MismatchedTypes {
         let expected_span = self.expected_span.or(expected.span);
         let recieved_span = self.recieved_span.or(recieved.span);
 
-        if let Some(expected_span) = expected_span {
-            diag.add_annotation(
-                Annotation::new(Level::Info, expected_span).label("expected due to this"),
-            );
-        }
-
         if let Some(recieved_str) = recieved_span {
             diag.add_annotation(Annotation::new(Level::Error, recieved_str).label(format!(
                 "expected `{}`, found `{}`",
                 ctx.tcx.pool.wrap(self.expected),
                 ctx.tcx.pool.wrap(self.recieved)
             )));
+        }
+
+        if let Some(expected_span) = expected_span {
+            diag.add_annotation(
+                Annotation::new(Level::Info, expected_span).label("expected due to this"),
+            );
         }
 
         diag
