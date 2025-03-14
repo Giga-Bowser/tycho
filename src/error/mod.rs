@@ -1,6 +1,6 @@
 use std::{error::Error, fmt, io::BufWriter, path::Path, rc::Rc};
 
-use ariadne::{Color, Label, Report, ReportKind, Source};
+use ariadne::{Color, Label, Report, ReportBuilder, ReportKind, Source};
 use rustc_hash::FxHashMap;
 
 use crate::{
@@ -23,28 +23,28 @@ pub(crate) fn report_diag(diag: Diag, map: &SourceMap) -> Result<String, Box<dyn
         title,
         level,
         annotations,
+        notes,
     } = diag;
 
     let span = annotations.first().map(|it| it.span).unwrap_or_default();
 
-    let report = Report::build(level.report_kind(), WrappedSpan::new(map, span))
-        .with_message(&title)
-        .with_labels(annotations.iter().map(|it| {
-            let mut label = Label::new(WrappedSpan::new(map, it.span)).with_color(it.level.color());
-            if let Some(s) = &it.label {
-                label = label.with_message(s);
-            }
-            label
-        }));
+    let mut builder =
+        Report::build(level.report_kind(), WrappedSpan::new(map, span)).with_message(&title);
+
+    for annotations in &annotations {
+        builder = annotations.apply(builder, map);
+    }
+
+    builder.with_notes(notes);
 
     let mut buf = BufWriter::new(Vec::new());
-    report.finish().write(SourceCache::new(map), &mut buf)?;
+    builder.finish().write(SourceCache::new(map), &mut buf)?;
 
     let bytes = buf.into_inner()?;
     Ok(String::from_utf8(bytes)?)
 }
 
-pub struct DiagCtx<'a> {
+pub(crate) struct DiagCtx<'a> {
     pub tcx: &'a TypeContext,
     pub expr_pool: &'a ExprPool,
     pub file: &'a SourceFile,
@@ -55,45 +55,47 @@ pub(crate) trait Snippetize {
 }
 
 #[derive(Debug)]
-pub struct Diag {
+pub(crate) struct Diag {
     pub level: Level,
     pub title: String,
     pub annotations: Vec<Annotation>,
+    pub notes: Vec<String>,
 }
 
 impl Diag {
-    pub fn new(level: Level, title: impl Into<String>) -> Self {
+    pub(crate) fn new(level: Level, title: impl Into<String>) -> Self {
         Diag {
             level,
             title: title.into(),
             annotations: Vec::new(),
+            notes: Vec::new(),
         }
     }
 
-    #[must_use]
-    pub fn add_annotation(mut self, annotation: Annotation) -> Self {
+    pub(crate) fn add_annotation(&mut self, annotation: Annotation) {
         self.annotations.push(annotation);
-
-        self
     }
 
     #[must_use]
-    pub fn add_annotations(mut self, annotations: impl IntoIterator<Item = Annotation>) -> Self {
-        self.annotations.extend(annotations);
-
+    pub(crate) fn with_annotation(mut self, annotation: Annotation) -> Self {
+        self.add_annotation(annotation);
         self
+    }
+
+    pub(crate) fn add_note(&mut self, note: impl Into<String>) {
+        self.notes.push(note.into());
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct Annotation {
+pub(crate) struct Annotation {
     pub level: Level,
     pub span: Span,
     pub label: Option<String>,
 }
 
 impl Annotation {
-    pub fn new(level: Level, span: Span) -> Self {
+    pub(crate) fn new(level: Level, span: Span) -> Self {
         Annotation {
             level,
             span,
@@ -101,14 +103,29 @@ impl Annotation {
         }
     }
 
-    pub fn label(mut self, label: impl Into<String>) -> Self {
+    pub(crate) fn label(mut self, label: impl Into<String>) -> Self {
         self.label = Some(label.into());
         self
     }
+
+    fn apply<'a>(
+        &self,
+        builder: ReportBuilder<'a, WrappedSpan<'a>>,
+        map: &'a SourceMap,
+    ) -> ReportBuilder<'a, WrappedSpan<'a>> {
+        let mut label = Label::new(WrappedSpan::new(map, self.span)).with_color(self.level.color());
+
+        if let Some(s) = &self.label {
+            label = label.with_message(s);
+        }
+
+        builder.with_label(label)
+    }
 }
 
+#[allow(unused)]
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Level {
+pub(crate) enum Level {
     Error,
     Warning,
     Info,
@@ -117,7 +134,7 @@ pub enum Level {
 }
 
 impl Level {
-    pub fn color(self) -> Color {
+    pub(crate) fn color(self) -> Color {
         match self {
             Level::Error => Color::Red,
             Level::Warning => Color::Yellow,
@@ -127,7 +144,7 @@ impl Level {
         }
     }
 
-    pub fn report_kind(self) -> ReportKind<'static> {
+    pub(crate) fn report_kind(self) -> ReportKind<'static> {
         let s = match self {
             Level::Error => "error",
             Level::Warning => "warning",
@@ -195,4 +212,28 @@ impl ariadne::Cache<Path> for SourceCache {
     fn display<'a>(&self, path: &'a Path) -> Option<Box<dyn fmt::Display + 'a>> {
         Some(Box::new(path.display()))
     }
+}
+
+#[macro_export]
+macro_rules! error_kind {
+    ($(#[$m:meta])* $v:vis enum $name:ident { $($var:ident),* $(,)? }) => {
+        $(#[$m])*
+        $v enum $name {
+            $($var($var),)*
+        }
+
+        impl Snippetize for $name {
+            fn snippetize(&self, ctx: &DiagCtx<'_>) -> Diag {
+                match self {
+                    $(Self::$var(inner) => inner.snippetize(ctx),)*
+                }
+            }
+        }
+
+        $(impl From<$var> for $name {
+            fn from(value: $var) -> Self {
+                Self::$var(value)
+            }
+        })*
+    };
 }

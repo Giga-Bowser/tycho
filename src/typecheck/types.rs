@@ -40,7 +40,6 @@ pub enum TypeKind {
     Nil,
     Any,
     Number,
-    String,
     Boolean,
     Function(Function),
     Table(TableType),
@@ -119,7 +118,6 @@ impl fmt::Debug for PooledType<'_> {
             TypeKind::Nil => f.write_str("nil"),
             TypeKind::Any => f.write_str("any"),
             TypeKind::Number => f.write_str("number"),
-            TypeKind::String => f.write_str("string"),
             TypeKind::Boolean => f.write_str("boolean"),
             TypeKind::Function(function) => {
                 f.write_str("func")?;

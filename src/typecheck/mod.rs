@@ -1,5 +1,6 @@
+mod error;
+
 pub mod ctx;
-pub mod error;
 pub mod func_ctx;
 pub mod pool;
 pub mod type_env;
@@ -12,14 +13,14 @@ use crate::{
         pool::{ExprPool, ExprRef},
     },
     sourcemap::SourceFile,
-    typecheck::{func_ctx::FuncCtxStack, pool::TypePool},
+    typecheck::{error::*, func_ctx::FuncCtxStack, pool::TypePool},
     utils::{spanned::Spanned, Ident, Span, Symbol},
 };
 
 use self::{
     ctx::TypeContext,
     error::{
-        CheckErr, MethodOnWrongType, MismatchedTypes, NoReturn, NoSuchField, NoSuchMethod,
+        CheckErrKind, MethodOnWrongType, MismatchedTypes, NoReturn, NoSuchField, NoSuchMethod,
         NoSuchVal,
     },
     pool::TypeRef,
@@ -47,7 +48,7 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
-    pub fn into_diag_ctx(self) -> DiagCtx<'a> {
+    pub(crate) fn into_diag_ctx(self) -> DiagCtx<'a> {
         DiagCtx {
             tcx: self.tcx,
             expr_pool: self.expr_pool,
@@ -72,7 +73,12 @@ impl TypeChecker<'_> {
                 if self.can_equal(lhs_type, rhs_type) {
                     Ok(())
                 } else {
-                    Err(MismatchedTypes::err(lhs_type, rhs_type))
+                    Err(MismatchedTypes::full(
+                        lhs_type,
+                        self.expr_pool.wrap(lhs.as_ref()),
+                        rhs_type,
+                        self.expr_pool.wrap(*rhs),
+                    ))
                 }
             }
             ast::Stmt::MultiAssign(multi_assign) => self.check_multi_assign(multi_assign),
@@ -88,6 +94,7 @@ impl TypeChecker<'_> {
             ast::Stmt::Return(return_stmt) => self.check_return(return_stmt),
             ast::Stmt::Break(_) => Ok(()), // TODO: actually handle this
         }
+        .map_err(|e| e.while_checking(stmt.clone()))
     }
 
     fn check_decl(&mut self, decl: &ast::Declare) -> TResult<()> {
@@ -99,7 +106,6 @@ impl TypeChecker<'_> {
             (Some(val), None) => self.check_decl_with_val(decl.lhs.name, val),
             (None, None) => unreachable!(),
         }
-        // .map_err(|e| e.while_checking(self.expr_pool.wrap(decl)))
     }
 
     fn check_decl_with_val(&mut self, name: Span, val: ExprRef) -> TResult<()> {
@@ -117,7 +123,12 @@ impl TypeChecker<'_> {
             let val_type = self.check_expr(val)?;
 
             if !self.can_equal(func_ty, val_type) {
-                return Err(MismatchedTypes::err(func_ty, val_type));
+                return Err(MismatchedTypes::full(
+                    func_ty,
+                    &func_node.ty,
+                    val_type,
+                    self.expr_pool.wrap(val),
+                ));
             }
         } else {
             let val_type = self.check_expr(val)?;
@@ -148,7 +159,7 @@ impl TypeChecker<'_> {
             .tcx
             .value_map
             .get_top(&lhs.name.ident(self.file))
-            .ok_or_else(|| Box::new(CheckErr::NoSuchVal(NoSuchVal { val_name: lhs.name })))?
+            .ok_or_else(|| CheckErr::new(NoSuchVal { val_name: lhs.name }))?
             .inner();
 
         for suffix in &mut lhs.suffixes.iter().take(lhs.suffixes.len() - 1) {
@@ -157,9 +168,7 @@ impl TypeChecker<'_> {
                     if let Some(field) = self.tcx.pool[ty].kind.get_field(name.symbol(self.file)) {
                         ty = field;
                     } else {
-                        return Err(Box::new(CheckErr::NoSuchField(NoSuchField {
-                            field_name: *name,
-                        })));
+                        return Err(CheckErr::new(NoSuchField { field_name: *name }));
                     }
                 }
                 _ => unreachable!(),
@@ -175,10 +184,7 @@ impl TypeChecker<'_> {
                     strukt.fields.push((field_name.symbol(self.file), decl_ty));
                     Ok(())
                 }
-                _ => Err(Box::new(CheckErr::BadAccess {
-                    span: *field_name,
-                    ty,
-                })),
+                _ => Err(BadAccess::err(*field_name, ty)),
             }
         } else {
             unreachable!()
@@ -193,6 +199,7 @@ impl TypeChecker<'_> {
     ) -> TResult<()> {
         let decl_ty = self.resolve_type_node(type_node)?;
 
+        // We need to check for this so we can insert the function type early in case of recursive functions
         if let ast::Expr::Simple(ast::SimpleExpr::FuncNode(func_node)) = &self.expr_pool[val] {
             let func_ty = self.resolve_function_type(&func_node.ty, None)?;
             let func_ty = self.tcx.pool.add(Type {
@@ -201,7 +208,12 @@ impl TypeChecker<'_> {
             });
 
             if !self.can_equal(decl_ty, func_ty) {
-                return Err(MismatchedTypes::err(decl_ty, func_ty));
+                return Err(MismatchedTypes::full(
+                    decl_ty,
+                    type_node,
+                    func_ty,
+                    self.expr_pool.wrap(func_node.as_ref()),
+                ));
             }
 
             self.tcx
@@ -211,13 +223,23 @@ impl TypeChecker<'_> {
             let val_type = self.check_expr(val)?;
 
             if !self.can_equal(func_ty, val_type) {
-                return Err(MismatchedTypes::err(func_ty, val_type));
+                return Err(MismatchedTypes::full(
+                    func_ty,
+                    self.expr_pool.wrap(func_node.as_ref()),
+                    val_type,
+                    self.expr_pool.wrap(val),
+                ));
             }
         } else {
             let val_type = self.check_expr(val)?;
 
             if !self.can_equal(decl_ty, val_type) {
-                return Err(MismatchedTypes::err(decl_ty, val_type));
+                return Err(MismatchedTypes::full(
+                    decl_ty,
+                    type_node,
+                    val_type,
+                    self.expr_pool.wrap(val),
+                ));
             }
 
             self.tcx
@@ -227,19 +249,31 @@ impl TypeChecker<'_> {
 
         Ok(())
     }
+    // CheckErr::new(CheckErrKind::BadAccess { span: $s, ty: $t}) ==>> BadAccess::err($s, $t)
 
     fn check_method_decl(&mut self, method_decl: &ast::MethodDecl) -> TResult<()> {
-        let self_ty = self
-            .tcx
-            .value_map
-            .get_type(&method_decl.struct_name.ident(self.file))
-            .unwrap();
+        let struct_ident = method_decl.struct_name.ident(self.file);
+        let Some(self_ty) = self.tcx.value_map.get_type(&struct_ident) else {
+            let kind: CheckErrKind = match self.tcx.value_map.get_value(&struct_ident) {
+                Some(ty) => MethodOnVal {
+                    span: Span::cover(method_decl.struct_name, method_decl.method_name),
+                    ty,
+                }
+                .into(),
+                None => NoSuchType {
+                    ty_name: method_decl.struct_name,
+                }
+                .into(),
+            };
+
+            return Err(CheckErr::new(kind));
+        };
 
         let TypeKind::Struct(_) = self.tcx.pool[self_ty].kind else {
-            return Err(Box::new(CheckErr::MethodOnWrongType(MethodOnWrongType {
+            return Err(CheckErr::new(MethodOnWrongType {
                 span: Span::cover(method_decl.struct_name, method_decl.method_name),
                 ty: self_ty,
-            })));
+            }));
         };
 
         let func: &ast::FuncNode = &method_decl.func;
@@ -282,10 +316,7 @@ impl TypeChecker<'_> {
                     .value_map
                     .insert_value(name.ident(self.file), types[i]);
             } else {
-                let ty = self.tcx.pool.add(Type {
-                    kind: TypeKind::Nil,
-                    span: None,
-                });
+                let ty = TypePool::nil();
                 self.tcx.value_map.insert_value(name.ident(self.file), ty);
             }
         }
@@ -332,14 +363,14 @@ impl TypeChecker<'_> {
             let recieved = if idx < types.len() {
                 types[idx]
             } else {
-                self.tcx.pool.add(Type {
-                    kind: TypeKind::Nil,
-                    span: None,
-                })
+                TypePool::nil()
             };
 
             if !self.can_equal(expected, recieved) {
-                return Err(MismatchedTypes::err(expected, recieved));
+                return Err(CheckErr::new(
+                    MismatchedTypes::new(expected, recieved)
+                        .expected(self.expr_pool.wrap(suffixed_expr)),
+                ));
             }
         }
 
@@ -355,10 +386,7 @@ impl TypeChecker<'_> {
                     if let TypeKind::Number = &self.tcx.pool[res].kind {
                         Ok(res)
                     } else {
-                        Err(Box::new(CheckErr::BadNegate {
-                            op_span: unop.op_span,
-                            ty: res,
-                        }))
+                        Err(BadNegate::err(unop.op_span, res))
                     }
                 }
                 ast::UnOpKind::Len => Ok(self.tcx.pool.add(Type {
@@ -370,10 +398,7 @@ impl TypeChecker<'_> {
                     if let TypeKind::Boolean = self.tcx.pool[res].kind {
                         Ok(res)
                     } else {
-                        Err(Box::new(CheckErr::BadNot {
-                            op_span: unop.op_span,
-                            ty: res,
-                        }))
+                        Err(BadNot::err(unop.op_span, res))
                     }
                 }
             },
@@ -383,7 +408,7 @@ impl TypeChecker<'_> {
                 .tcx
                 .value_map
                 .get_value(&span.ident(self.file))
-                .ok_or_else(|| Box::new(CheckErr::NoSuchVal(NoSuchVal { val_name: *span }))),
+                .ok_or_else(|| CheckErr::new(NoSuchVal { val_name: *span })),
         }
     }
 
@@ -396,10 +421,7 @@ impl TypeChecker<'_> {
 
     fn check_field_key(&mut self, field_node: &ast::FieldNode) -> TResult<TypeRef> {
         match field_node {
-            ast::FieldNode::Field { key, .. } => Ok(self.tcx.pool.add(Type {
-                kind: TypeKind::String,
-                span: Some(*key),
-            })),
+            ast::FieldNode::Field { .. } => Ok(TypePool::string()),
             ast::FieldNode::ExprField { key, .. } => self.check_expr(*key),
             ast::FieldNode::ValField { .. } => Ok(self.tcx.pool.add(Type {
                 kind: TypeKind::Number,
@@ -501,9 +523,9 @@ impl TypeChecker<'_> {
             }
 
             if this.needs_return(func_ty.returns) && !this.func_ctx.has_return() {
-                return Err(Box::new(CheckErr::NoReturn(NoReturn {
+                return Err(CheckErr::new(NoReturn {
                     func_node: func.clone(),
-                })));
+                }));
             }
 
             this.func_ctx.pop();
@@ -529,7 +551,10 @@ impl TypeChecker<'_> {
             self.func_ctx.set_return(true);
             Ok(())
         } else {
-            Err(MismatchedTypes::err(self.func_ctx.ret_ty(), ret_type))
+            Err(CheckErr::new(
+                MismatchedTypes::new(self.func_ctx.ret_ty(), ret_type)
+                    .recieved(self.expr_pool.wrap(return_stmt)),
+            ))
         }
     }
 
@@ -539,9 +564,9 @@ impl TypeChecker<'_> {
             .value_map
             .get_value(&suffixed_name.name.ident(self.file))
             .ok_or_else(|| {
-                Box::new(CheckErr::NoSuchVal(NoSuchVal {
+                CheckErr::new(NoSuchVal {
                     val_name: suffixed_name.name,
-                }))
+                })
             })?;
 
         for suffix in &suffixed_name.suffixes {
@@ -555,7 +580,7 @@ impl TypeChecker<'_> {
         let mut ty = match &self.expr_pool[suffixed_expr.val] {
             ast::Expr::Name(name) => {
                 if name.to_str(self.file) == "debug_print_ctx" {
-                    eprintln!("{:#?}", self.tcx);
+                    eprintln!("{:#}", self.tcx);
                     return Ok(TypePool::nil());
                 }
 
@@ -563,13 +588,13 @@ impl TypeChecker<'_> {
                     .tcx
                     .value_map
                     .get(&name.ident(self.file))
-                    .ok_or_else(|| Box::new(CheckErr::NoSuchVal(NoSuchVal { val_name: *name })))?;
+                    .ok_or_else(|| CheckErr::new(NoSuchVal { val_name: *name }))?;
 
                 if let Resolved::Type(_) = res {
                     let Some(ast::Suffix::Method(_) | ast::Suffix::Access(_)) =
                         suffixed_expr.suffixes.first()
                     else {
-                        return Err(Box::new(CheckErr::NoSuchVal(NoSuchVal { val_name: *name })));
+                        return Err(CheckErr::new(NoSuchVal { val_name: *name }));
                     };
                 }
 
@@ -589,12 +614,9 @@ impl TypeChecker<'_> {
         match suffix {
             ast::Suffix::Index(ast::Index { key: _, span }) => match &self.tcx.pool[base].kind {
                 TypeKind::Table(TableType { val_type, .. }) => base = *val_type,
-                TypeKind::String | TypeKind::Adaptable | TypeKind::Any => (),
+                TypeKind::Adaptable | TypeKind::Any => (),
                 _ => {
-                    return Err(Box::new(CheckErr::BadIndex {
-                        span: *span,
-                        ty: base,
-                    }));
+                    return Err(BadIndex::err(*span, base));
                 }
             },
             ast::Suffix::Access(ast::Access { field_name }) => match self.tcx.pool[base].kind {
@@ -602,9 +624,9 @@ impl TypeChecker<'_> {
                     if let Some(field) = strukt.get_field(field_name.symbol(self.file)) {
                         base = field;
                     } else {
-                        return Err(Box::new(CheckErr::NoSuchField(NoSuchField {
+                        return Err(CheckErr::new(NoSuchField {
                             field_name: *field_name,
-                        })));
+                        }));
                     }
                 }
                 TypeKind::Table(TableType { key_type, val_type }) => {
@@ -612,24 +634,18 @@ impl TypeChecker<'_> {
                     if self.can_equal(string_ty, key_type) {
                         base = val_type;
                     } else {
-                        return Err(MismatchedTypes::err(
-                            self.tcx.pool.add(Type {
-                                kind: TypeKind::String,
-                                span: Some(*field_name),
-                            }),
-                            key_type,
+                        return Err(CheckErr::new(
+                            MismatchedTypes::new(key_type, TypePool::string())
+                                .recieved(*field_name),
                         ));
                     }
                 }
                 _ => {
-                    return Err(Box::new(CheckErr::BadAccess {
-                        span: *field_name,
-                        ty: base,
-                    }));
+                    return Err(BadAccess::err(*field_name, base));
                 }
             },
-            ast::Suffix::Call(ast::Call { args, .. }) => {
-                base = self.check_call(base, args, None)?;
+            ast::Suffix::Call(ast::Call { args, span }) => {
+                base = self.check_call(base, args, None, *span)?;
             }
             ast::Suffix::Method(ast::Method { method_name, args }) => {
                 let self_ty = base;
@@ -644,13 +660,13 @@ impl TypeChecker<'_> {
                 {
                     Some(method) => base = method,
                     None => {
-                        return Err(Box::new(CheckErr::NoSuchMethod(NoSuchMethod {
+                        return Err(CheckErr::new(NoSuchMethod {
                             method_name: *method_name,
-                        })))
+                        }))
                     }
                 }
 
-                base = self.check_call(base, args, Some(self_ty))?;
+                base = self.check_call(base, args, Some(self_ty), *method_name)?;
             }
         }
 
@@ -662,6 +678,8 @@ impl TypeChecker<'_> {
         ty: TypeRef,
         args: &[ExprRef],
         self_ty: Option<TypeRef>,
+        // for diagnostics
+        call_span: Span,
     ) -> TResult<TypeRef> {
         let mut arg_types;
         if let Some(self_ty) = self_ty {
@@ -676,33 +694,29 @@ impl TypeChecker<'_> {
         }
 
         let TypeKind::Function(func_ty) = &self.tcx.pool[ty].kind else {
-            // TODO: should probably be it's own error
-            let expected = TypeKind::Function(Function {
-                params: Vec::new(),
-                returns: TypePool::nil(),
-            })
-            .into();
-            return Err(MismatchedTypes::err(self.tcx.pool.add(expected), ty));
+            return Err(CallNonFunc::err(ty, call_span));
         };
 
         if arg_types.len() > func_ty.params.len() {
-            let last_param = func_ty.params.last().ok_or_else(|| {
-                Box::new(CheckErr::TooManyArgs {
-                    expected: func_ty.params.len(),
-                    recieved: arg_types.len(),
-                })
-            })?;
+            let Some(last_param) = func_ty.params.last() else {
+                return Err(ArgCount::err(
+                    call_span,
+                    func_ty.params.len(),
+                    arg_types.len(),
+                ));
+            };
             let TypeKind::Variadic = self.tcx.pool[last_param.1].kind else {
-                return Err(Box::new(CheckErr::TooManyArgs {
-                    expected: func_ty.params.len(),
-                    recieved: arg_types.len(),
-                }));
+                return Err(ArgCount::err(
+                    call_span,
+                    func_ty.params.len(),
+                    arg_types.len(),
+                ));
             };
         }
 
         for (arg_ty, (_, param_ty)) in arg_types.iter().zip(&func_ty.params) {
             if !self.can_equal(*param_ty, *arg_ty) {
-                return Err(MismatchedTypes::err(*param_ty, *arg_ty));
+                return Err(CheckErr::new(MismatchedTypes::new(*param_ty, *arg_ty)));
             }
         }
 
@@ -710,7 +724,12 @@ impl TypeChecker<'_> {
         // should we allow skipping non-optional nil params?
         for (_, param_ty) in func_ty.params.iter().skip(arg_types.len()) {
             if !self.can_equal(*param_ty, TypePool::nil()) {
-                return Err(MismatchedTypes::err(*param_ty, TypePool::nil()));
+                // probably not great
+                return Err(ArgCount::err(
+                    call_span,
+                    func_ty.params.len(),
+                    arg_types.len(),
+                ));
             }
         }
 
@@ -720,6 +739,37 @@ impl TypeChecker<'_> {
     fn check_binop(&mut self, binop: &ast::BinOp) -> TResult<TypeRef> {
         let lhs_type = self.check_expr(binop.lhs)?;
         let rhs_type = self.check_expr(binop.rhs)?;
+        if let ast::OpKind::Cat = binop.op {
+            return if self.can_equal(lhs_type, TypePool::string()) {
+                if self.can_equal(rhs_type, TypePool::string()) {
+                    Ok(TypePool::string())
+                } else {
+                    Err(MismatchedTypes::full(
+                        TypePool::string(),
+                        binop.op_span(),
+                        rhs_type,
+                        self.expr_pool.wrap(binop.rhs),
+                    ))
+                }
+            } else {
+                Err(MismatchedTypes::full(
+                    TypePool::string(),
+                    binop.op_span(),
+                    lhs_type,
+                    self.expr_pool.wrap(binop.lhs),
+                ))
+            };
+        }
+
+        if !self.comm_eq(lhs_type, rhs_type) {
+            return Err(MismatchedTypes::full(
+                lhs_type,
+                self.expr_pool.wrap(binop.lhs),
+                rhs_type,
+                self.expr_pool.wrap(binop.rhs),
+            ));
+        }
+
         match binop.op {
             ast::OpKind::Add
             | ast::OpKind::Sub
@@ -727,50 +777,25 @@ impl TypeChecker<'_> {
             | ast::OpKind::Div
             | ast::OpKind::Mod
             | ast::OpKind::Pow
-            | ast::OpKind::Or => {
-                if self.comm_eq(lhs_type, rhs_type) {
-                    Ok(lhs_type)
-                } else {
-                    Err(MismatchedTypes::err(lhs_type, rhs_type))
-                }
-            }
-            ast::OpKind::And => {
-                if self.comm_eq(lhs_type, rhs_type) {
-                    Ok(rhs_type)
-                } else {
-                    Err(MismatchedTypes::err(lhs_type, rhs_type))
-                }
-            }
+            | ast::OpKind::Or => Ok(lhs_type),
+            ast::OpKind::And => Ok(rhs_type),
             ast::OpKind::Equ
             | ast::OpKind::Neq
             | ast::OpKind::Gre
             | ast::OpKind::Grq
             | ast::OpKind::Les
-            | ast::OpKind::Leq => {
-                if self.comm_eq(lhs_type, rhs_type) {
-                    Ok(TypePool::boolean())
-                } else {
-                    Err(MismatchedTypes::err(lhs_type, rhs_type))
-                }
-            }
-            ast::OpKind::Cat => {
-                if self.can_equal(lhs_type, TypePool::string()) {
-                    if self.can_equal(rhs_type, TypePool::string()) {
-                        Ok(TypePool::string())
-                    } else {
-                        Err(MismatchedTypes::err(TypePool::string(), rhs_type))
-                    }
-                } else {
-                    Err(MismatchedTypes::err(TypePool::string(), lhs_type))
-                }
-            }
+            | ast::OpKind::Leq => Ok(TypePool::boolean()),
+            ast::OpKind::Cat => unreachable!(),
         }
     }
 
     fn check_if_stmt(&mut self, if_stmt: &ast::IfStmt) -> TResult<()> {
         let condition_type = self.check_expr(if_stmt.condition)?;
         if !self.can_equal_primitive(condition_type, &TypeKind::Boolean) {
-            return Err(MismatchedTypes::err(TypePool::boolean(), condition_type));
+            return Err(CheckErr::new(
+                MismatchedTypes::new(TypePool::boolean(), condition_type)
+                    .recieved(self.expr_pool.wrap(if_stmt.condition)),
+            ));
         }
 
         self.with_scope::<TResult<()>>(|this| {
@@ -799,7 +824,10 @@ impl TypeChecker<'_> {
     fn check_while_stmt(&mut self, while_stmt: &ast::WhileStmt) -> TResult<()> {
         let condition_type = self.check_expr(while_stmt.condition)?;
         if !self.can_equal_primitive(condition_type, &TypeKind::Boolean) {
-            return Err(MismatchedTypes::err(TypePool::boolean(), condition_type));
+            return Err(CheckErr::new(
+                MismatchedTypes::new(TypePool::boolean(), condition_type)
+                    .recieved(self.expr_pool.wrap(while_stmt.condition)),
+            ));
         }
 
         self.with_scope(|this| {
@@ -817,11 +845,21 @@ impl TypeChecker<'_> {
         let number_type = TypePool::number();
 
         if !self.can_equal(lhs_type, number_type) {
-            return Err(MismatchedTypes::err(number_type, lhs_type));
+            return Err(MismatchedTypes::full(
+                number_type,
+                range_for.range.op_span,
+                lhs_type,
+                self.expr_pool.wrap(range_for.range.lhs),
+            ));
         }
 
         if !self.can_equal(rhs_type, number_type) {
-            return Err(MismatchedTypes::err(number_type, lhs_type));
+            return Err(MismatchedTypes::full(
+                number_type,
+                range_for.range.op_span,
+                rhs_type,
+                self.expr_pool.wrap(range_for.range.rhs),
+            ));
         }
 
         self.with_scope(|this| {
@@ -838,9 +876,9 @@ impl TypeChecker<'_> {
     }
 
     fn check_keyval_for(&mut self, keyval_for: &ast::KeyValFor) -> TResult<()> {
-        let lhs_type = self.check_expr(keyval_for.iter)?;
+        let iter_ty = self.check_expr(keyval_for.iter)?;
 
-        if let TypeKind::Table(TableType { key_type, val_type }) = self.tcx.pool[lhs_type].kind {
+        if let TypeKind::Table(TableType { key_type, val_type }) = self.tcx.pool[iter_ty].kind {
             self.with_scope(|this| {
                 this.tcx
                     .value_map
@@ -856,7 +894,7 @@ impl TypeChecker<'_> {
                 Ok(())
             })
         } else {
-            Err(Box::new(CheckErr::NotIterable))
+            Err(NotIterable::err(iter_ty, keyval_for.iter))
         }
     }
 }
@@ -868,7 +906,7 @@ impl TypeChecker<'_> {
                 .tcx
                 .value_map
                 .get_type(&span.ident(self.file))
-                .ok_or(Box::new(CheckErr::NoSuchVal(NoSuchVal { val_name: *span }))),
+                .ok_or_else(|| CheckErr::new(NoSuchVal { val_name: *span })),
             ast::TypeNode::Nil(span) => Ok(self.tcx.pool.add(Type {
                 kind: TypeKind::Nil,
                 span: Some(*span),
@@ -915,10 +953,7 @@ impl TypeChecker<'_> {
                     span: Some(*span),
                 })
             }
-            None => self.tcx.pool.add(Type {
-                kind: TypeKind::Nil,
-                span: Some(Span::empty(function_type.header_span.end)),
-            }),
+            None => TypePool::nil(),
         };
 
         let mut params = if let Some(self_ty) = self_ty {
@@ -978,8 +1013,11 @@ impl TypeChecker<'_> {
             return true;
         }
 
-        if let TypeKind::Optional(base) = lhs.kind {
-            let base = &self.tcx.pool[base];
+        if let TypeKind::Optional(lhs_base) = lhs.kind {
+            if let TypeKind::Optional(rhs_base) = rhs.kind {
+                return self.can_equal(lhs_base, rhs_base);
+            }
+            let base = &self.tcx.pool[lhs_base];
             return std::mem::discriminant(&rhs.kind) == std::mem::discriminant(&base.kind)
                 || std::mem::discriminant(&rhs.kind) == std::mem::discriminant(&TypeKind::Nil);
         }
@@ -1018,7 +1056,6 @@ impl TypeChecker<'_> {
             TypeKind::Nil
                 | TypeKind::Any
                 | TypeKind::Number
-                | TypeKind::String
                 | TypeKind::Boolean
                 | TypeKind::Adaptable
                 | TypeKind::Variadic

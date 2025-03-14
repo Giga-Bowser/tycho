@@ -197,7 +197,7 @@ pub fn run_compiler(file: &SourceFile, pool: &ExprPool, stmts: &[ast::Stmt]) -> 
     compiler.protos
 }
 
-pub fn add_defines(file: &SourceFile, tcx: &mut TypeContext) -> Result<(), Diag> {
+fn add_defines(file: &SourceFile, tcx: &mut TypeContext) -> Result<(), Diag> {
     let tokens = Lexer::new(file).lex_all();
 
     let mut expr_pool = ExprPool::new();

@@ -1,0 +1,3 @@
+local foo = func(n: number) -> number {
+	return n
+}

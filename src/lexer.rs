@@ -346,24 +346,18 @@ impl Tokens {
     }
 
     pub fn pop_name(&mut self) -> Result<Span, Box<ParseError>> {
-        if self.dq[0].kind != TokenKind::Name {
-            return Err(Box::new(ParseError::UnexpectedToken(UnexpectedToken {
-                token: self.dq[0].clone(),
-                expected_kinds: vec![TokenKind::Name],
-            })));
+        if self.dq[0].kind == TokenKind::Name {
+            Ok(self.pop_front().span)
+        } else {
+            Err(UnexpectedToken::err(self.dq[0].clone(), [TokenKind::Name]))
         }
-
-        Ok(self.pop_front().span)
     }
 
     pub fn expect(&mut self, expected_kind: TokenKind) -> Result<Token, Box<ParseError>> {
         if self.dq[0].kind == expected_kind {
             Ok(self.pop_front())
         } else {
-            Err(Box::new(ParseError::UnexpectedToken(UnexpectedToken {
-                token: self.dq[0].clone(),
-                expected_kinds: vec![expected_kind],
-            })))
+            Err(UnexpectedToken::err(self.dq[0].clone(), [expected_kind]))
         }
     }
 }

@@ -1,0 +1,17 @@
+string.byte: func(s: string, i: number?, j: number?) -> number
+string.char: func(...) -> string
+string.dump: func(func(...) -> ..., strip: boolean?) -> string
+string.find: func(s: string, pattern: string, init: number?, plain: boolean?) -> (number, number)?
+string.format: func(s: string, ...) -> string
+string.gmatch: func(s: string, pattern: string) -> func() -> string
+string.gsub: func(s: string, pattern: string, repl: any, n: number?) -> (string, number)
+string.len: func(s: string)
+string.lower: func(s: string)
+string.match: func(s: string)
+string.pack: func(s: string)
+string.packsize: func(s: string)
+string.rep: func(s: string)
+string.reverse: func(s: string)
+string.sub: func(s: string, i: number, j: number?) -> string
+string.unpack: func(s: string)
+string.upper: func(s: string)

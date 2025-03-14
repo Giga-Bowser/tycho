@@ -1,6 +1,7 @@
 use crate::{
     mem_size::DeepSize,
-    typecheck::types::{PooledType, Type, TypeKind},
+    typecheck::types::{PooledType, Struct, Type, TypeKind},
+    utils::Ident,
 };
 
 #[derive(Debug, Clone)]
@@ -15,7 +16,11 @@ impl TypePool {
                 TypeKind::Nil.into(),
                 TypeKind::Any.into(),
                 TypeKind::Number.into(),
-                TypeKind::String.into(),
+                TypeKind::Struct(Struct {
+                    name: Ident::from_str("string"),
+                    fields: Vec::new(),
+                })
+                .into(),
                 TypeKind::Boolean.into(),
             ],
         }

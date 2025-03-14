@@ -8,6 +8,7 @@ use crate::{
         TokenKind::{self, *},
         Tokens,
     },
+    parser::error::{BadExprStmt, ExprInDeclLHS, ParseError},
     sourcemap::SourceFile,
     typecheck::ctx::TypeContext,
     utils::Span,
@@ -15,7 +16,7 @@ use crate::{
 
 use self::{
     ast::*,
-    error::{ParseError, UnexpectedToken},
+    error::UnexpectedToken,
     pool::{ExprPool, ExprRef},
 };
 
@@ -36,7 +37,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn into_diag_ctx(self, tcx: &'a TypeContext) -> DiagCtx<'a> {
+    pub(crate) fn into_diag_ctx(self, tcx: &'a TypeContext) -> DiagCtx<'a> {
         DiagCtx {
             tcx,
             expr_pool: self.expr_pool,
@@ -273,10 +274,7 @@ impl Parser<'_> {
                     kw_span,
                 }))
             }
-            _ => Err(Box::new(ParseError::UnexpectedToken(UnexpectedToken {
-                token: self.tokens[0].clone(),
-                expected_kinds: vec![Comma, In],
-            }))),
+            _ => Err(UnexpectedToken::err(self.tokens[0].clone(), [Comma, In])),
         }
     }
 
@@ -300,7 +298,7 @@ impl Parser<'_> {
 
             if self.tokens[0].kind != Comma {
                 if sufexpr.suffixes.is_empty() {
-                    return Err(Box::new(ParseError::BadExprStmt(sufexpr.clone())));
+                    return Err(ParseError::new(BadExprStmt { expr_stmt: sufexpr }));
                 }
                 return Ok(Stmt::ExprStmt(sufexpr));
             }
@@ -309,13 +307,11 @@ impl Parser<'_> {
 
             while self.tokens[0].kind == Comma {
                 self.tokens.pop_front();
-                let temp = self.parse_suffixed_expr()?;
-                match self.expr_pool[temp.val] {
-                    Expr::Name(..) => {
-                        lhs_arr.push(temp);
-                    }
-                    _ => return Err(Box::new(ParseError::EmptyError)),
-                }
+                // NOTE: should we be matching lua's behavior here? they only allow expressions
+                //       of these types: VLOCAL, VUPVAL, VGLOBAL, VINDEXED. we could match this
+                //       through some combination of checking the last stuffix and checking the
+                //       primary expr if there are no suffixes.
+                lhs_arr.push(self.parse_suffixed_expr()?);
             }
 
             return match self.tokens[0].kind {
@@ -327,13 +323,15 @@ impl Parser<'_> {
 
                     let mut new_lhs_arr = Vec::new();
 
-                    for SuffixedExpr { val, suffixes } in lhs_arr {
-                        if let Expr::Name(name) = self.expr_pool[val] {
-                            assert!(suffixes.is_empty());
+                    for suffixed_expr in lhs_arr {
+                        if let Expr::Name(name) = self.expr_pool[suffixed_expr.val] {
+                            if !suffixed_expr.suffixes.is_empty() {
+                                return Err(ExprInDeclLHS::err(suffixed_expr));
+                            }
 
                             new_lhs_arr.push(name);
                         } else {
-                            return Err(Box::new(ParseError::EmptyError));
+                            return Err(ExprInDeclLHS::err(suffixed_expr));
                         }
                     }
 
@@ -348,15 +346,12 @@ impl Parser<'_> {
 
                     Ok(Stmt::MultiAssign(MultiAssign { lhs_arr, rhs_arr }))
                 }
-                _ => Err(Box::new(ParseError::UnexpectedToken(UnexpectedToken {
-                    token: self.tokens[0].clone(),
-                    expected_kinds: vec![Colon, Equal],
-                }))),
+                _ => Err(UnexpectedToken::err(self.tokens[0].clone(), [Colon, Equal])),
             };
         }
 
         if sufexpr.suffixes.is_empty() {
-            return Err(Box::new(ParseError::BadExprStmt(sufexpr.clone())));
+            return Err(BadExprStmt::err(sufexpr.clone()));
         }
 
         Ok(Stmt::ExprStmt(sufexpr))
@@ -383,15 +378,7 @@ impl Parser<'_> {
 
                     if self.tokens[1].kind == Name && self.tokens[2].kind == LParen {
                         self.tokens.pop_front(); // ':'
-                        let name = self.tokens[0].span;
-                        self.tokens.pop_front(); // name
-
-                        if self.tokens[0].kind != LParen {
-                            return Err(Box::new(ParseError::UnexpectedToken(UnexpectedToken {
-                                token: self.tokens[0].clone(),
-                                expected_kinds: vec![LParen],
-                            })));
-                        }
+                        let name = self.tokens.pop_front().span;
 
                         suffixes.push(Suffix::Method(Method {
                             method_name: name,
@@ -503,10 +490,10 @@ impl Parser<'_> {
                     span: Span::new(start, end),
                 })))
             }
-            _ => Err(Box::new(ParseError::UnexpectedToken(UnexpectedToken {
-                token: self.tokens[0].clone(),
-                expected_kinds: vec![Name, Elipsis, LParen],
-            }))),
+            _ => Err(UnexpectedToken::err(
+                self.tokens[0].clone(),
+                [Name, Elipsis, LParen],
+            )),
         }
     }
 
@@ -744,10 +731,10 @@ impl Parser<'_> {
                     end_loc,
                 })
             }
-            _ => Err(Box::new(ParseError::UnexpectedToken(UnexpectedToken {
-                token: self.tokens[0].clone(),
-                expected_kinds: vec![RCurly, Constructor],
-            }))),
+            _ => Err(UnexpectedToken::err(
+                self.tokens[0].clone(),
+                [RCurly, Constructor],
+            )),
         }
     }
 
@@ -885,10 +872,10 @@ impl Parser<'_> {
                 let ty = self.parse_func_header()?;
                 Ok(TypeNode::FunctionType(ty))
             }
-            _ => Err(Box::new(ParseError::UnexpectedToken(UnexpectedToken {
-                token: self.tokens[0].clone(),
-                expected_kinds: vec![Name, Nil, LSquare, Func],
-            }))),
+            _ => Err(UnexpectedToken::err(
+                self.tokens[0].clone(),
+                [Name, Nil, LSquare, Func],
+            )),
         }
     }
 

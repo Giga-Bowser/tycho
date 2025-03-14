@@ -21,7 +21,7 @@ impl Default for TypeContext {
     }
 }
 
-impl fmt::Debug for TypeContext {
+impl fmt::Display for TypeContext {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let entries: Vec<_> = self
             .value_map
@@ -29,7 +29,7 @@ impl fmt::Debug for TypeContext {
             .iter()
             .map(|it| {
                 it.iter()
-                    .map(|(k, v)| (k, self.pool.wrap(v.inner())))
+                    .map(|(k, v)| (format!("{:?}", k.symbol), self.pool.wrap(v.inner())))
                     .collect::<FxHashMap<_, _>>()
             })
             .collect();

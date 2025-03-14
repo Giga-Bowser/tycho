@@ -66,6 +66,7 @@ impl TypeEnv {
                     Resolved::Type(TypePool::boolean()),
                 ),
                 (Ident::from_str("any"), Resolved::Type(TypePool::any())),
+                (Ident::from_str("nil"), Resolved::Type(TypePool::nil())),
             ])],
         }
     }
