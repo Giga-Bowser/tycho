@@ -1086,7 +1086,9 @@ impl TypeChecker<'_> {
         let lhs = &self.tcx.pool[lhs].kind;
         let rhs = &self.tcx.pool[rhs].kind;
         match (lhs, rhs) {
-            (TypeKind::Adaptable, _) | (_, TypeKind::Adaptable) => return true,
+            (TypeKind::Adaptable | TypeKind::Any, _) | (_, TypeKind::Adaptable | TypeKind::Any) => {
+                return true
+            }
             _ => (),
         }
 
