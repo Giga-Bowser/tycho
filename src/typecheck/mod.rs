@@ -249,7 +249,6 @@ impl TypeChecker<'_> {
 
         Ok(())
     }
-    // CheckErr::new(CheckErrKind::BadAccess { span: $s, ty: $t}) ==>> BadAccess::err($s, $t)
 
     fn check_method_decl(&mut self, method_decl: &ast::MethodDecl) -> TResult<()> {
         let struct_ident = method_decl.struct_name.ident(self.file);
