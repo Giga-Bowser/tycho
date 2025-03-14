@@ -13,7 +13,7 @@ is_even := func(n: number) -> boolean {
 countSpaces := func(str: string) -> number {
 	count := 0
 	for i in 1..#str {
-		if str[i] == " " {
+		if str:sub(i) == " " {
 			count = count + 1
 		}
 	}
@@ -265,9 +265,9 @@ print("hello, world")
 
 struct T {}
 
-tests : [string]func(t: T) = {}
+tests : [string]func() = {}
 
-test := func(name: string, f: func(t: T)) {
+test := func(name: string, f: func()) {
 	tests[name] = f
 }
 
@@ -276,129 +276,129 @@ red := "\27[31m"
 green := "\27[32m"
 blue := "\27[94m"
 
-T:assertEqual := func(actual: number, expected: number, message: string) {
+T:assertEqual := func(actual: number, expected: number, message: string?) {
 	message = message || ("expected " .. tostring(expected) .. ", but got " .. tostring(actual))
 	assert(math.abs(actual - expected) < 0.00001, message)
 }
 
-test("Vector tests", func(t: T) {
-	t:assertEqual(Vector:new(3, 4):length(), 5, "Vector:length()")
-	t:assertEqual(Vector:new(3, 4):normalized().x, 0.6, "Vector:normalized().x")
-	t:assertEqual(Vector:new(3, 4):normalized().y, 0.8, "Vector:normalized().y")
+test("Vector tests", func() {
+	T:assertEqual(Vector:new(3, 4):length(), 5, "Vector:length()")
+	T:assertEqual(Vector:new(3, 4):normalized().x, 0.6, "Vector:normalized().x")
+	T:assertEqual(Vector:new(3, 4):normalized().y, 0.8, "Vector:normalized().y")
 	actual := Vector:new(1, 2):rotate(math.pi / 2)
-	t:assertEqual(actual.x,-2, "Vector:rotate().x")
-	t:assertEqual(actual.y, 1, "Vector:rotate().y")
+	T:assertEqual(actual.x,-2, "Vector:rotate().x")
+	T:assertEqual(actual.y, 1, "Vector:rotate().y")
 })
 
-test("getTrapezoidSpeed", func(t: T) {
-		t:assertEqual(getTrapezoidSpeed(0.2, 0.8, 0.4, 5, 1, 2, -1), 0.2)
-		t:assertEqual(getTrapezoidSpeed(0.2, 0.8, 0.4, 5, 1, 2, 0), 0.2)
-		t:assertEqual(getTrapezoidSpeed(0.2, 0.8, 0.4, 5, 1, 2, 0.5), 0.5)
-		t:assertEqual(getTrapezoidSpeed(0.2, 0.8, 0.4, 5, 1, 2, 1), 0.8)
-		t:assertEqual(getTrapezoidSpeed(0.2, 0.8, 0.4, 5, 1, 2, 1.5), 0.8)
-		t:assertEqual(getTrapezoidSpeed(0.2, 0.8, 0.4, 5, 1, 2, 2), 0.8)
-		t:assertEqual(getTrapezoidSpeed(0.2, 0.8, 0.4, 5, 1, 2, 3), 0.8)
-		t:assertEqual(getTrapezoidSpeed(0.2, 0.8, 0.4, 5, 1, 2, 4), 0.6)
-		t:assertEqual(getTrapezoidSpeed(0.2, 0.8, 0.4, 5, 1, 2, 5), 0.4)
-		t:assertEqual(getTrapezoidSpeed(0.2, 0.8, 0.4, 5, 1, 2, 6), 0.4)
+test("getTrapezoidSpeed", func() {
+	T:assertEqual(getTrapezoidSpeed(0.2, 0.8, 0.4, 5, 1, 2, -1), 0.2)
+	T:assertEqual(getTrapezoidSpeed(0.2, 0.8, 0.4, 5, 1, 2, 0), 0.2)
+	T:assertEqual(getTrapezoidSpeed(0.2, 0.8, 0.4, 5, 1, 2, 0.5), 0.5)
+	T:assertEqual(getTrapezoidSpeed(0.2, 0.8, 0.4, 5, 1, 2, 1), 0.8)
+	T:assertEqual(getTrapezoidSpeed(0.2, 0.8, 0.4, 5, 1, 2, 1.5), 0.8)
+	T:assertEqual(getTrapezoidSpeed(0.2, 0.8, 0.4, 5, 1, 2, 2), 0.8)
+	T:assertEqual(getTrapezoidSpeed(0.2, 0.8, 0.4, 5, 1, 2, 3), 0.8)
+	T:assertEqual(getTrapezoidSpeed(0.2, 0.8, 0.4, 5, 1, 2, 4), 0.6)
+	T:assertEqual(getTrapezoidSpeed(0.2, 0.8, 0.4, 5, 1, 2, 5), 0.4)
+	T:assertEqual(getTrapezoidSpeed(0.2, 0.8, 0.4, 5, 1, 2, 6), 0.4)
 
-		t:assertEqual(getTrapezoidSpeed(0.2, 0.8, 0.4, 3, 1, 2, -1), 0.2)
-		t:assertEqual(getTrapezoidSpeed(0.2, 0.8, 0.4, 3, 1, 2, 0), 0.2)
-		t:assertEqual(getTrapezoidSpeed(0.2, 0.8, 0.4, 3, 1, 2, 0.5), 0.5)
-		t:assertEqual(getTrapezoidSpeed(0.2, 0.8, 0.4, 3, 1, 2, 1), 0.8)
-		t:assertEqual(getTrapezoidSpeed(0.2, 0.8, 0.4, 3, 1, 2, 2), 0.6)
-		t:assertEqual(getTrapezoidSpeed(0.2, 0.8, 0.4, 3, 1, 2, 3), 0.4)
-		t:assertEqual(getTrapezoidSpeed(0.2, 0.8, 0.4, 3, 1, 2, 4), 0.4)
+	T:assertEqual(getTrapezoidSpeed(0.2, 0.8, 0.4, 3, 1, 2, -1), 0.2)
+	T:assertEqual(getTrapezoidSpeed(0.2, 0.8, 0.4, 3, 1, 2, 0), 0.2)
+	T:assertEqual(getTrapezoidSpeed(0.2, 0.8, 0.4, 3, 1, 2, 0.5), 0.5)
+	T:assertEqual(getTrapezoidSpeed(0.2, 0.8, 0.4, 3, 1, 2, 1), 0.8)
+	T:assertEqual(getTrapezoidSpeed(0.2, 0.8, 0.4, 3, 1, 2, 2), 0.6)
+	T:assertEqual(getTrapezoidSpeed(0.2, 0.8, 0.4, 3, 1, 2, 3), 0.4)
+	T:assertEqual(getTrapezoidSpeed(0.2, 0.8, 0.4, 3, 1, 2, 4), 0.4)
 
-		// ramp up/down distances are greater than the total distance
-		t:assertEqual(getTrapezoidSpeed(0.2, 0.8, 0.4, 3, 2, 2, -1), 0.2)
-		t:assertEqual(getTrapezoidSpeed(0.2, 0.8, 0.4, 3, 2, 2, 0), 0.2)
-		t:assertEqual(getTrapezoidSpeed(0.2, 0.8, 0.4, 3, 2, 2, 1.5), 0.3)
-		t:assertEqual(getTrapezoidSpeed(0.2, 0.8, 0.4, 3, 2, 2, 3), 0.4)
-		t:assertEqual(getTrapezoidSpeed(0.2, 0.8, 0.4, 3, 2, 2, 4), 0.4)
+	// ramp up/down distances are greater than the total distance
+	T:assertEqual(getTrapezoidSpeed(0.2, 0.8, 0.4, 3, 2, 2, -1), 0.2)
+	T:assertEqual(getTrapezoidSpeed(0.2, 0.8, 0.4, 3, 2, 2, 0), 0.2)
+	T:assertEqual(getTrapezoidSpeed(0.2, 0.8, 0.4, 3, 2, 2, 1.5), 0.3)
+	T:assertEqual(getTrapezoidSpeed(0.2, 0.8, 0.4, 3, 2, 2, 3), 0.4)
+	T:assertEqual(getTrapezoidSpeed(0.2, 0.8, 0.4, 3, 2, 2, 4), 0.4)
 })
 
-test("doGrossRampStuff", func(t: T) {
-		// positive speed
-		t:assertEqual(doGrossRampStuff(0.5, 1, 0.2, 0.1), 0.7, "should accelerate by 0.2")
-		t:assertEqual(doGrossRampStuff(0.5, 0.1, 0.2, 0.1), 0.4, "should decelerate by 0.1")
-		t:assertEqual(doGrossRampStuff(0.5, 0, 0.2, 0.1), 0.4, "should decelerate by 0.1")
-		t:assertEqual(doGrossRampStuff(0.5, -1, 0.2, 0.1), 0.4, "should decelerate by 0.1")
-		t:assertEqual(
-			doGrossRampStuff(0.5, 0.5, 0.2, 0.1), 0.5,
-			"speed should not change when current and target are equal"
-		)
+test("doGrossRampStuff", func() {
+	// positive speed
+	T:assertEqual(doGrossRampStuff(0.5, 1, 0.2, 0.1), 0.7, "should accelerate by 0.2")
+	T:assertEqual(doGrossRampStuff(0.5, 0.1, 0.2, 0.1), 0.4, "should decelerate by 0.1")
+	T:assertEqual(doGrossRampStuff(0.5, 0, 0.2, 0.1), 0.4, "should decelerate by 0.1")
+	T:assertEqual(doGrossRampStuff(0.5, -1, 0.2, 0.1), 0.4, "should decelerate by 0.1")
+	T:assertEqual(
+		doGrossRampStuff(0.5, 0.5, 0.2, 0.1), 0.5,
+		"speed should not change when current and target are equal"
+	)
 
-		// negative speed
-		t:assertEqual(doGrossRampStuff(-0.5, 1, 0.2, 0.1), -0.4, "should decelerate by 0.1")
-		t:assertEqual(doGrossRampStuff(-0.5, 0, 0.2, 0.1), -0.4, "should decelerate by 0.1")
-		t:assertEqual(doGrossRampStuff(-0.5, -0.1, 0.2, 0.1), -0.4, "should decelerate by 0.1")
-		t:assertEqual(doGrossRampStuff(-0.5, -1, 0.2, 0.1), -0.7, "should accelerate by 0.2")
-		t:assertEqual(
-			doGrossRampStuff(-0.5, -0.5, 0.2, 0.1), -0.5,
-			"speed should not change when current and target are equal"
-		)
+	// negative speed
+	T:assertEqual(doGrossRampStuff(-0.5, 1, 0.2, 0.1), -0.4, "should decelerate by 0.1")
+	T:assertEqual(doGrossRampStuff(-0.5, 0, 0.2, 0.1), -0.4, "should decelerate by 0.1")
+	T:assertEqual(doGrossRampStuff(-0.5, -0.1, 0.2, 0.1), -0.4, "should decelerate by 0.1")
+	T:assertEqual(doGrossRampStuff(-0.5, -1, 0.2, 0.1), -0.7, "should accelerate by 0.2")
+	T:assertEqual(
+		doGrossRampStuff(-0.5, -0.5, 0.2, 0.1), -0.5,
+		"speed should not change when current and target are equal"
+	)
 
-		// zero
-		t:assertEqual(doGrossRampStuff(0, 0, 0.2, 0.1), 0, "should go nowhere at zero")
-		t:assertEqual(doGrossRampStuff(0, 1, 0.2, 0.1), 0.2, "should accelerate by 0.2 positively")
-		t:assertEqual(doGrossRampStuff(0, -1, 0.2, 0.1), -0.2, "should accelerate by 0.2 negatively")
+	// zero
+	T:assertEqual(doGrossRampStuff(0, 0, 0.2, 0.1), 0, "should go nowhere at zero")
+	T:assertEqual(doGrossRampStuff(0, 1, 0.2, 0.1), 0.2, "should accelerate by 0.2 positively")
+	T:assertEqual(doGrossRampStuff(0, -1, 0.2, 0.1), -0.2, "should accelerate by 0.2 negatively")
 
-		// overshoot
-		t:assertEqual(doGrossRampStuff(0.5, 0.6, 1, 0.1), 0.6, "acceleration overshot when positive")
-		t:assertEqual(doGrossRampStuff(-0.5, -0.6, 1, 0.1), -0.6, "acceleration overshot when negative")
-		t:assertEqual(doGrossRampStuff(0.5, -0.1, 0.1, 1), -0.1, "deceleration overshot when positive")
-		t:assertEqual(doGrossRampStuff(-0.5, 0.1, 0.1, 1), 0.1, "deceleration overshot when negative")
+	// overshoot
+	T:assertEqual(doGrossRampStuff(0.5, 0.6, 1, 0.1), 0.6, "acceleration overshot when positive")
+	T:assertEqual(doGrossRampStuff(-0.5, -0.6, 1, 0.1), -0.6, "acceleration overshot when negative")
+	T:assertEqual(doGrossRampStuff(0.5, -0.1, 0.1, 1), -0.1, "deceleration overshot when positive")
+	T:assertEqual(doGrossRampStuff(-0.5, 0.1, 0.1, 1), 0.1, "deceleration overshot when negative")
 })
 
-test("ramp", func(t: T) {
-		// five ticks to max, ten ticks to stop
-		ramp := Ramp:new(0.1, 0.2)
+test("ramp", func() {
+	// five ticks to max, ten ticks to stop
+	ramp := Ramp:new(0.1, 0.2)
 
-		// accelerate (positively)
-		t:assertEqual(ramp:ramp(0.9), 0.2)
-		t:assertEqual(ramp:ramp(0.9), 0.4)
-		t:assertEqual(ramp:ramp(1.1), 0.6)
-		t:assertEqual(ramp:ramp(1.1), 0.8)
-		t:assertEqual(ramp:ramp(1), 1.0)
-		t:assertEqual(ramp:ramp(1), 1.0)
+	// accelerate (positively)
+	T:assertEqual(ramp:ramp(0.9), 0.2)
+	T:assertEqual(ramp:ramp(0.9), 0.4)
+	T:assertEqual(ramp:ramp(1.1), 0.6)
+	T:assertEqual(ramp:ramp(1.1), 0.8)
+	T:assertEqual(ramp:ramp(1), 1.0)
+	T:assertEqual(ramp:ramp(1), 1.0)
 
-		// decelerate (while positive)
-		t:assertEqual(ramp:ramp(0.1), 0.9)
-		t:assertEqual(ramp:ramp(0.1), 0.8)
-		t:assertEqual(ramp:ramp(0), 0.7)
-		t:assertEqual(ramp:ramp(0), 0.6)
-		t:assertEqual(ramp:ramp(-0.1), 0.5)
-		t:assertEqual(ramp:ramp(-0.1), 0.4)
-		t:assertEqual(ramp:ramp(-1), 0.3)
-		t:assertEqual(ramp:ramp(-1), 0.2)
-		t:assertEqual(ramp:ramp(-1), 0.1)
-		t:assertEqual(ramp:ramp(0), 0.0)
-		t:assertEqual(ramp:ramp(0), 0.0)
+	// decelerate (while positive)
+	T:assertEqual(ramp:ramp(0.1), 0.9)
+	T:assertEqual(ramp:ramp(0.1), 0.8)
+	T:assertEqual(ramp:ramp(0), 0.7)
+	T:assertEqual(ramp:ramp(0), 0.6)
+	T:assertEqual(ramp:ramp(-0.1), 0.5)
+	T:assertEqual(ramp:ramp(-0.1), 0.4)
+	T:assertEqual(ramp:ramp(-1), 0.3)
+	T:assertEqual(ramp:ramp(-1), 0.2)
+	T:assertEqual(ramp:ramp(-1), 0.1)
+	T:assertEqual(ramp:ramp(0), 0.0)
+	T:assertEqual(ramp:ramp(0), 0.0)
 
-		// accelerate (negatively)
-		t:assertEqual(ramp:ramp(-0.9), -0.2)
-		t:assertEqual(ramp:ramp(-0.9), -0.4)
-		t:assertEqual(ramp:ramp(-1.1), -0.6)
-		t:assertEqual(ramp:ramp(-1.1), -0.8)
-		t:assertEqual(ramp:ramp(-1), -1.0)
-		t:assertEqual(ramp:ramp(-1), -1.0)
+	// accelerate (negatively)
+	T:assertEqual(ramp:ramp(-0.9), -0.2)
+	T:assertEqual(ramp:ramp(-0.9), -0.4)
+	T:assertEqual(ramp:ramp(-1.1), -0.6)
+	T:assertEqual(ramp:ramp(-1.1), -0.8)
+	T:assertEqual(ramp:ramp(-1), -1.0)
+	T:assertEqual(ramp:ramp(-1), -1.0)
 
-		// decelerate (while negative)
-		t:assertEqual(ramp:ramp(-0.1), -0.9)
-		t:assertEqual(ramp:ramp(-0.1), -0.8)
-		t:assertEqual(ramp:ramp(0), -0.7)
-		t:assertEqual(ramp:ramp(0), -0.6)
-		t:assertEqual(ramp:ramp(0.1), -0.5)
-		t:assertEqual(ramp:ramp(0.1), -0.4)
-		t:assertEqual(ramp:ramp(1), -0.3)
-		t:assertEqual(ramp:ramp(1), -0.2)
-		t:assertEqual(ramp:ramp(1), -0.1)
-		t:assertEqual(ramp:ramp(0), 0.0)
-		t:assertEqual(ramp:ramp(0), 0.0)
+	// decelerate (while negative)
+	T:assertEqual(ramp:ramp(-0.1), -0.9)
+	T:assertEqual(ramp:ramp(-0.1), -0.8)
+	T:assertEqual(ramp:ramp(0), -0.7)
+	T:assertEqual(ramp:ramp(0), -0.6)
+	T:assertEqual(ramp:ramp(0.1), -0.5)
+	T:assertEqual(ramp:ramp(0.1), -0.4)
+	T:assertEqual(ramp:ramp(1), -0.3)
+	T:assertEqual(ramp:ramp(1), -0.2)
+	T:assertEqual(ramp:ramp(1), -0.1)
+	T:assertEqual(ramp:ramp(0), 0.0)
+	T:assertEqual(ramp:ramp(0), 0.0)
 })
 
-test("number tests", func(t: T) {
+test("number tests", func() {
 	assert(0x3.14 == tonumber("0x3.14"))
 	assert(0x3.14fp+3 == tonumber("0x3.14fp+3"))
 	assert(0xAbC.p1 == tonumber("0xAbC.p1"))
@@ -445,7 +445,7 @@ test("number tests", func(t: T) {
 
 for name, test in tests {
 	result := blue .. name .. ": " .. reset
-	ok, err := pcall(func() { test(T) })
+	ok, err := pcall(func() { test() })
 	if ok {
 		result = result .. green .. "passed"
 	} else {
