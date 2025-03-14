@@ -34,9 +34,8 @@ impl Struct {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub enum TypeKind {
-    #[default]
     Nil,
     Any,
     Number,
