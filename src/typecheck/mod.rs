@@ -635,8 +635,7 @@ impl TypeChecker<'_> {
                     }
                 }
                 TypeKind::Table(TableType { key_type, val_type }) => {
-                    let string_ty = TypePool::string();
-                    if self.can_equal(string_ty, key_type) {
+                    if self.can_equal(TypePool::string(), key_type) {
                         base = val_type;
                     } else {
                         return Err(CheckErr::new(
@@ -849,7 +848,7 @@ impl TypeChecker<'_> {
         let rhs_type = self.check_expr(range_for.range.rhs)?;
         let number_type = TypePool::number();
 
-        if !self.can_equal(lhs_type, number_type) {
+        if !self.can_equal(number_type, lhs_type) {
             return Err(MismatchedTypes::full(
                 number_type,
                 range_for.range.op_span,
@@ -858,7 +857,7 @@ impl TypeChecker<'_> {
             ));
         }
 
-        if !self.can_equal(rhs_type, number_type) {
+        if !self.can_equal(number_type, rhs_type) {
             return Err(MismatchedTypes::full(
                 number_type,
                 range_for.range.op_span,
@@ -1007,51 +1006,46 @@ impl TypeChecker<'_> {
 }
 
 impl TypeChecker<'_> {
-    fn can_equal(&self, lhs_ref: TypeRef, rhs_ref: TypeRef) -> bool {
-        let lhs = &self.tcx.pool[lhs_ref];
-        let mut rhs = &self.tcx.pool[rhs_ref];
-        if let TypeKind::Multiple(m) = &rhs.kind {
-            rhs = match m.first() {
-                Some(ty) => &self.tcx.pool[*ty],
-                None => &self.tcx.pool[TypePool::nil()],
+    fn can_equal(&self, expected: TypeRef, value: TypeRef) -> bool {
+        let expected_kind = &self.tcx.pool[expected].kind;
+
+        let mut value_kind = &self.tcx.pool[value].kind;
+        if let TypeKind::Multiple(m) = &value_kind {
+            value_kind = match m.first() {
+                Some(ty) => &self.tcx.pool[*ty].kind,
+                None => &TypeKind::Nil,
             };
         }
 
-        if let TypeKind::Any | TypeKind::Variadic = lhs.kind {
+        if let TypeKind::Any | TypeKind::Variadic = expected_kind {
             return true;
         }
 
-        if let TypeKind::Adaptable = rhs.kind {
+        if let TypeKind::Adaptable | TypeKind::Any | TypeKind::Variadic = value_kind {
             return true;
         }
 
-        if let TypeKind::Optional(lhs_base) = lhs.kind {
-            if let TypeKind::Optional(rhs_base) = rhs.kind {
-                return self.can_equal(lhs_base, rhs_base);
-            }
-            let base = &self.tcx.pool[lhs_base];
-            return std::mem::discriminant(&rhs.kind) == std::mem::discriminant(&base.kind)
-                || std::mem::discriminant(&rhs.kind) == std::mem::discriminant(&TypeKind::Nil);
+        if let TypeKind::Optional(exp_base) = expected_kind {
+            return self.can_equal(*exp_base, value) || self.can_equal(TypePool::nil(), value);
         }
 
-        if let TypeKind::Optional(base) = rhs.kind {
-            let base = &self.tcx.pool[base];
-            return std::mem::discriminant(&lhs.kind) == std::mem::discriminant(&base.kind);
+        if let TypeKind::Optional(base) = value_kind {
+            return self.can_equal(expected, *base) || self.can_equal(expected, TypePool::nil());
         }
 
-        if std::mem::discriminant(&lhs.kind) != std::mem::discriminant(&rhs.kind) {
+        if std::mem::discriminant(expected_kind) != std::mem::discriminant(value_kind) {
             return false;
         }
 
         if let TypeKind::Table(TableType {
             key_type: lhs_key,
             val_type: lhs_val,
-        }) = lhs.kind
+        }) = *expected_kind
         {
             let TypeKind::Table(TableType {
                 key_type: rhs_key,
                 val_type: rhs_val,
-            }) = rhs.kind
+            }) = *value_kind
             else {
                 unreachable!() // we know they have the same discriminant
             };
