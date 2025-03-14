@@ -155,8 +155,7 @@ mod ast {
 
     impl Spanned for Pooled<'_, &ast::IfStmt, ExprPool> {
         fn span(&self) -> Span {
-            let mut span = self.wrap(self.val.condition).span();
-
+            let mut span = self.val.kw_span;
             span = span.cover(self.wrap(&self.val.body).span());
 
             if let Some(else_branch) = &self.val.else_ {
