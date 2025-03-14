@@ -67,20 +67,7 @@ impl TypeChecker<'_> {
             ast::Stmt::WhileStmt(while_stmt) => self.check_while_stmt(while_stmt),
             ast::Stmt::RangeFor(range_for) => self.check_range_for(range_for),
             ast::Stmt::KeyValFor(keyval_for) => self.check_keyval_for(keyval_for),
-            ast::Stmt::Assign(ast::Assign { lhs, rhs }) => {
-                let lhs_type = self.check_suffixed_name(lhs)?;
-                let rhs_type = self.check_expr(*rhs)?;
-                if self.can_equal(lhs_type, rhs_type) {
-                    Ok(())
-                } else {
-                    Err(MismatchedTypes::full(
-                        lhs_type,
-                        self.expr_pool.wrap(lhs.as_ref()),
-                        rhs_type,
-                        self.expr_pool.wrap(*rhs),
-                    ))
-                }
-            }
+            ast::Stmt::Assign(assign) => self.check_assign(assign),
             ast::Stmt::MultiAssign(multi_assign) => self.check_multi_assign(multi_assign),
             // TODO: investigate if making a more expression-statement specific checking function is worth it
             ast::Stmt::ExprStmt(suffixed_expr) => self.check_suffixed_expr(suffixed_expr).map(drop),
@@ -339,6 +326,25 @@ impl TypeChecker<'_> {
         };
         self.tcx.value_map.insert_type(name, self.tcx.pool.add(ty));
         Ok(())
+    }
+
+    fn check_assign(&mut self, assign: &ast::Assign) -> TResult<()> {
+        let lhs_type = self.check_suffixed_name(&assign.lhs)?;
+        let rhs_type = self.check_expr(assign.rhs)?;
+        if self.can_equal(lhs_type, rhs_type) {
+            Ok(())
+        } else if let TypeKind::Adaptable = &self.tcx.pool[lhs_type].kind {
+            let new_type = self.tcx.pool[rhs_type].clone();
+            self.tcx.pool[lhs_type] = new_type;
+            Ok(())
+        } else {
+            Err(MismatchedTypes::full(
+                lhs_type,
+                self.expr_pool.wrap(assign.lhs.as_ref()),
+                rhs_type,
+                self.expr_pool.wrap(assign.rhs),
+            ))
+        }
     }
 
     fn check_multi_assign(&mut self, multi_assign: &ast::MultiAssign) -> TResult<()> {
