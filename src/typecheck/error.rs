@@ -9,7 +9,7 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct CheckErr {
     kind: CheckErrKind,
-    while_checking: Option<ast::Stmt>,
+    while_checking: Option<Span>,
 }
 
 impl CheckErr {
@@ -20,8 +20,8 @@ impl CheckErr {
         })
     }
 
-    pub(crate) fn while_checking(mut self: Box<Self>, stmt: ast::Stmt) -> Box<Self> {
-        self.while_checking = self.while_checking.or(Some(stmt));
+    pub(crate) fn while_checking(mut self: Box<Self>, spanned: impl Spanned) -> Box<Self> {
+        self.while_checking = self.while_checking.or(Some(spanned.span()));
         self
     }
 }
@@ -31,8 +31,7 @@ impl Snippetize for CheckErr {
         let mut diag = self.kind.snippetize(ctx);
 
         if !self.kind.has_context() {
-            if let Some(stmt) = &self.while_checking {
-                let span = ctx.expr_pool.wrap(stmt).span();
+            if let Some(span) = self.while_checking {
                 diag.add_annotation(
                     Annotation::new(Level::Info, span).label("while checking this"),
                 );

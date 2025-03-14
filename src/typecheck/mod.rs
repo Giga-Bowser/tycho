@@ -94,7 +94,7 @@ impl TypeChecker<'_> {
             ast::Stmt::Return(return_stmt) => self.check_return(return_stmt),
             ast::Stmt::Break(_) => Ok(()), // TODO: actually handle this
         }
-        .map_err(|e| e.while_checking(stmt.clone()))
+        .map_err(|e| e.while_checking(self.expr_pool.wrap(stmt)))
     }
 
     fn check_decl(&mut self, decl: &ast::Declare) -> TResult<()> {
@@ -587,13 +587,17 @@ impl TypeChecker<'_> {
                     .tcx
                     .value_map
                     .get(&name.ident(self.file))
-                    .ok_or_else(|| CheckErr::new(NoSuchVal { val_name: *name }))?;
+                    .ok_or_else(|| {
+                        CheckErr::new(NoSuchVal { val_name: *name })
+                            .while_checking(self.expr_pool.wrap(suffixed_expr))
+                    })?;
 
                 if let Resolved::Type(_) = res {
                     let Some(ast::Suffix::Method(_) | ast::Suffix::Access(_)) =
                         suffixed_expr.suffixes.first()
                     else {
-                        return Err(CheckErr::new(NoSuchVal { val_name: *name }));
+                        return Err(CheckErr::new(NoSuchVal { val_name: *name })
+                            .while_checking(self.expr_pool.wrap(suffixed_expr)));
                     };
                 }
 
@@ -603,7 +607,9 @@ impl TypeChecker<'_> {
         };
 
         for suffix in &suffixed_expr.suffixes {
-            ty = self.check_suffix(ty, suffix)?;
+            ty = self
+                .check_suffix(ty, suffix)
+                .map_err(|e| e.while_checking(self.expr_pool.wrap(suffixed_expr)))?;
         }
 
         Ok(ty)
