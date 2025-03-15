@@ -242,31 +242,61 @@ mod ast {
 
     impl Spanned for Pooled<'_, &ast::SuffixedExpr, ExprPool> {
         fn span(&self) -> Span {
-            let mut span = self.wrap(self.val.val).span();
+            let expr_span = self.wrap(self.val.val).span();
+            if let Some(suffix_span) = self
+                .val
+                .suffixes
+                .iter()
+                .map(|it| self.wrap(it).span())
+                .covering()
+            {
+                Span::cover(expr_span, suffix_span)
+            } else {
+                expr_span
+            }
+        }
+    }
 
-            for suffix in &self.val.suffixes {
-                match suffix {
-                    ast::Suffix::Index(index) => span = span.cover(index.span),
-                    ast::Suffix::Access(access) => span = span.cover(access.field_name),
-                    ast::Suffix::Call(call) => {
-                        if let Some(arg_span) =
-                            call.args.iter().map(|it| self.wrap(*it).span()).covering()
-                        {
-                            span = span.cover(arg_span);
-                        }
-                    }
-                    ast::Suffix::Method(method) => {
-                        span = span.cover(method.method_name);
-                        if let Some(arg_span) = method
-                            .args
-                            .iter()
-                            .map(|it| self.wrap(*it).span())
-                            .covering()
-                        {
-                            span = span.cover(arg_span);
-                        }
-                    }
-                }
+    impl Spanned for Pooled<'_, &ast::Suffix, ExprPool> {
+        fn span(&self) -> Span {
+            match self.val {
+                ast::Suffix::Index(index) => self.wrap(index).span(),
+                ast::Suffix::Access(access) => self.wrap(access).span(),
+                ast::Suffix::Call(call) => self.wrap(call).span(),
+                ast::Suffix::Method(method) => self.wrap(method).span(),
+            }
+        }
+    }
+
+    impl Spanned for Pooled<'_, &ast::Index, ExprPool> {
+        fn span(&self) -> Span {
+            self.val.span
+        }
+    }
+
+    impl Spanned for Pooled<'_, &ast::Access, ExprPool> {
+        fn span(&self) -> Span {
+            self.val.field_name
+        }
+    }
+
+    impl Spanned for Pooled<'_, &ast::Call, ExprPool> {
+        fn span(&self) -> Span {
+            self.val.span
+        }
+    }
+
+    impl Spanned for Pooled<'_, &ast::Method, ExprPool> {
+        fn span(&self) -> Span {
+            let mut span = self.val.method_name;
+            if let Some(arg_span) = self
+                .val
+                .args
+                .iter()
+                .map(|it| self.wrap(*it).span())
+                .covering()
+            {
+                span = span.cover(arg_span);
             }
 
             span
@@ -284,34 +314,17 @@ mod ast {
 
     impl Spanned for Pooled<'_, &ast::SuffixedName, ExprPool> {
         fn span(&self) -> Span {
-            let mut span = self.val.name;
-
-            for suffix in &self.val.suffixes {
-                match suffix {
-                    ast::Suffix::Index(index) => span = span.cover(index.span),
-                    ast::Suffix::Access(access) => span = span.cover(access.field_name),
-                    ast::Suffix::Call(call) => {
-                        if let Some(arg_span) =
-                            call.args.iter().map(|it| self.wrap(*it).span()).covering()
-                        {
-                            span = span.cover(arg_span);
-                        }
-                    }
-                    ast::Suffix::Method(method) => {
-                        span = span.cover(method.method_name);
-                        if let Some(arg_span) = method
-                            .args
-                            .iter()
-                            .map(|it| self.wrap(*it).span())
-                            .covering()
-                        {
-                            span = span.cover(arg_span);
-                        }
-                    }
-                }
+            if let Some(suffix_span) = self
+                .val
+                .suffixes
+                .iter()
+                .map(|it| self.wrap(it).span())
+                .covering()
+            {
+                Span::cover(self.val.name, suffix_span)
+            } else {
+                self.val.name
             }
-
-            span
         }
     }
 
