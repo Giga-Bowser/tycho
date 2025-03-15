@@ -644,6 +644,16 @@ impl Parser<'_> {
             self.tokens.pop_front().span.end
         } else {
             loop {
+                if self.tokens[0].kind == Elipsis {
+                    let span = self.tokens.pop_front().span;
+                    params.push(Param {
+                        name: span,
+                        ty: TypeNode::VariadicType(span),
+                    });
+                    break self.tokens.expect(RParen)?.span.end;
+                    // TODO: diagnostic here for params after variadic
+                }
+
                 if self.tokens[0].kind == Name && self.tokens[1].kind == Colon {
                     let argname = self.tokens[0].span;
                     self.tokens.pop_front();
@@ -751,7 +761,7 @@ impl Parser<'_> {
                 if self.tokens[0].kind == Elipsis {
                     let span = self.tokens.pop_front().span;
                     params.push(Param {
-                        name: Span::empty(span.start),
+                        name: span,
                         ty: TypeNode::VariadicType(span),
                     });
                     break self.tokens.expect(RParen)?.span.end;

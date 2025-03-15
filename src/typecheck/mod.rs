@@ -518,7 +518,12 @@ impl TypeChecker<'_> {
 
             let func_ty = this.resolve_function_type(&func.ty, self_ty)?;
             for (name, ty) in &func_ty.params {
-                this.tcx.value_map.insert_value(name.ident(this.file), *ty);
+                let ident = if let TypeKind::Variadic = &this.tcx.pool[*ty].kind {
+                    Ident::from_str("...")
+                } else {
+                    name.ident(this.file)
+                };
+                this.tcx.value_map.insert_value(ident, *ty);
             }
 
             this.func_ctx.push(func_ty.returns);
