@@ -400,7 +400,7 @@ impl TypeChecker<'_> {
                 })),
                 ast::UnOpKind::Not => {
                     let res = self.check_expr(unop.val)?;
-                    if let TypeKind::Boolean = self.tcx.pool[res].kind {
+                    if self.can_equal(TypePool::boolean(), res) || self.can_equal(TypePool::nil(), res) {
                         Ok(res)
                     } else {
                         Err(BadNot::err(unop.op_span, res))
@@ -629,7 +629,9 @@ impl TypeChecker<'_> {
     fn check_suffix(&mut self, mut base: TypeRef, suffix: &ast::Suffix) -> TResult<TypeRef> {
         match suffix {
             ast::Suffix::Index(ast::Index { key: _, span }) => match &self.tcx.pool[base].kind {
-                TypeKind::Table(TableType { val_type, .. }) => base = *val_type,
+                TypeKind::Table(TableType { val_type, .. }) => {
+                    base = self.tcx.pool.add(TypeKind::Optional(*val_type).into())
+                }
                 TypeKind::Adaptable | TypeKind::Any => (),
                 _ => {
                     return Err(BadIndex::err(*span, base));
@@ -708,8 +710,10 @@ impl TypeChecker<'_> {
             arg_types.push(self.check_expr(*arg)?);
         }
 
-        let TypeKind::Function(func_ty) = &self.tcx.pool[ty].kind else {
-            return Err(CallNonFunc::err(ty, call_span));
+        let func_ty = match &self.tcx.pool[ty].kind {
+            TypeKind::Function(func_ty) => func_ty,
+            TypeKind::Any => return Ok(ty),
+            _ => return Err(CallNonFunc::err(ty, call_span)),
         };
 
         if arg_types.len() > func_ty.params.len() {
@@ -807,10 +811,13 @@ impl TypeChecker<'_> {
     fn check_if_stmt(&mut self, if_stmt: &ast::IfStmt) -> TResult<()> {
         let condition_type = self.check_expr(if_stmt.condition)?;
         if !self.can_equal_primitive(condition_type, &TypeKind::Boolean) {
-            return Err(CheckErr::new(
-                MismatchedTypes::new(TypePool::boolean(), condition_type)
-                    .recieved(self.expr_pool.wrap(if_stmt.condition)),
-            ));
+            if self.can_equal_primitive(condition_type, &TypeKind::Nil) {
+            } else {
+                return Err(CheckErr::new(
+                    MismatchedTypes::new(TypePool::boolean(), condition_type)
+                        .recieved(self.expr_pool.wrap(if_stmt.condition)),
+                ));
+            }
         }
 
         self.with_scope::<TResult<()>>(|this| {
@@ -1021,14 +1028,20 @@ impl TypeChecker<'_> {
         let expected_kind = &self.tcx.pool[expected].kind;
 
         let mut value_kind = &self.tcx.pool[value].kind;
-        if let TypeKind::Multiple(m) = &value_kind {
-            value_kind = match m.first() {
+        if let TypeKind::Multiple(vals) = &value_kind {
+            if let TypeKind::Multiple(exps) = &expected_kind {
+                return exps
+                    .iter()
+                    .zip(vals.iter())
+                    .all(|(exp, val)| self.can_equal(*exp, *val));
+            }
+            value_kind = match vals.first() {
                 Some(ty) => &self.tcx.pool[*ty].kind,
                 None => &TypeKind::Nil,
             };
         }
 
-        if let TypeKind::Any | TypeKind::Variadic = expected_kind {
+        if let TypeKind::Adaptable | TypeKind::Any | TypeKind::Variadic = expected_kind {
             return true;
         }
 
@@ -1100,9 +1113,9 @@ impl TypeChecker<'_> {
         true
     }
 
-    fn comm_eq(&self, lhs: TypeRef, rhs: TypeRef) -> bool {
-        let lhs = &self.tcx.pool[lhs].kind;
-        let rhs = &self.tcx.pool[rhs].kind;
+    fn comm_eq(&self, lhs_ref: TypeRef, rhs_ref: TypeRef) -> bool {
+        let lhs = &self.tcx.pool[lhs_ref].kind;
+        let rhs = &self.tcx.pool[rhs_ref].kind;
         match (lhs, rhs) {
             (TypeKind::Adaptable | TypeKind::Any, _) | (_, TypeKind::Adaptable | TypeKind::Any) => {
                 return true
@@ -1111,17 +1124,11 @@ impl TypeChecker<'_> {
         }
 
         match (lhs, rhs) {
-            (TypeKind::Optional(opt), other) | (other, TypeKind::Optional(opt)) => {
-                let opt = &self.tcx.pool[*opt];
-                if let TypeKind::Nil = other {
-                    return true;
-                }
-
-                if std::mem::discriminant(other) == std::mem::discriminant(&opt.kind) {
-                    return true;
-                }
-
-                return false;
+            (TypeKind::Optional(opt), _) => {
+                return self.comm_eq(*opt, rhs_ref) || self.comm_eq(TypePool::nil(), rhs_ref)
+            }
+            (_, TypeKind::Optional(opt)) => {
+                return self.comm_eq(lhs_ref, *opt) || self.comm_eq(TypePool::nil(), lhs_ref)
             }
             _ => (),
         }
