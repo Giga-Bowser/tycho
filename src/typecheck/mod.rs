@@ -400,7 +400,9 @@ impl TypeChecker<'_> {
                 })),
                 ast::UnOpKind::Not => {
                     let res = self.check_expr(unop.val)?;
-                    if self.can_equal(TypePool::boolean(), res) || self.can_equal(TypePool::nil(), res) {
+                    if self.can_equal(TypePool::boolean(), res)
+                        || self.can_equal(TypePool::nil(), res)
+                    {
                         Ok(res)
                     } else {
                         Err(BadNot::err(unop.op_span, res))
@@ -630,7 +632,7 @@ impl TypeChecker<'_> {
         match suffix {
             ast::Suffix::Index(ast::Index { key: _, span }) => match &self.tcx.pool[base].kind {
                 TypeKind::Table(TableType { val_type, .. }) => {
-                    base = self.tcx.pool.add(TypeKind::Optional(*val_type).into())
+                    base = self.tcx.pool.add(TypeKind::Optional(*val_type).into());
                 }
                 TypeKind::Adaptable | TypeKind::Any => (),
                 _ => {
@@ -712,7 +714,7 @@ impl TypeChecker<'_> {
 
         let func_ty = match &self.tcx.pool[ty].kind {
             TypeKind::Function(func_ty) => func_ty,
-            TypeKind::Any => return Ok(ty),
+            TypeKind::Any | TypeKind::Adaptable => return Ok(ty),
             _ => return Err(CallNonFunc::err(ty, call_span)),
         };
 

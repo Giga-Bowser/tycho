@@ -1,0 +1,609 @@
+// json.lua
+
+// Copyright (c) 2020 rxi
+
+// Permission is hereby granted, free of charge, to any person obtaining a copy of
+// this software and associated documentation files (the "Software"), to deal in
+// the Software without restriction, including without limitation the rights to
+// use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+// of the Software, and to permit persons to whom the Software is furnished to do
+// so, subject to the following conditions:
+
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+json: [string]any = { _version = "0.1.2" }
+
+// ----------------------------------------------------------------------------
+// Encode
+// ----------------------------------------------------------------------------
+
+encode: func(val: any, stack: [any]boolean) -> string
+
+escape_char_map := {
+	[ "\\" ] = "\\",
+	[ "\"" ] = "\"",
+	[ "\b" ] = "b",
+	[ "\f" ] = "f",
+	[ "\n" ] = "n",
+	[ "\r" ] = "r",
+	[ "\t" ] = "t",
+}
+
+escape_char_map_inv := { [ "/" ] = "/" }
+for k, v in escape_char_map {
+	escape_char_map_inv[v] = k
+}
+
+
+escape_char := func(c: string) -> string {
+	return "\\" .. (escape_char_map[c] || string.format("u%04x", c:byte()))
+}
+
+
+encode_nil := func(val: nil) -> string {
+	return "null"
+}
+
+
+encode_table := func(val: [any]any, stack: [any]boolean) -> string {
+	res := {}
+	stack = stack || {}
+
+	// Circular reference?
+	if stack[val] { error("circular reference") }
+
+	stack[val] = true
+
+	if rawget(val, 1) != nil || next(val) == nil {
+		// Treat as array // check keys are valid and it is not sparse
+		n := 0
+		for k, _ in val {
+			if type(k) != "number" {
+				error("invalid table: mixed or invalid key types")
+			}
+			n = n + 1
+		}
+		if n != #val {
+			error("invalid table: sparse array")
+		}
+		// Encode
+		for i, v in val {
+			table.insert(res, encode(v, stack))
+		}
+		stack[val] = nil
+		return "[" .. table.concat(res, ",") .. "]"
+
+	} else {
+		// Treat as an object
+		for k, v in val {
+			if type(k) != "string" {
+				error("invalid table: mixed or invalid key types")
+			}
+			table.insert(res, encode(k, stack) .. ":" .. encode(v, stack))
+		}
+		stack[val] = nil
+		return "{" .. table.concat(res, ",") .. "}"
+	}
+}
+
+
+encode_string := func(val: string, stack: [any]boolean) -> string {
+	return "\"" .. val:gsub("[%z\1-\31\\\"]", escape_char) .. "\""
+}
+
+
+encode_number := func(val: number, stack: [any]boolean) -> string {
+	// Check for NaN, -inf and inf
+	if val != val || val <= -math.huge || val >= math.huge {
+		error("unexpected number value '" .. tostring(val) .. "'")
+	}
+	return string.format("%.14g", val)
+}
+
+
+type_func_map: [string]func(any, [any]boolean) = {
+	[ "nil"     ] = encode_nil,
+	[ "table"   ] = encode_table,
+	[ "string"  ] = encode_string,
+	[ "number"  ] = encode_number,
+	[ "boolean" ] = tostring,
+}
+
+
+encode = func(val: any, stack: [any]boolean) -> string {
+	t := type(val)
+	f: any = type_func_map[t]
+	if f {
+		return f(val, stack)
+	}
+	error("unexpected type '" .. t .. "'")
+}
+
+
+json.encode = func(val: any) -> string {
+	return encode(val, {})
+}
+
+
+// -------------------------------------------------------------------------------
+// Decode
+// -------------------------------------------------------------------------------
+
+parse: func(str: string, idx: number) -> (any, number)
+
+create_set := func(...) -> [string]boolean {
+	res := {}
+	for i in 1..select("#", ...) {
+		res[ select(i, ...) ] = true
+	}
+	return res
+}
+
+space_chars   := create_set(" ", "\t", "\r", "\n")
+delim_chars   := create_set(" ", "\t", "\r", "\n", "]", "}", ",")
+escape_chars  := create_set("\\", "/", "\"", "b", "f", "n", "r", "t", "u")
+literals      := create_set("true", "false", "null")
+
+literal_map := {
+	[ "true"  ] = true,
+	[ "false" ] = false,
+	[ "null"  ] = nil,
+}
+
+
+next_char := func(str: string, idx: number, set: [string]boolean, negate: boolean?) -> number {
+	for i in idx..#str {
+		if set[str:sub(i, i)] != negate {
+			return i
+		}
+	}
+	return #str + 1
+}
+
+
+decode_error := func(str: string, idx: number, msg: string) -> any {
+	line_count := 1
+	col_count := 1
+	for i in 1..idx - 1 {
+		col_count = col_count + 1
+		if str:sub(i, i) == "\n" {
+			line_count = line_count + 1
+			col_count = 1
+		}
+	}
+	error( string.format("%s at line %d col %d", msg, line_count, col_count) )
+}
+
+
+codepoint_to_utf8 := func(n: number) -> string {
+	// http://scripts.sil.org/cms/scripts/page.php?site_id=nrsi&id=iws-appendixa
+	f := math.floor
+	if n <= 0x7f {
+		return string.char(n)
+	} else if  n <= 0x7ff {
+		return string.char(f(n / 64) + 192, n % 64 + 128)
+	} else if  n <= 0xffff {
+		return string.char(f(n / 4096) + 224, f(n % 4096 / 64) + 128, n % 64 + 128)
+	} else if  n <= 0x10ffff {
+		return string.char(f(n / 262144) + 240, f(n % 262144 / 4096) + 128,
+		                   f(n % 4096 / 64) + 128, n % 64 + 128)
+	}
+	error( string.format("invalid unicode codepoint '%x'", n) )
+}
+
+
+parse_unicode_escape := func(s: string) -> string {
+	n1 := tonumber(s:sub(1, 4),  16 )
+	n2 := tonumber(s:sub(7, 10), 16 )
+	 // Surrogate pair?
+	if n2 {
+		return codepoint_to_utf8((n1 - 0xd800) * 0x400 + (n2 - 0xdc00) + 0x10000)
+	} else {
+		return codepoint_to_utf8(n1)
+	}
+}
+
+
+parse_string := func(str: string, i: number) -> (string, number) {
+	res := ""
+	j := i + 1
+	k := j
+
+	while j <= #str {
+		x := str:byte(j)
+
+		if x < 32 {
+			decode_error(str, j, "control character in string")
+		} else if  x == 92 { // `\`: Escape
+			res = res .. str:sub(k, j - 1)
+			j = j + 1
+			c := str:sub(j, j)
+			if c == "u" {
+				hex: string = str:match("^[dD][89aAbB]%x%x\\u%x%x%x%x", j + 1)
+				           || str:match("^%x%x%x%x", j + 1)
+				           || decode_error(str, j - 1, "invalid unicode escape in string")
+				res = res .. parse_unicode_escape(hex)
+				j = j + #hex
+			} else {
+				escape_char: boolean = escape_chars[c]
+				if !escape_char {
+					decode_error(str, j - 1, "invalid escape char '" .. c .. "' in string")
+				}
+				res = res .. escape_char_map_inv[c]
+			}
+			k = j + 1
+		} else if  x == 34 { // `"`: End of string
+			res = res .. str:sub(k, j - 1)
+			return res, j + 1
+		}
+
+		j = j + 1
+	}
+
+	decode_error(str, i, "expected closing quote for string")
+}
+
+
+parse_number := func(str: string, i: number) -> (number, number) {
+	x := next_char(str, i, delim_chars)
+	s := str:sub(i, x - 1)
+	n := tonumber(s)
+	if !n {
+		decode_error(str, i, "invalid number '" .. s .. "'")
+	}
+	return n, x
+}
+
+
+parse_literal := func(str: string, i: number) -> (string, number) {
+	x := next_char(str, i, delim_chars)
+	word := str:sub(i, x - 1)
+	if !literals[word] {
+		decode_error(str, i, "invalid literal '" .. word .. "'")
+	}
+	return literal_map[word], x
+}
+
+
+parse_array := func(str: string, i: number) -> ([]any, number) {
+	res := {}
+	n := 1
+	i = i + 1
+	while true {
+		x: [any]any
+		i = next_char(str, i, space_chars, true)
+		// Empty / end of array?
+		if str:sub(i, i) == "]" {
+			i = i + 1
+			break
+		}
+		// Read token
+		x, i = parse(str, i)
+		res[n] = x
+		n = n + 1
+		// Next token
+		i = next_char(str, i, space_chars, true)
+		chr := str:sub(i, i)
+		i = i + 1
+		if chr == "]" { break }
+		if chr != "," { decode_error(str, i, "expected ']' or ','") }
+	}
+	return res, i
+}
+
+
+parse_object := func(str: string, i: number) -> ([string]any, number) {
+	res := {}
+	i = i + 1
+	while true {
+		key: string
+		val: [any]any
+		i = next_char(str, i, space_chars, true)
+		// Empty / end of object?
+		if str:sub(i, i) == "}" {
+			i = i + 1
+			break
+		}
+		// Read key
+		if str:sub(i, i) != "\"" {
+			decode_error(str, i, "expected string for key")
+		}
+		key, i = parse(str, i)
+		// Read ':' delimiter
+		i = next_char(str, i, space_chars, true)
+		if str:sub(i, i) != ":" {
+			decode_error(str, i, "expected ':' after key")
+		}
+		i = next_char(str, i + 1, space_chars, true)
+		// Read value
+		val, i = parse(str, i)
+		// Set
+		res[key] = val
+		// Next token
+		i = next_char(str, i, space_chars, true)
+		chr := str:sub(i, i)
+		i = i + 1
+		if chr == "}" { break }
+		if chr != "," { decode_error(str, i, "expected '}' or ','") }
+	}
+	return res, i
+}
+
+
+char_func_map := {
+	[ "\"" ] = parse_string,
+	[ "0" ] = parse_number,
+	[ "1" ] = parse_number,
+	[ "2" ] = parse_number,
+	[ "3" ] = parse_number,
+	[ "4" ] = parse_number,
+	[ "5" ] = parse_number,
+	[ "6" ] = parse_number,
+	[ "7" ] = parse_number,
+	[ "8" ] = parse_number,
+	[ "9" ] = parse_number,
+	[ "-" ] = parse_number,
+	[ "t" ] = parse_literal,
+	[ "f" ] = parse_literal,
+	[ "n" ] = parse_literal,
+	[ "[" ] = parse_array,
+	[ "{" ] = parse_object,
+}
+
+
+parse = func(str: string, idx: number) -> (any, number) {
+	chr := str:sub(idx, idx)
+	f := char_func_map[chr]
+	if f {
+		f: func(string, number) -> (any, number) = f
+		return f(str, idx)
+	}
+	decode_error(str, idx, "unexpected character '" .. chr .. "'")
+}
+
+
+json.decode = func(str: string) -> [any]any {
+	if type(str) != "string" {
+		error("expected argument of type string, got " .. type(str))
+	}
+	res, idx := parse(str, next_char(str, 1, space_chars, true))
+	idx = next_char(str, idx, space_chars, true)
+	if idx <= #str {
+		decode_error(str, idx, "trailing garbage")
+	}
+	return res
+}
+
+
+fmt := string.format
+
+test := func(name: any, f: func()) {
+	xpcall(func() {
+		f()
+		print( fmt("[pass] %s", name) )
+	}, func(err: any) {
+		print( fmt("[fail] %s : %s", name, err) )
+	})
+}
+
+
+equal := func(a: any, b: any) -> boolean {
+	// Handle table
+	if type(a) == "table" && type(b) == "table" {
+		a: [any]any = a
+		b: [any]any = b
+		for k, _ in a {
+			if !equal(a[k], b[k]) {
+				return false
+			}
+		}
+		for k, _ in a {
+			if !equal(b[k], a[k]) {
+				return false
+			}
+		}
+		return true
+	}
+	// Handle scalar
+	return a == b
+}
+
+
+test("numbers", func() {
+	t := {
+		[ "123.456"       ] = 123.456,
+		[ "-123"          ] = -123,
+		[ "-567.765"      ] = -567.765,
+		[ "12.3"          ] = 12.3,
+		[ "0"             ] = 0,
+		[ "0.10000000012" ] = 0.10000000012,
+	}
+	for k, v in t {
+		res := json.decode(k)
+		assert( res == v, fmt("expected '%s', got '%s'", k, res) )
+		res := json.encode(v)
+		assert( res == k, fmt("expected '%s', got '%s'", v, res) )
+	}
+	assert( json.decode("13e2") == 13e2 )
+	assert( json.decode("13E+2") == 13e2 )
+	assert( json.decode("13e-2") == 13e-2 )
+})
+
+
+test("literals", func() {
+	assert( json.decode("true") == true )
+	assert( json.encode(true) == "true" )
+	assert( json.decode("false") == false )
+	assert( json.encode(false) == "false" )
+	assert( json.decode("null") == nil )
+	assert( json.encode(nil) == "null")
+})
+
+
+test("strings", func() {
+	s := ""
+	assert( s == json.decode( json.encode(s) ) )
+	s := "\\"
+	assert( s == json.decode( json.encode(s) ) )
+	s := "Hello world"
+	assert( s == json.decode( json.encode(s) ) )
+	s := "\0 \13 \27"
+	assert( s == json.decode( json.encode(s) ) )
+	s := "\0\r\n\8"
+	assert( s == json.decode( json.encode(s) ) )
+})
+
+
+test("unicode", func() {
+	s := "こんにちは世界"
+	assert( s == json.decode( json.encode(s) ) )
+})
+
+
+test("arrays", func() {
+	t := { "cat", "dog", "owl" }
+	assert( equal( t, json.decode( json.encode(t) ) ) )
+})
+
+
+test("objects", func() {
+	t := { x = 10, y = 20, z = 30 }
+	assert( equal( t, json.decode( json.encode(t) ) ) )
+})
+
+test("decode invalid", func() {
+	t := {
+		"",
+		" ",
+		"{",
+		"[",
+		"{\"x\" : ",
+		"{\"x\" : 1",
+		"{\"x\" : z }",
+		"{\"x\" : 123z }",
+		"{x : 123 }",
+		"{10 : 123 }",
+		"{]",
+		"[}",
+		"\"a",
+		"10 xx",
+		"{}123",
+	}
+	for i, v in t {
+		status := pcall(json.decode, v)
+		assert( !status, fmt("'%s' was parsed without error", v) )
+	}
+})
+
+
+test("decode invalid string", func() {
+	t := {
+		"\"\\z\"",
+		"\"\\1\"",
+		"\"\\u000z\"",
+		"\"\\ud83d\\ude0q\"",
+		"\"x\ny\"",
+		"\"x\0y\"",
+	}
+	for i, v in t {
+		status, err := pcall(json.decode, v)
+		assert( !status, fmt("'%s' was parsed without error", v) )
+	}
+})
+
+
+test("decode escape", func() {
+	t := {
+		[ "\"\\u263a\""       ] = "☺",
+		[ "\"\\ud83d\\ude02\"" ] = "😂",
+		[ "\"\\r\\n\\t\\\\\\\"\""   ] = "\r\n\t\\\"",
+		[ "\"\\\\\""           ] = "\\",
+		[ "\"\\\\\\\\\""         ] = "\\\\",
+		[ "\"\\/\""           ] = "/",
+		[ "\"\\\\u \\u263a\""   ] = "\\u ☺",
+	}
+	for k, v in t {
+		res := json.decode(k)
+		assert( res == v, fmt("expected '%s', got '%s'", v, res) )
+	}
+})
+
+
+test("decode empty", func() {
+	t := {
+		[ "[]" ] = {},
+		[ "{}" ] = {},
+		[ "\"\"" ] = "",
+	}
+	for k, v in t {
+		res := json.decode(k)
+		assert( equal(res, v), fmt("'%s' did not equal expected", k) )
+	}
+})
+
+
+test("decode collection", func() {
+	t := {
+		[ "[1, 2, 3, 4, 5, 6]"            ] = {1, 2, 3, 4, 5, 6},
+		[ "[1, 2, 3, \"hello\"]"            ] = {1, 2, 3, "hello"},
+		[ "{ \"name\": \"test\", \"id\": 231 }" ] = {name = "test", id = 231},
+		[ "{\"x\":1,\"y\":2,\"z\":[1,2,3]}"     ] = {x = 1, y = 2, z = {1, 2, 3}},
+	}
+	for k, v in t {
+		res := json.decode(k)
+		assert( equal(res, v), fmt("'%s' did not equal expected", k) )
+	}
+})
+
+
+test("encode invalid", func() {
+	t := {
+		{ [1000] = "b" },
+		{ [ func() {} ] = 12 },
+		{ nil, 2, 3, 4 },
+		{ x = 10, [1] = 2 },
+		{ [1] = "a", [3] = "b" },
+		{ x = 10, [4] = 5 },
+	}
+	for i, v in t {
+		status, res := pcall(json.encode, v)
+		assert(!status, fmt("encoding idx %d did not result in an error", i) )
+	}
+})
+
+
+test("encode invalid number", func() {
+	t := {
+		math.huge,      // inf
+		-math.huge,     // -inf
+		math.huge * 0,  // NaN
+	}
+	for i, v in t {
+		status, res := pcall(json.encode, v)
+		assert( !status, fmt("encoding '%s' did not result in an error", v) )
+	}
+})
+
+
+test("encode escape", func() {
+	t := {
+		[ "\"x\""       ] = "\"\\\"x\\\"\"",
+		[ "x\ny"      ] = "\"x\\ny\"",
+		[ "x\0y"      ] = "\"x\\u0000y\"",
+		[ "x\27y"     ] = "\"x\\u001by\"",
+		[ "\r\n\t\\\"" ] = "\"\\r\\n\\t\\\\\\\"\"",
+	}
+	for k, v in t {
+		res := json.encode(k)
+		assert( res == v, fmt("'%s' was not escaped properly", k) )
+	}
+})

@@ -405,6 +405,10 @@ impl<'a> Transpiler<'a> {
                 }
             },
             ast::Expr::UnOp(un_op) => {
+                if let ast::UnOpKind::Not = un_op.op {
+                    return None;
+                }
+
                 let val = self.jit_expr(un_op.val)?;
                 Some(un_op.op_span.cover(val))
             }
