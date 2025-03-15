@@ -1,0 +1,6 @@
+struct table {}
+table.concat: func(table: []any, sep: string?, i: number?, j: number?) -> string
+table.insert: func(table: [any]any, value: any)
+table.maxn: func(table: [any]any) -> number
+table.remove: func(table: [any]any, pos: number?) -> any
+table.sort: func(table: [any]any, comp: any?)

@@ -7,6 +7,7 @@ rawequal : func(v1: any, v2: any) -> boolean
 rawget : func(table: [any]any, index: any) -> any
 rawlen : func(v: any) -> number
 rawset : func(table: [any]any, index: any, value: any)
-tonumber : func(e: string, base: number?) -> number
+select: func(index: any, ...) -> number
+tonumber : func(e: string, base: number?) -> number?
 tostring : func(v: number) -> string
 type : func(v: any) -> string

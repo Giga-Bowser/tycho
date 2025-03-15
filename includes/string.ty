@@ -5,13 +5,10 @@ string.find: func(s: string, pattern: string, init: number?, plain: boolean?) ->
 string.format: func(s: string, ...) -> string
 string.gmatch: func(s: string, pattern: string) -> func() -> string
 string.gsub: func(s: string, pattern: string, repl: any, n: number?) -> (string, number)
-string.len: func(s: string)
-string.lower: func(s: string)
-string.match: func(s: string)
-string.pack: func(s: string)
-string.packsize: func(s: string)
-string.rep: func(s: string)
-string.reverse: func(s: string)
+string.len: func(s: string) -> number
+string.lower: func(s: string) -> string
+string.match: func(s: string, pattern: string, init: number?) -> ...
+string.rep: func(s: string, n: number) -> string
+string.reverse: func(s: string) -> string
 string.sub: func(s: string, i: number, j: number?) -> string
-string.unpack: func(s: string)
-string.upper: func(s: string)
+string.upper: func(s: string) -> string
