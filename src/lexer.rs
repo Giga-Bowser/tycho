@@ -291,7 +291,7 @@ impl<'a> Lexer<'a> {
                 .src
                 .get_unchecked(self.token_start..self.token_end)
         };
-        panic!("bad token: {text}");
+        panic!("{}: bad token `{text}`", self.file.path.display());
     }
 
     #[inline]
