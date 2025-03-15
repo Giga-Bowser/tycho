@@ -29,22 +29,14 @@ pub struct LJCompiler<'a> {
 
 impl<'a> LJCompiler<'a> {
     pub fn new(file: &'a SourceFile, pool: &'a ExprPool) -> Self {
-        let mut result = Self {
+        Self {
             file,
             pool,
             func_state: FuncState::top(),
             prev_states: Vec::new(),
             var_info: Vec::new(),
             protos: Vec::new(),
-        };
-
-        let func = result.func_state.const_str("require") as u16;
-        let arg = result.func_state.const_str("lualib.tycho") as u16;
-        result.bcemit(BCInstr::new_ad(BCOp::GGET, 0, func));
-        result.bcemit(BCInstr::new_ad(BCOp::KSTR, if LJ_FR2 { 2 } else { 1 }, arg));
-        result.bcemit(BCInstr::new_abc(BCOp::CALL, 0, 1, 2));
-
-        result
+        }
     }
 }
 

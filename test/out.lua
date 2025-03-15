@@ -1,4 +1,3 @@
-require("lualib.tycho")
 local function factorial(n)
 	if n == 0 then
 		return 1

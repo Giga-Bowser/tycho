@@ -23,7 +23,7 @@ impl<'a> Transpiler<'a> {
         Self {
             file,
             pool,
-            result: "require(\"lualib.tycho\")\n".to_owned(),
+            result: String::new(),
             indent: 0.into(),
         }
     }
