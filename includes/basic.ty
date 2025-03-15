@@ -11,3 +11,4 @@ select: func(index: any, ...) -> number
 tonumber : func(e: string, base: number?) -> number?
 tostring : func(v: number) -> string
 type : func(v: any) -> string
+xpcall : func(f: func(...) -> ..., msgh: func(any) -> ...) -> ...
