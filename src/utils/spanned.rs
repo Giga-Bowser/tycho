@@ -240,6 +240,18 @@ mod ast {
         }
     }
 
+    impl Spanned for Pooled<'_, &ast::FieldNode, ExprPool> {
+        fn span(&self) -> Span {
+            match self.val {
+                ast::FieldNode::Field { key, val } => key.cover(self.wrap(*val).span()),
+                ast::FieldNode::ExprField { key, val } => {
+                    Span::cover(self.wrap(*key).span(), self.wrap(*val).span())
+                }
+                ast::FieldNode::ValField { val } => self.wrap(*val).span(),
+            }
+        }
+    }
+
     impl Spanned for Pooled<'_, &ast::SuffixedExpr, ExprPool> {
         fn span(&self) -> Span {
             let expr_span = self.wrap(self.val.val).span();
