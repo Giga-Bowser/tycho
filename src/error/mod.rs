@@ -203,13 +203,13 @@ impl SourceCache {
 impl ariadne::Cache<Path> for SourceCache {
     type Storage = Rc<str>;
 
-    fn fetch(&mut self, path: &Path) -> Result<&Source<Self::Storage>, Box<dyn fmt::Debug + '_>> {
+    fn fetch(&mut self, path: &Path) -> Result<&Source<Self::Storage>, impl fmt::Debug> {
         self.map
             .get(path)
-            .ok_or_else(|| Box::new(format!("{} not found in source map", path.display())) as _)
+            .ok_or_else(|| format!("{} not found in source map", path.display()))
     }
 
-    fn display<'a>(&self, path: &'a Path) -> Option<Box<dyn fmt::Display + 'a>> {
+    fn display<'a>(&self, path: &'a Path) -> Option<impl fmt::Display + 'a> {
         Some(Box::new(path.display()))
     }
 }
