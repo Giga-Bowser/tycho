@@ -1,11 +1,13 @@
 use std::{error::Error, path::PathBuf, time::Instant};
 
+use anstream::{eprintln, println};
+
 use crate::{
     cli::{self},
     error::{report_diag, report_err, Diag, Snippetize},
     lexer::{Lexer, Token, TokenKind, Tokens},
     luajit::{
-        bytecode::{dump_bc, Header, Proto},
+        bytecode::{dump_bc, read_dump, Header, Proto},
         compiler::LJCompiler,
     },
     mem_size::DeepSize,
@@ -16,7 +18,7 @@ use crate::{
     utils::{duration_fmt, ByteFmt},
 };
 
-pub fn main(args: &cli::Build) -> Result<(), Box<dyn Error>> {
+pub fn build_main(args: &cli::Build) -> Result<(), Box<dyn Error>> {
     let total_timer = Instant::now();
 
     build(args)?;
@@ -54,6 +56,16 @@ fn build(args: &cli::Build) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+pub fn read_main(args: &cli::Read) -> Result<(), Box<dyn Error>> {
+    let dump = std::fs::read(&args.file)?;
+    let (header, protos) = read_dump(&dump);
+
+    println!("{header:#?}");
+    println!("{protos:#?}");
+
+    Ok(())
+}
+
 pub fn print_main(args: &cli::Print) -> Result<(), Box<dyn Error>> {
     let mut source_map = SourceMap::new();
     let mut tcx = TypeContext::default();
@@ -63,7 +75,7 @@ pub fn print_main(args: &cli::Print) -> Result<(), Box<dyn Error>> {
     let (expr_pool, stmts) = run_parser(&file, &source_map, &tcx, tokens)?;
     run_typechecker(&file, &source_map, tcx, &expr_pool, &stmts)?;
     let protos = run_compiler(&file, &expr_pool, &stmts);
-    eprintln!("{protos:#?}");
+    println!("{protos:#?}");
 
     Ok(())
 }

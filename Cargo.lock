@@ -436,6 +436,7 @@ dependencies = [
 name = "tycho"
 version = "0.1.0"
 dependencies = [
+ "anstream",
  "ariadne",
  "bitflags",
  "clap",

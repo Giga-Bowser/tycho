@@ -4,26 +4,12 @@ mod utils;
 pub mod bytecode;
 pub mod compiler;
 
-use std::error::Error;
-
 use bitflags::bitflags;
 
-use crate::cli;
-
 use self::{
-    bytecode::{read_dump, BCPos, BCReg},
+    bytecode::{BCPos, BCReg},
     funcstate::VarIdx,
 };
-
-pub fn read_main(args: &cli::Read) -> Result<(), Box<dyn Error>> {
-    let dump = std::fs::read(&args.file)?;
-    let (header, protos) = read_dump(&dump);
-    eprintln!("{header:#?}");
-    eprintln!("{protos:#?}");
-
-    Ok(())
-}
-
 #[derive(Debug)]
 pub struct ExprDesc<'s> {
     kind: ExprKind<'s>,
