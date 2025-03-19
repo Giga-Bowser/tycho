@@ -19,9 +19,9 @@ const LJ_FR2: bool = true;
 
 #[derive(Debug)]
 pub struct LJCompiler<'a> {
-    pub file: &'a SourceFile,
-    pub pool: &'a ExprPool,
-    pub func_state: FuncState,
+    file: &'a SourceFile,
+    pool: &'a ExprPool,
+    func_state: FuncState,
     prev_states: Vec<FuncState>,
     var_info: Vec<VarInfo>,
     pub protos: Vec<Proto>,
@@ -117,10 +117,12 @@ impl LJCompiler<'_> {
             upvalue_data,
             gc_constants,
             number_constants,
+            // TODO: add debug info some day?
+            debug_info: None,
         });
     }
 
-    pub fn fscope_begin(&mut self, flags: ScopeFlags) {
+    fn fscope_begin(&mut self, flags: ScopeFlags) {
         let new_scope = FuncScope {
             vstart: self.var_info.len() as u32,
             nactvar: self.func_state.nactvar as u8,
@@ -136,7 +138,7 @@ impl LJCompiler<'_> {
         );
     }
 
-    pub fn fscope_end(&mut self) {
+    fn fscope_end(&mut self) {
         let prev_scope = self.func_state.prev_scopes.pop().unwrap();
         let dead_scope = std::mem::replace(&mut self.func_state.scope, prev_scope);
         self.var_remove(dead_scope.nactvar as u32);
@@ -1311,8 +1313,11 @@ impl<'a> LJCompiler<'a> {
     }
 
     fn compile_index(&mut self, base: &mut ExprDesc<'a>, key: &mut ExprDesc<'a>) {
-        let ExprKind::NonReloc { result_reg } = base.kind else {
-            unreachable!("compile_index called on bad expr: {base:?}")
+        let result_reg = match base.kind {
+            ExprKind::NonReloc { result_reg } => result_reg,
+            ExprKind::Indexed { table_reg, .. } => table_reg,
+            ExprKind::Local { local_reg, .. } => local_reg,
+            _ => unreachable!("compile_index called on bad expr: {base:#?}"),
         };
 
         let index = match key.kind {
@@ -1407,11 +1412,11 @@ impl<'a> LJCompiler<'a> {
 
 impl<'a> LJCompiler<'a> {
     #[inline]
-    pub fn bcemit(&mut self, instr: BCInstr) -> BCPos {
+    fn bcemit(&mut self, instr: BCInstr) -> BCPos {
         self.func_state.bcemit(instr)
     }
 
-    pub fn bcemit_store(&mut self, var: &ExprDesc<'a>, mut expr: ExprDesc<'a>) -> ExprDesc<'a> {
+    fn bcemit_store(&mut self, var: &ExprDesc<'a>, mut expr: ExprDesc<'a>) -> ExprDesc<'a> {
         let instr = match var.kind {
             ExprKind::Local {
                 local_reg,
@@ -1477,7 +1482,7 @@ impl<'a> LJCompiler<'a> {
         expr
     }
 
-    pub fn bcemit_method(&mut self, mut base: ExprDesc<'a>, method_name: &'a str) -> ExprDesc<'a> {
+    fn bcemit_method(&mut self, mut base: ExprDesc<'a>, method_name: &'a str) -> ExprDesc<'a> {
         let obj = self.func_state.expr_toanyreg(&mut base);
         self.func_state.expr_free(&base);
         let func = self.func_state.free_reg as u8;
@@ -1600,5 +1605,9 @@ impl<'s> LJCompiler<'_> {
         }
 
         ExprDesc::new(ExprKind::Global(name))
+    }
+
+    pub fn reset_free_reg(&mut self) {
+        self.func_state.free_reg = self.func_state.nactvar;
     }
 }

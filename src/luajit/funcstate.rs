@@ -11,7 +11,7 @@ use crate::luajit::{
 pub(super) type VarIdx = u16;
 
 #[derive(Debug)]
-pub struct FuncState {
+pub(super) struct FuncState {
     /// Hash table for constants
     pub kt: FxHashMap<TValue, BCReg>,
     pub template_tables: Vec<(TemplateTable, usize)>,
@@ -36,7 +36,7 @@ pub struct FuncState {
 }
 
 #[derive(Debug, Default)]
-pub struct FuncScope {
+pub(super) struct FuncScope {
     pub vstart: u32,
     pub nactvar: u8,
     pub flags: ScopeFlags,
@@ -44,7 +44,7 @@ pub struct FuncScope {
 
 bitflags! {
     #[derive(Debug, Default)]
-    pub struct ScopeFlags: u8 {
+    pub(super) struct ScopeFlags: u8 {
         const LOOP = 0b00001;
         const BREAK = 0b00010;
         const GOLA = 0b00100;
@@ -77,14 +77,14 @@ impl Default for FuncState {
 }
 
 impl FuncState {
-    pub fn top() -> Self {
+    pub(super) fn top() -> Self {
         Self {
             flags: ProtoFlags::VARARG,
             ..Default::default()
         }
     }
 
-    pub fn uvmark(&mut self, level: BCReg) {
+    pub(super) fn uvmark(&mut self, level: BCReg) {
         let mut scopes = self
             .prev_scopes
             .iter_mut()
@@ -97,7 +97,7 @@ impl FuncState {
 }
 
 impl FuncState {
-    pub fn const_num(&mut self, n: f64) -> BCReg {
+    pub(super) fn const_num(&mut self, n: f64) -> BCReg {
         match self.kt.entry(TValue::Number(n)) {
             Entry::Occupied(occupied_entry) => *occupied_entry.get(),
             Entry::Vacant(vacant_entry) => {
@@ -108,7 +108,7 @@ impl FuncState {
         }
     }
 
-    pub fn const_str(&mut self, s: &str) -> BCReg {
+    pub(super) fn const_str(&mut self, s: &str) -> BCReg {
         match self.kt.entry(TValue::String(s.to_owned())) {
             Entry::Occupied(occupied_entry) => *occupied_entry.get(),
             Entry::Vacant(vacant_entry) => {
@@ -121,7 +121,7 @@ impl FuncState {
 }
 
 impl FuncState {
-    pub fn bcemit(&mut self, instr: BCInstr) -> BCPos {
+    pub(super) fn bcemit(&mut self, instr: BCInstr) -> BCPos {
         let pc = self.bc.len();
         self.jmp_patchval(self.jpc, pc, NO_REG, pc);
         self.jpc = NO_JMP;
@@ -129,7 +129,7 @@ impl FuncState {
         pc
     }
 
-    pub fn bcemit_jmp(&mut self) -> BCPos {
+    pub(super) fn bcemit_jmp(&mut self) -> BCPos {
         let jpc = self.jpc;
         let mut j = self.bc.len() - 1;
         let ip = &mut self.bc[j];
@@ -179,7 +179,7 @@ impl FuncState {
         instr_idx
     }
 
-    pub fn bcemit_branch_t(&mut self, expr: &mut ExprDesc<'_>) {
+    pub(super) fn bcemit_branch_t(&mut self, expr: &mut ExprDesc<'_>) {
         self.expr_discharge(expr);
         let instr_idx = match expr.kind {
             ExprKind::KString(_) | ExprKind::KNumber(_) | ExprKind::KTrue => NO_JMP,
@@ -199,7 +199,7 @@ impl FuncState {
         expr.true_jumplist = NO_JMP;
     }
 
-    pub fn bcemit_branch_f(&mut self, expr: &mut ExprDesc<'_>) {
+    pub(super) fn bcemit_branch_f(&mut self, expr: &mut ExprDesc<'_>) {
         self.expr_discharge(expr);
         let instr_idx = match expr.kind {
             ExprKind::KNil | ExprKind::KFalse => NO_JMP,
@@ -270,7 +270,7 @@ impl FuncState {
         true
     }
 
-    pub fn jmp_patchins(&mut self, pc: BCPos, dest: BCPos) {
+    pub(super) fn jmp_patchins(&mut self, pc: BCPos, dest: BCPos) {
         let jmp = &mut self.bc[pc];
         let offset = dest + BCInstr::BIAS_J as u32 - (pc + 1);
         debug_assert!(dest != NO_JMP, "uninitialized jump target");
@@ -279,7 +279,7 @@ impl FuncState {
         jmp.set_d(offset as u16);
     }
 
-    pub fn jmp_append(&mut self, l1: BCPos, l2: BCPos) -> BCPos {
+    pub(super) fn jmp_append(&mut self, l1: BCPos, l2: BCPos) -> BCPos {
         if l2 == NO_JMP {
             l1
         } else if l1 == NO_JMP {
@@ -312,12 +312,12 @@ impl FuncState {
         }
     }
 
-    pub fn jmp_tohere(&mut self, list: BCPos) {
+    pub(super) fn jmp_tohere(&mut self, list: BCPos) {
         self.last_target = self.bc.len();
         self.jpc = self.jmp_append(self.jpc, list);
     }
 
-    pub fn jmp_patch(&mut self, list: BCPos, target: BCPos) {
+    pub(super) fn jmp_patch(&mut self, list: BCPos, target: BCPos) {
         if target == self.bc.len() {
             self.jmp_tohere(list);
         } else {
@@ -326,19 +326,19 @@ impl FuncState {
         }
     }
 
-    pub fn bcreg_bump(&mut self, num_regs: BCReg) {
+    pub(super) fn bcreg_bump(&mut self, num_regs: BCReg) {
         let sz = self.free_reg + num_regs;
         if sz > self.frame_size as BCReg {
             self.frame_size = sz as u8;
         }
     }
 
-    pub fn bcreg_reserve(&mut self, num_regs: BCReg) {
+    pub(super) fn bcreg_reserve(&mut self, num_regs: BCReg) {
         self.bcreg_bump(num_regs);
         self.free_reg += num_regs;
     }
 
-    pub fn bcreg_free(&mut self, reg: BCReg) {
+    pub(super) fn bcreg_free(&mut self, reg: BCReg) {
         if reg >= self.nactvar {
             self.free_reg -= 1;
             debug_assert!(reg == self.free_reg, "bad regfree");
@@ -346,13 +346,13 @@ impl FuncState {
     }
 
     /// Free register for expression
-    pub fn expr_free(&mut self, expr: &ExprDesc<'_>) {
+    pub(super) fn expr_free(&mut self, expr: &ExprDesc<'_>) {
         if let ExprKind::NonReloc { result_reg } = expr.kind {
             self.bcreg_free(result_reg);
         }
     }
 
-    pub fn expr_discharge(&mut self, expr: &mut ExprDesc<'_>) {
+    pub(super) fn expr_discharge(&mut self, expr: &mut ExprDesc<'_>) {
         let instr = match expr.kind {
             ExprKind::Upvalue {
                 upvalue_idx,
@@ -400,7 +400,7 @@ impl FuncState {
         };
     }
 
-    pub fn bcemit_nil(&mut self, mut from: BCReg, mut n: BCReg) {
+    pub(super) fn bcemit_nil(&mut self, mut from: BCReg, mut n: BCReg) {
         if self.bc.len() > self.last_target {
             let instr = self.bc.last_mut();
             let pfrom = instr.a() as BCReg;
@@ -470,7 +470,6 @@ impl FuncState {
                     ))
                 }
             }
-            ExprKind::KCData(_) => todo!("ffi"),
             ExprKind::Relocable { instr_idx } => {
                 self.bc[instr_idx].set_a(reg as u8);
                 None
@@ -498,7 +497,7 @@ impl FuncState {
     }
 
     /// Always returns `NonReloc`
-    pub fn expr_toreg(&mut self, expr: &mut ExprDesc<'_>, reg: BCReg) {
+    pub(super) fn expr_toreg(&mut self, expr: &mut ExprDesc<'_>, reg: BCReg) {
         self.expr_toreg_nobranch(expr, reg);
 
         if let ExprKind::Jmp {
@@ -537,7 +536,7 @@ impl FuncState {
     }
 
     /// Always returns `NonReloc`
-    pub fn expr_tonextreg(&mut self, expr: &mut ExprDesc<'_>) -> BCReg {
+    pub(super) fn expr_tonextreg(&mut self, expr: &mut ExprDesc<'_>) -> BCReg {
         self.expr_discharge(expr);
         self.expr_free(expr);
         self.bcreg_reserve(1);
@@ -547,7 +546,7 @@ impl FuncState {
     }
 
     /// Always returns `NonReloc`
-    pub fn expr_toanyreg(&mut self, expr: &mut ExprDesc<'_>) -> BCReg {
+    pub(super) fn expr_toanyreg(&mut self, expr: &mut ExprDesc<'_>) -> BCReg {
         self.expr_discharge(expr);
         if let ExprKind::NonReloc { result_reg } = expr.kind {
             if !expr.has_jump() {
@@ -561,7 +560,7 @@ impl FuncState {
         self.expr_tonextreg(expr)
     }
 
-    pub fn expr_toval(&mut self, expr: &mut ExprDesc<'_>) {
+    pub(super) fn expr_toval(&mut self, expr: &mut ExprDesc<'_>) {
         if expr.has_jump() {
             self.expr_toanyreg(expr);
         } else {
@@ -569,7 +568,7 @@ impl FuncState {
         }
     }
 
-    pub fn invert_cond(&mut self, instr_pc: BCPos) {
+    fn invert_cond(&mut self, instr_pc: BCPos) {
         let instr = &mut self.bc[instr_pc - 1];
         instr.set_op(instr.op().invert());
     }
@@ -578,7 +577,12 @@ impl FuncState {
 const NAME_BREAK: &str = "(break)";
 
 impl FuncState {
-    pub fn gola_new(&mut self, var_info: &mut Vec<VarInfo>, flags: VarFlags, pc: BCPos) -> usize {
+    pub(super) fn gola_new(
+        &mut self,
+        var_info: &mut Vec<VarInfo>,
+        flags: VarFlags,
+        pc: BCPos,
+    ) -> usize {
         let vtop = var_info.len();
 
         var_info.push(VarInfo {
@@ -592,14 +596,14 @@ impl FuncState {
         vtop
     }
 
-    pub fn gola_patch(&mut self, vg: &mut VarInfo, vl: &VarInfo) {
+    fn gola_patch(&mut self, vg: &mut VarInfo, vl: &VarInfo) {
         let pc = vg.startpc;
         vg.name = None;
         self.bc[pc].set_a(vl.slot);
         self.jmp_patch(pc, vl.startpc);
     }
 
-    pub fn gola_close(&mut self, vg: &VarInfo) {
+    fn gola_close(&mut self, vg: &VarInfo) {
         let idx = vg.startpc;
         debug_assert!(vg.is_goto(), "expected goto");
         debug_assert!(
@@ -618,7 +622,12 @@ impl FuncState {
         }
     }
 
-    pub fn gola_resolve(&mut self, var_info: &mut Vec<VarInfo>, scope: &FuncScope, idx: usize) {
+    pub(super) fn gola_resolve(
+        &mut self,
+        var_info: &mut Vec<VarInfo>,
+        scope: &FuncScope,
+        idx: usize,
+    ) {
         let vl = var_info.drain(idx..).next().unwrap();
         let start = scope.vstart as usize;
         for vg in &mut var_info[start..] {
@@ -630,7 +639,7 @@ impl FuncState {
         }
     }
 
-    pub fn gola_fixup(&mut self, var_info: &mut [VarInfo], dead_scope: &FuncScope) {
+    pub(super) fn gola_fixup(&mut self, var_info: &mut [VarInfo], dead_scope: &FuncScope) {
         let start = dead_scope.vstart as usize;
 
         for idx in start..var_info.len() {

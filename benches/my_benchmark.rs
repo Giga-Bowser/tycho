@@ -9,10 +9,7 @@ use mimalloc::MiMalloc;
 use tycho::{
     driver::{full_includes, run_lexer, run_parser},
     lexer::{Lexer, TokenKind},
-    luajit::{
-        bytecode::{dump_bc, Header},
-        compiler::LJCompiler,
-    },
+    luajit::{bytecode::dump_protos, compiler::LJCompiler},
     parser::{pool::ExprPool, Parser},
     sourcemap::SourceMap,
     transpiler::Transpiler,
@@ -119,7 +116,7 @@ fn benchmark_compiler(c: &mut Criterion) {
                 let start = Instant::now();
                 compiler.compile_chunk(&stmts);
                 compiler.fs_finish();
-                black_box(dump_bc(&Header::default(), &compiler.protos));
+                black_box(dump_protos(&compiler.protos));
                 elapsed += start.elapsed();
             }
             elapsed
@@ -190,7 +187,7 @@ fn benchmark_all_compile(c: &mut Criterion) {
                 for stmt in &stmts {
                     typechecker.check_stmt(stmt).unwrap();
                     compiler.compile_stmt(black_box(stmt));
-                    compiler.func_state.free_reg = compiler.func_state.nactvar;
+                    compiler.reset_free_reg();
                 }
 
                 elapsed += start.elapsed();

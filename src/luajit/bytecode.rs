@@ -4,6 +4,7 @@ use std::{
     collections::VecDeque,
     hash::Hash,
     ops::{Index, IndexMut},
+    path::{Path, PathBuf},
 };
 
 use bitflags::bitflags;
@@ -20,7 +21,27 @@ use crate::{
 const BC_MAGIC: [u8; 3] = [0x1B, b'L', b'J'];
 const BC_VERSION: u8 = 2;
 
-pub fn dump_bc(header: &Header, protos: &[Proto]) -> Vec<u8> {
+pub fn dump_protos(protos: &[Proto]) -> Vec<u8> {
+    let mut result = Vec::new();
+    result.extend(BC_MAGIC);
+    result.push(BC_VERSION);
+
+    Header::default().write(&mut result);
+
+    for proto in protos {
+        let mut proto_buf = Vec::new();
+        proto.write(&mut proto_buf);
+        uleb128::write_usize(&mut result, proto_buf.len());
+        result.append(&mut proto_buf);
+    }
+
+    // null terminate
+    result.push(0);
+
+    result
+}
+
+pub(crate) fn dump_bc(header: &Header, protos: &[Proto]) -> Vec<u8> {
     let mut result = Vec::new();
     result.extend(BC_MAGIC);
     result.push(BC_VERSION);
@@ -40,7 +61,7 @@ pub fn dump_bc(header: &Header, protos: &[Proto]) -> Vec<u8> {
     result
 }
 
-pub fn read_dump(vec: &[u8]) -> (Header, Vec<Proto>) {
+pub(crate) fn read_dump(vec: &[u8]) -> (Header, Vec<Proto>) {
     let mut vec: VecDeque<u8> = vec.iter().copied().collect();
     let magic = vec.drain(..3);
     assert!(
@@ -55,7 +76,7 @@ pub fn read_dump(vec: &[u8]) -> (Header, Vec<Proto>) {
 
     while *vec.front().unwrap() != 0x00 {
         let _proto_len = uleb128::read_usize(&mut vec);
-        protos.push(Proto::read(&mut vec));
+        protos.push(Proto::read(&mut vec, header.flags));
     }
 
     vec.pop_front();
@@ -63,9 +84,39 @@ pub fn read_dump(vec: &[u8]) -> (Header, Vec<Proto>) {
     (header, protos)
 }
 
+#[derive(Debug, Default)]
+pub(crate) struct Header {
+    flags: HeaderFlags,
+    chunk_name: Option<ChunkName>,
+}
+
+impl Header {
+    pub(crate) fn read(vec: &mut VecDeque<u8>) -> Self {
+        let flags = HeaderFlags::read(vec);
+
+        let chunk_name = if flags.debug() {
+            Some(ChunkName::read(vec))
+        } else {
+            None
+        };
+
+        Self { flags, chunk_name }
+    }
+
+    pub(crate) fn write(&self, vec: &mut Vec<u8>) {
+        self.flags.write(vec);
+
+        if let Some(chunk_name) = &self.chunk_name {
+            if self.flags.debug() {
+                chunk_name.write(vec);
+            }
+        }
+    }
+}
+
 bitflags! {
-    #[derive(Debug)]
-    pub struct Header: u8 {
+    #[derive(Debug, Clone, Copy)]
+    pub(crate) struct HeaderFlags: u8 {
         const BIG_ENDIAN = 0b0001;
         const STRIP = 0b0010;
         const FFI = 0b0100;
@@ -73,21 +124,61 @@ bitflags! {
     }
 }
 
-impl Default for Header {
+impl Default for HeaderFlags {
     fn default() -> Self {
-        Header::STRIP | Header::FR2
+        HeaderFlags::STRIP | HeaderFlags::FR2
     }
 }
 
-impl Header {
-    pub fn read(vec: &mut VecDeque<u8>) -> Self {
+impl HeaderFlags {
+    pub(crate) fn read(vec: &mut VecDeque<u8>) -> Self {
         let byte = vec.pop_front().unwrap();
 
-        Header::from_bits_truncate(byte)
+        HeaderFlags::from_bits_truncate(byte)
     }
 
-    pub fn write(&self, vec: &mut Vec<u8>) {
+    pub(crate) fn write(self, vec: &mut Vec<u8>) {
         vec.push(self.bits());
+    }
+
+    pub(crate) const fn debug(self) -> bool {
+        !self.contains(Self::STRIP)
+    }
+}
+
+#[derive(Debug)]
+pub(crate) enum ChunkName {
+    File(Box<Path>),
+    Custom(Box<str>),
+}
+
+impl ChunkName {
+    pub(crate) fn read(vec: &mut VecDeque<u8>) -> Self {
+        let name_len = uleb128::read_usize(vec);
+        let name_vec: Vec<u8> = vec.drain(..name_len).collect();
+        match name_vec.split_at(1) {
+            (b"@", filename) => {
+                Self::File(PathBuf::from(String::from_utf8_lossy(filename).as_ref()).into())
+            }
+            (b"=", name) => Self::Custom(String::from_utf8_lossy(name).into()),
+            _ => panic!("bad chunk name!"),
+        }
+    }
+
+    pub(crate) fn write(&self, vec: &mut Vec<u8>) {
+        match self {
+            ChunkName::File(path) => {
+                let path_str = path.to_string_lossy();
+                uleb128::write_usize(vec, path_str.len() + 1);
+                vec.push(b'@');
+                vec.extend(path_str.as_bytes());
+            }
+            ChunkName::Custom(name) => {
+                uleb128::write_usize(vec, name.len() + 1);
+                vec.push(b'@');
+                vec.extend(name.as_bytes());
+            }
+        };
     }
 }
 
@@ -100,10 +191,11 @@ pub struct Proto {
     pub upvalue_data: Vec<UVData>,
     pub gc_constants: Vec<GCConstant>,
     pub number_constants: Vec<f64>,
+    pub debug_info: Option<Box<DebugInfo>>,
 }
 
 impl Proto {
-    pub fn read(vec: &mut VecDeque<u8>) -> Self {
+    pub(crate) fn read(vec: &mut VecDeque<u8>, header_flags: HeaderFlags) -> Self {
         // read header
         let flags = ProtoFlags::from_bits_retain(vec.pop_front().unwrap());
         let num_params = vec.pop_front().unwrap();
@@ -112,6 +204,21 @@ impl Proto {
         let gc_constants_len = uleb128::read_usize(vec);
         let number_constants_len = uleb128::read_usize(vec);
         let bcins_len = uleb128::read_usize(vec);
+
+        let (debug_len, first_line, num_lines) = if header_flags.debug() {
+            let debug_len = uleb128::read_usize(vec);
+
+            if debug_len != 0 {
+                let first_line = uleb128::read_usize(vec);
+                let num_lines = uleb128::read_usize(vec);
+
+                (debug_len, first_line, num_lines)
+            } else {
+                (0, 0, 0)
+            }
+        } else {
+            (0, 0, 0)
+        };
 
         // read body
         let bytes: Vec<u8> = vec.drain(..bcins_len * size_of::<BCInstr>()).collect();
@@ -136,6 +243,16 @@ impl Proto {
             number_constants.push(read_number_constant(vec));
         }
 
+        let debug_info = if debug_len != 0 {
+            Some(Box::new(DebugInfo {
+                first_line,
+                num_lines,
+                info: vec.drain(..debug_len).collect(),
+            }))
+        } else {
+            None
+        };
+
         Proto {
             flags,
             num_params,
@@ -144,10 +261,11 @@ impl Proto {
             upvalue_data,
             gc_constants,
             number_constants,
+            debug_info,
         }
     }
 
-    pub fn write(&self, vec: &mut Vec<u8>) {
+    pub(crate) fn write(&self, vec: &mut Vec<u8>) {
         // write header
         vec.push(self.flags.intersection(ProtoFlags::DUMP).bits());
         vec.push(self.num_params);
@@ -194,14 +312,14 @@ pub struct UVData {
 }
 
 impl UVData {
-    pub fn from_bytes(bytes: [u8; 2]) -> Self {
+    pub(crate) fn from_bytes(bytes: [u8; 2]) -> Self {
         Self {
             flags: UVFlags::from_bits_retain(bytes[1]),
             reg: bytes[0],
         }
     }
 
-    pub fn to_bytes(self) -> [u8; 2] {
+    pub(crate) fn to_bytes(self) -> [u8; 2] {
         [self.reg, self.flags.bits()]
     }
 }
@@ -244,7 +362,7 @@ impl GCConstant {
         }
     }
 
-    pub fn read(vec: &mut VecDeque<u8>) -> Self {
+    pub(crate) fn read(vec: &mut VecDeque<u8>) -> Self {
         let discrim = uleb128::read_usize(vec);
         match discrim {
             0 => GCConstant::Child,
@@ -258,7 +376,7 @@ impl GCConstant {
         }
     }
 
-    pub fn write(&self, vec: &mut Vec<u8>) {
+    pub(crate) fn write(&self, vec: &mut Vec<u8>) {
         let discrim = self.discriminator();
         match self {
             GCConstant::Child => {
@@ -284,14 +402,14 @@ pub struct TemplateTable {
 }
 
 impl TemplateTable {
-    pub fn with_size(array_len: usize) -> Self {
+    pub(crate) fn with_size(array_len: usize) -> Self {
         Self {
             array: vec![TValue::Nil; array_len],
             ..Default::default()
         }
     }
 
-    pub fn read(vec: &mut VecDeque<u8>) -> Self {
+    pub(crate) fn read(vec: &mut VecDeque<u8>) -> Self {
         let mut result = TemplateTable::default();
         let array_len = uleb128::read_usize(vec);
         let hash_len = uleb128::read_usize(vec);
@@ -309,7 +427,7 @@ impl TemplateTable {
         result
     }
 
-    pub fn write(&self, vec: &mut Vec<u8>) {
+    pub(crate) fn write(&self, vec: &mut Vec<u8>) {
         uleb128::write_usize(vec, self.array.len());
         uleb128::write_usize(vec, self.hash.len());
         for ktabk in &self.array {
@@ -321,7 +439,7 @@ impl TemplateTable {
         }
     }
 
-    pub fn insert(&mut self, k: TValue, v: TValue) -> Option<TValue> {
+    pub(crate) fn insert(&mut self, k: TValue, v: TValue) -> Option<TValue> {
         match k {
             TValue::Number(n) => {
                 let int_n = n as i32 as usize;
@@ -349,7 +467,7 @@ impl TemplateTable {
 }
 
 impl TValue {
-    pub fn read(vec: &mut VecDeque<u8>) -> Self {
+    pub(crate) fn read(vec: &mut VecDeque<u8>) -> Self {
         let tag = uleb128::read_usize(vec);
         match tag {
             0 => TValue::Nil,
@@ -372,7 +490,7 @@ impl TValue {
         }
     }
 
-    pub fn write(&self, vec: &mut Vec<u8>, narrow: bool) {
+    pub(crate) fn write(&self, vec: &mut Vec<u8>, narrow: bool) {
         match self {
             TValue::Nil => vec.push(0),
             TValue::False => vec.push(1),
@@ -548,28 +666,23 @@ pub struct Bytecode {
 
 impl Bytecode {
     #[inline]
-    pub fn len(&self) -> BCPos {
+    pub(crate) fn len(&self) -> BCPos {
         self.vec.len() as BCPos
     }
 
     #[inline]
-    pub fn is_empty(&self) -> bool {
-        self.vec.is_empty()
-    }
-
-    #[inline]
-    pub fn last(&self) -> &BCInstr {
+    pub(crate) fn last(&self) -> &BCInstr {
         &self[self.len() - 1]
     }
 
     #[inline]
-    pub fn last_mut(&mut self) -> &mut BCInstr {
+    pub(crate) fn last_mut(&mut self) -> &mut BCInstr {
         let idx = self.len() - 1;
         &mut self[idx]
     }
 
     #[inline]
-    pub fn pop(&mut self) -> BCInstr {
+    pub(crate) fn pop(&mut self) -> BCInstr {
         self.vec.pop().unwrap()
     }
 }
@@ -732,13 +845,13 @@ impl BCOp {
     }
 
     #[inline]
-    pub fn from_ast(op: ast::OpKind) -> Self {
+    pub(crate) fn from_ast(op: ast::OpKind) -> Self {
         BCOp::from_u8(op as u8 + BCOp::ADDVV as u8)
     }
 
     #[inline]
     #[must_use]
-    pub fn invert(self) -> Self {
+    pub(crate) fn invert(self) -> Self {
         BCOp::from_u8((self as u8) ^ 1)
     }
 
@@ -750,7 +863,7 @@ impl BCOp {
     }
 
     #[inline]
-    pub fn is_ret(&self) -> bool {
+    pub(crate) fn is_ret(self) -> bool {
         matches!(
             self,
             BCOp::RETM | BCOp::RET | BCOp::RET0 | BCOp::RET1 | BCOp::CALLT | BCOp::CALLMT
@@ -759,7 +872,7 @@ impl BCOp {
 }
 
 #[allow(clippy::upper_case_acronyms)]
-pub enum BCInsModes {
+pub(crate) enum BCInsModes {
     ABC {
         a_mode: BCOpMode,
         b_mode: BCOpMode,
@@ -772,7 +885,7 @@ pub enum BCInsModes {
 }
 
 impl BCInsModes {
-    pub fn from_op(op: BCOp) -> Self {
+    pub(crate) fn from_op(op: BCOp) -> Self {
         let modes = BC_MODES[op as usize];
         let a_mode = BCOpMode::from_u16(modes & 0b111);
         let b_mode = BCOpMode::from_u16((modes >> 3) & 0b1111);
@@ -795,7 +908,7 @@ impl BCInsModes {
 }
 
 #[derive(PartialEq, Clone, Copy)]
-pub enum BCOpMode {
+pub(crate) enum BCOpMode {
     // Mode A must be <= 7
     None,
     Dst,
@@ -835,14 +948,6 @@ impl BCOpMode {
             14 => BCOpMode::CData,
             _ => panic!(),
         }
-    }
-
-    /// Does the value of this operand mode represent a slot.
-    pub const fn is_slot(&self) -> bool {
-        matches!(
-            self,
-            BCOpMode::Dst | BCOpMode::Base | BCOpMode::Var | BCOpMode::RBase
-        )
     }
 }
 
@@ -887,6 +992,13 @@ fn format_operand16(val: u16, mode: BCOpMode) -> String {
         BCOpMode::Jump => format!("{}", u16::wrapping_sub(val, BCInstr::BIAS_J) as i16),
         _ => format!("{val}"),
     }
+}
+
+#[derive(Debug)]
+pub struct DebugInfo {
+    pub first_line: usize,
+    pub num_lines: usize,
+    pub info: Vec<u8>,
 }
 
 fn read_number_constant(vec: &mut VecDeque<u8>) -> f64 {

@@ -1,4 +1,4 @@
-pub(super) mod uleb128 {
+pub(crate) mod uleb128 {
     use std::collections::VecDeque;
 
     pub(crate) fn read_usize(vec: &mut VecDeque<u8>) -> usize {
@@ -66,7 +66,7 @@ pub(super) mod uleb128 {
     }
 }
 
-pub(super) mod unescape {
+pub(crate) mod unescape {
     use std::borrow::Cow;
 
     fn to_digit_hex(c: char) -> u8 {
@@ -160,7 +160,7 @@ pub(super) mod unescape {
     }
 }
 
-pub(super) mod numlit {
+pub(crate) mod numlit {
     pub(crate) fn parse(s: &str) -> f64 {
         let b = s.as_bytes();
         if b.starts_with(b"0x") | b.starts_with(b"0X") {

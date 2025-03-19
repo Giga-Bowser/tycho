@@ -11,14 +11,14 @@ use self::{
     funcstate::VarIdx,
 };
 #[derive(Debug)]
-pub struct ExprDesc<'s> {
+struct ExprDesc<'s> {
     kind: ExprKind<'s>,
     true_jumplist: BCPos,
     false_jumplist: BCPos,
 }
 
 impl<'s> ExprDesc<'s> {
-    pub fn new(kind: ExprKind<'s>) -> Self {
+    pub(crate) fn new(kind: ExprKind<'s>) -> Self {
         ExprDesc {
             kind,
             true_jumplist: !0,
@@ -26,11 +26,11 @@ impl<'s> ExprDesc<'s> {
         }
     }
 
-    pub fn has_jump(&self) -> bool {
+    pub(crate) fn has_jump(&self) -> bool {
         self.true_jumplist != self.false_jumplist
     }
 
-    pub fn is_const(&self) -> bool {
+    pub(crate) fn is_const(&self) -> bool {
         matches!(
             self.kind,
             ExprKind::KNil
@@ -41,20 +41,21 @@ impl<'s> ExprDesc<'s> {
         )
     }
 
-    pub fn is_number(&self) -> bool {
+    pub(crate) fn is_number(&self) -> bool {
         matches!(self.kind, ExprKind::KNumber(_))
     }
 }
 
 #[derive(Debug)]
-pub enum ExprKind<'s> {
+enum ExprKind<'s> {
     // Constant expressions must be first and in this order:
     KNil,
     KFalse,
     KTrue,
     KString(&'s str), // sval = string value
     KNumber(f64),     // nval = number value
-    KCData(u64),      // nval = cdata value, not treated as a constant expression
+    // TODO: support FFI
+    // KCData(u64),      // nval = cdata value, not treated as a constant expression
 
     // Non-constant expressions follow:
 
