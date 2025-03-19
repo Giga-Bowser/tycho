@@ -41,13 +41,6 @@ impl<'s> ExprDesc<'s> {
         )
     }
 
-    pub fn is_primitive(&self) -> bool {
-        matches!(
-            self.kind,
-            ExprKind::KNil | ExprKind::KFalse | ExprKind::KTrue
-        )
-    }
-
     pub fn is_number(&self) -> bool {
         matches!(self.kind, ExprKind::KNumber(_))
     }
