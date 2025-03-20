@@ -768,9 +768,7 @@ impl TemplateTable {
                             Some(old)
                         }
                     } else {
-                        self.array.resize(int_n + 1, TValue::Nil);
-                        self.array[int_n] = v;
-                        None
+                        self.hash.insert(k, v)
                     }
                 } else {
                     self.hash.insert(k, v)
@@ -818,7 +816,9 @@ impl TValue {
                     uleb128::write_u32(vec, int_n as u32);
                 } else {
                     vec.push(4);
-                    uleb128::write_usize(vec, n.to_bits() as usize);
+                    let bits = n.to_bits();
+                    uleb128::write_u32(vec, bits as u32);
+                    uleb128::write_u32(vec, (bits >> 32) as u32);
                 }
             }
             TValue::String(s) => {
