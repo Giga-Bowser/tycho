@@ -444,6 +444,7 @@ dependencies = [
  "indexmap",
  "mimalloc",
  "rustc-hash",
+ "yansi",
 ]
 
 [[package]]

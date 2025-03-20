@@ -1,4 +1,5 @@
 mod funcstate;
+mod print;
 mod utils;
 
 pub mod bytecode;

@@ -59,9 +59,7 @@ fn build(args: &cli::Build) -> Result<(), Box<dyn Error>> {
 pub fn read_main(args: &cli::Read) -> Result<(), Box<dyn Error>> {
     let dump = std::fs::read(&args.file)?;
     let (header, protos) = read_dump(&dump);
-
-    println!("{header:#?}");
-    println!("{protos:#?}");
+    print_dump(&header, &protos);
 
     Ok(())
 }
@@ -75,9 +73,16 @@ pub fn print_main(args: &cli::Print) -> Result<(), Box<dyn Error>> {
     let (expr_pool, stmts) = run_parser(&file, &source_map, &tcx, tokens)?;
     run_typechecker(&file, &source_map, tcx, &expr_pool, &stmts)?;
     let protos = run_compiler(&file, &expr_pool, &stmts);
-    println!("{protos:#?}");
+    print_dump(&Header::default(), &protos);
 
     Ok(())
+}
+
+fn print_dump(header: &Header, protos: &[Proto]) {
+    println!("{header}");
+    for proto in protos {
+        println!("{proto}");
+    }
 }
 
 pub fn full_includes(

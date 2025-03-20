@@ -1,5 +1,6 @@
 mod span;
 
+pub(crate) mod indenter;
 pub(crate) mod pooled;
 pub(crate) mod spanned;
 

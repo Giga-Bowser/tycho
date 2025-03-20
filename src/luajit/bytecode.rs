@@ -2,7 +2,6 @@
 
 use std::{
     collections::VecDeque,
-    hash::Hash,
     ops::{Index, IndexMut},
     path::{Path, PathBuf},
 };
@@ -86,8 +85,8 @@ pub(crate) fn read_dump(vec: &[u8]) -> (Header, Vec<Proto>) {
 
 #[derive(Debug, Default)]
 pub(crate) struct Header {
-    flags: HeaderFlags,
-    chunk_name: Option<ChunkName>,
+    pub flags: HeaderFlags,
+    pub chunk_name: Option<ChunkName>,
 }
 
 impl Header {
@@ -305,218 +304,8 @@ bitflags! {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct UVData {
-    pub flags: UVFlags,
-    pub reg: u8,
-}
-
-impl UVData {
-    pub(crate) fn from_bytes(bytes: [u8; 2]) -> Self {
-        Self {
-            flags: UVFlags::from_bits_retain(bytes[1]),
-            reg: bytes[0],
-        }
-    }
-
-    pub(crate) fn to_bytes(self) -> [u8; 2] {
-        [self.reg, self.flags.bits()]
-    }
-}
-
-bitflags! {
-    #[derive(Debug, Default, Clone, Copy)]
-    pub struct UVFlags: u8 {
-        const IMMUTABLE = 0b01000000;
-        const LOCAL = 0b10000000;
-    }
-}
-
-#[derive(Clone)]
-pub enum GCConstant {
-    Child,
-    Table(TemplateTable),
-    // FFI stuff:
-    // I64,
-    // U64,
-    // Complex,
-    Str(String),
-}
-
-impl std::fmt::Debug for GCConstant {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Child => write!(f, "Child"),
-            Self::Table(table) => table.fmt(f),
-            Self::Str(s) => write!(f, "{s:?}"),
-        }
-    }
-}
-
-impl GCConstant {
-    fn discriminator(&self) -> usize {
-        match self {
-            GCConstant::Child => 0,
-            GCConstant::Table(_) => 1,
-            GCConstant::Str(_) => 5,
-        }
-    }
-
-    pub(crate) fn read(vec: &mut VecDeque<u8>) -> Self {
-        let discrim = uleb128::read_usize(vec);
-        match discrim {
-            0 => GCConstant::Child,
-            1 => GCConstant::Table(TemplateTable::read(vec)),
-            2..=4 => todo!("haven't implemented FFI stuff yet"),
-            n => {
-                let len = n - 5;
-                let bytes: Vec<u8> = vec.drain(..len).collect();
-                GCConstant::Str(unsafe { String::from_utf8_unchecked(bytes) })
-            }
-        }
-    }
-
-    pub(crate) fn write(&self, vec: &mut Vec<u8>) {
-        let discrim = self.discriminator();
-        match self {
-            GCConstant::Child => {
-                uleb128::write_usize(vec, discrim);
-            }
-            GCConstant::Table(table) => {
-                uleb128::write_usize(vec, discrim);
-                table.write(vec);
-            }
-            GCConstant::Str(s) => {
-                let s = unescape(s);
-                uleb128::write_usize(vec, discrim + s.len());
-                vec.extend(s.as_bytes());
-            }
-        }
-    }
-}
-
-#[derive(Debug, Default, Clone)]
-pub struct TemplateTable {
-    pub array: Vec<TValue>,
-    pub hash: FxHashMap<TValue, TValue>,
-}
-
-impl TemplateTable {
-    pub(crate) fn with_size(array_len: usize) -> Self {
-        Self {
-            array: vec![TValue::Nil; array_len],
-            ..Default::default()
-        }
-    }
-
-    pub(crate) fn read(vec: &mut VecDeque<u8>) -> Self {
-        let mut result = TemplateTable::default();
-        let array_len = uleb128::read_usize(vec);
-        let hash_len = uleb128::read_usize(vec);
-
-        for _ in 0..array_len {
-            result.array.push(TValue::read(vec));
-        }
-
-        for _ in 0..hash_len {
-            let key = TValue::read(vec);
-            let val = TValue::read(vec);
-            result.hash.insert(key, val);
-        }
-
-        result
-    }
-
-    pub(crate) fn write(&self, vec: &mut Vec<u8>) {
-        uleb128::write_usize(vec, self.array.len());
-        uleb128::write_usize(vec, self.hash.len());
-        for ktabk in &self.array {
-            ktabk.write(vec, true);
-        }
-        for (key, val) in &self.hash {
-            key.write(vec, false);
-            val.write(vec, true);
-        }
-    }
-
-    pub(crate) fn insert(&mut self, k: TValue, v: TValue) -> Option<TValue> {
-        match k {
-            TValue::Number(n) => {
-                let int_n = n as i32 as usize;
-                if int_n as f64 == n {
-                    if int_n < self.array.len() {
-                        let old = std::mem::replace(&mut self.array[int_n], v);
-                        if let TValue::Nil = old {
-                            None
-                        } else {
-                            Some(old)
-                        }
-                    } else {
-                        self.array.resize(int_n + 1, TValue::Nil);
-                        self.array[int_n] = v;
-                        None
-                    }
-                } else {
-                    self.hash.insert(k, v)
-                }
-            }
-            TValue::Nil => panic!("template table cannot be indexed by nil"),
-            _ => self.hash.insert(k, v),
-        }
-    }
-}
-
-impl TValue {
-    pub(crate) fn read(vec: &mut VecDeque<u8>) -> Self {
-        let tag = uleb128::read_usize(vec);
-        match tag {
-            0 => TValue::Nil,
-            1 => TValue::False,
-            2 => TValue::True,
-            3 => {
-                let n = uleb128::read_u32(vec);
-                TValue::Number(n as f64)
-            }
-            4 => {
-                let lo = uleb128::read_u32(vec);
-                let hi = uleb128::read_u32(vec);
-                TValue::Number(f64::from_bits(((hi as u64) << 32) | lo as u64))
-            }
-            n => {
-                let len = n - 5;
-                let bytes: Vec<u8> = vec.drain(..len).collect();
-                TValue::String(unsafe { String::from_utf8_unchecked(bytes) })
-            }
-        }
-    }
-
-    pub(crate) fn write(&self, vec: &mut Vec<u8>, narrow: bool) {
-        match self {
-            TValue::Nil => vec.push(0),
-            TValue::False => vec.push(1),
-            TValue::True => vec.push(2),
-            TValue::Number(n) => {
-                let int_n = *n as i32;
-                if int_n as f64 == *n && narrow {
-                    vec.push(3);
-                    uleb128::write_u32(vec, int_n as u32);
-                } else {
-                    vec.push(4);
-                    uleb128::write_usize(vec, n.to_bits() as usize);
-                }
-            }
-            TValue::String(s) => {
-                let s = unescape(s);
-                uleb128::write_usize(vec, 5 + s.len());
-                // i'm not happy about this either
-                vec.extend(s.as_bytes());
-            }
-        }
-    }
-}
-
 #[repr(transparent)]
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct BCInstr(pub u32);
 
 impl BCInstr {
@@ -620,35 +409,6 @@ impl BCInstr {
     #[inline]
     pub const fn from_bytes(bytes: [u8; 4]) -> Self {
         BCInstr(u32::from_le_bytes(bytes))
-    }
-}
-
-impl std::fmt::Debug for BCInstr {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let op = self.op();
-        let op_str = format!("{op:?}");
-        let modes = BCInsModes::from_op(op);
-        match modes {
-            BCInsModes::ABC {
-                a_mode,
-                b_mode,
-                c_mode,
-            } => {
-                let a_str = format_operand8(self.a(), a_mode);
-                let b_str = format_operand8(self.a(), b_mode);
-                let c_str = format_operand8(self.a(), c_mode);
-                write!(f, "\x1b[36m{op_str:<6}\x1b[0m \x1b[31m{a_str:>3}\x1b[0m \x1b[32m{b_str:>3}\x1b[0m \x1b[34m{c_str:>3}\x1b[0m")
-            }
-            BCInsModes::AD { a_mode, d_mode } => {
-                let a_str = format_operand8(self.a(), a_mode);
-                let d_str = format_operand16(self.d(), d_mode);
-
-                write!(
-                    f,
-                    "\x1b[36m{op_str:<6}\x1b[0m \x1b[31m{a_str:>3}\x1b[0m \x1b[34m{d_str:>7}\x1b[0m"
-                )
-            }
-        }
     }
 }
 
@@ -871,126 +631,203 @@ impl BCOp {
     }
 }
 
-#[allow(clippy::upper_case_acronyms)]
-pub(crate) enum BCInsModes {
-    ABC {
-        a_mode: BCOpMode,
-        b_mode: BCOpMode,
-        c_mode: BCOpMode,
-    },
-    AD {
-        a_mode: BCOpMode,
-        d_mode: BCOpMode,
-    },
+#[derive(Debug, Clone, Copy)]
+pub struct UVData {
+    pub flags: UVFlags,
+    pub reg: u8,
 }
 
-impl BCInsModes {
-    pub(crate) fn from_op(op: BCOp) -> Self {
-        let modes = BC_MODES[op as usize];
-        let a_mode = BCOpMode::from_u16(modes & 0b111);
-        let b_mode = BCOpMode::from_u16((modes >> 3) & 0b1111);
-        let c_or_d_mode = BCOpMode::from_u16((modes >> 7) & 0b1111);
+impl UVData {
+    pub(crate) fn from_bytes(bytes: [u8; 2]) -> Self {
+        Self {
+            flags: UVFlags::from_bits_retain(bytes[1]),
+            reg: bytes[0],
+        }
+    }
 
-        let has_b = b_mode != BCOpMode::None;
-        if has_b {
-            BCInsModes::ABC {
-                a_mode,
-                b_mode,
-                c_mode: c_or_d_mode,
+    pub(crate) fn to_bytes(self) -> [u8; 2] {
+        [self.reg, self.flags.bits()]
+    }
+}
+
+bitflags! {
+    #[derive(Debug, Default, Clone, Copy)]
+    pub struct UVFlags: u8 {
+        const IMMUTABLE = 0b01000000;
+        const LOCAL = 0b10000000;
+    }
+}
+
+#[derive(Clone)]
+pub enum GCConstant {
+    Child,
+    Table(TemplateTable),
+    // FFI stuff:
+    // I64,
+    // U64,
+    // Complex,
+    Str(String),
+}
+
+impl GCConstant {
+    fn discriminator(&self) -> usize {
+        match self {
+            GCConstant::Child => 0,
+            GCConstant::Table(_) => 1,
+            GCConstant::Str(_) => 5,
+        }
+    }
+
+    pub(crate) fn read(vec: &mut VecDeque<u8>) -> Self {
+        let discrim = uleb128::read_usize(vec);
+        match discrim {
+            0 => GCConstant::Child,
+            1 => GCConstant::Table(TemplateTable::read(vec)),
+            2..=4 => todo!("haven't implemented FFI stuff yet"),
+            n => {
+                let len = n - 5;
+                let bytes: Vec<u8> = vec.drain(..len).collect();
+                GCConstant::Str(unsafe { String::from_utf8_unchecked(bytes) })
             }
-        } else {
-            BCInsModes::AD {
-                a_mode,
-                d_mode: c_or_d_mode,
+        }
+    }
+
+    pub(crate) fn write(&self, vec: &mut Vec<u8>) {
+        let discrim = self.discriminator();
+        match self {
+            GCConstant::Child => {
+                uleb128::write_usize(vec, discrim);
+            }
+            GCConstant::Table(table) => {
+                uleb128::write_usize(vec, discrim);
+                table.write(vec);
+            }
+            GCConstant::Str(s) => {
+                let s = unescape(s);
+                uleb128::write_usize(vec, discrim + s.len());
+                vec.extend(s.as_bytes());
             }
         }
     }
 }
 
-#[derive(PartialEq, Clone, Copy)]
-pub(crate) enum BCOpMode {
-    // Mode A must be <= 7
-    None,
-    Dst,
-    Base,
-    Var,
-    RBase,
-    Upval,
-
-    Lit,
-    Lits,
-    Pri,
-    Num,
-    Str,
-    Table,
-    Func,
-    Jump,
-    CData,
+#[derive(Debug, Default, Clone)]
+pub struct TemplateTable {
+    pub array: Vec<TValue>,
+    pub hash: FxHashMap<TValue, TValue>,
 }
 
-impl BCOpMode {
-    const fn from_u16(value: u16) -> Self {
-        match value {
-            0 => BCOpMode::None,
-            1 => BCOpMode::Dst,
-            2 => BCOpMode::Base,
-            3 => BCOpMode::Var,
-            4 => BCOpMode::RBase,
-            5 => BCOpMode::Upval,
-            6 => BCOpMode::Lit,
-            7 => BCOpMode::Lits,
-            8 => BCOpMode::Pri,
-            9 => BCOpMode::Num,
-            10 => BCOpMode::Str,
-            11 => BCOpMode::Table,
-            12 => BCOpMode::Func,
-            13 => BCOpMode::Jump,
-            14 => BCOpMode::CData,
-            _ => panic!(),
+impl TemplateTable {
+    pub(crate) fn with_size(array_len: usize) -> Self {
+        Self {
+            array: vec![TValue::Nil; array_len],
+            ..Default::default()
+        }
+    }
+
+    pub(crate) fn read(vec: &mut VecDeque<u8>) -> Self {
+        let mut result = TemplateTable::default();
+        let array_len = uleb128::read_usize(vec);
+        let hash_len = uleb128::read_usize(vec);
+
+        for _ in 0..array_len {
+            result.array.push(TValue::read(vec));
+        }
+
+        for _ in 0..hash_len {
+            let key = TValue::read(vec);
+            let val = TValue::read(vec);
+            result.hash.insert(key, val);
+        }
+
+        result
+    }
+
+    pub(crate) fn write(&self, vec: &mut Vec<u8>) {
+        uleb128::write_usize(vec, self.array.len());
+        uleb128::write_usize(vec, self.hash.len());
+        for ktabk in &self.array {
+            ktabk.write(vec, true);
+        }
+        for (key, val) in &self.hash {
+            key.write(vec, false);
+            val.write(vec, true);
+        }
+    }
+
+    pub(crate) fn insert(&mut self, k: TValue, v: TValue) -> Option<TValue> {
+        match k {
+            TValue::Number(n) => {
+                let int_n = n as i32 as usize;
+                if int_n as f64 == n {
+                    if int_n < self.array.len() {
+                        let old = std::mem::replace(&mut self.array[int_n], v);
+                        if let TValue::Nil = old {
+                            None
+                        } else {
+                            Some(old)
+                        }
+                    } else {
+                        self.array.resize(int_n + 1, TValue::Nil);
+                        self.array[int_n] = v;
+                        None
+                    }
+                } else {
+                    self.hash.insert(k, v)
+                }
+            }
+            TValue::Nil => panic!("template table cannot be indexed by nil"),
+            _ => self.hash.insert(k, v),
         }
     }
 }
 
-const BC_MODES: [u16; 97] = [
-    12675, 12675, 14723, 14723, 8579, 8579, 9475, 9475, 9347, 9347, 9219, 9219, 45441, 45441,
-    45440, 45440, 45827, 45827, 45441, 45441, 33153, 10625, 21657, 23705, 25753, 27801, 29849,
-    21657, 23705, 25753, 27801, 29849, 20889, 22937, 24985, 27033, 29081, 31129, 16929, 46337,
-    46849, 45953, 46209, 46081, 45314, 45697, 45445, 46341, 46213, 46085, 46724, 5633, 4865, 5505,
-    1281, 3331, 409, 1305, 793, 409, 2459, 3355, 2843, 3202, 2459, 19250, 19250, 19202, 19202,
-    19250, 19250, 45874, 46722, 45826, 45828, 45828, 45828, 46722, 46722, 46722, 46722, 45826,
-    46722, 46722, 45826, 46724, 46724, 45828, 46724, 45060, 45060, 45828, 45060, 45060, 45828,
-    45060, 45060,
-];
-
-fn format_operand8(val: u8, mode: BCOpMode) -> String {
-    match mode {
-        BCOpMode::Dst | BCOpMode::Base | BCOpMode::Var | BCOpMode::RBase => {
-            format!("r{val}")
+impl TValue {
+    pub(crate) fn read(vec: &mut VecDeque<u8>) -> Self {
+        let tag = uleb128::read_usize(vec);
+        match tag {
+            0 => TValue::Nil,
+            1 => TValue::False,
+            2 => TValue::True,
+            3 => {
+                let n = uleb128::read_u32(vec);
+                TValue::Number(n as f64)
+            }
+            4 => {
+                let lo = uleb128::read_u32(vec);
+                let hi = uleb128::read_u32(vec);
+                TValue::Number(f64::from_bits(((hi as u64) << 32) | lo as u64))
+            }
+            n => {
+                let len = n - 5;
+                let bytes: Vec<u8> = vec.drain(..len).collect();
+                TValue::String(unsafe { String::from_utf8_unchecked(bytes) })
+            }
         }
-        BCOpMode::Upval => format!("^{val}"),
-        BCOpMode::None => String::new(),
-        _ => format!("{val}"),
     }
-}
 
-fn format_operand16(val: u16, mode: BCOpMode) -> String {
-    match mode {
-        BCOpMode::Dst | BCOpMode::Base | BCOpMode::Var | BCOpMode::RBase => {
-            format!("r{val}")
+    pub(crate) fn write(&self, vec: &mut Vec<u8>, narrow: bool) {
+        match self {
+            TValue::Nil => vec.push(0),
+            TValue::False => vec.push(1),
+            TValue::True => vec.push(2),
+            TValue::Number(n) => {
+                let int_n = *n as i32;
+                if int_n as f64 == *n && narrow {
+                    vec.push(3);
+                    uleb128::write_u32(vec, int_n as u32);
+                } else {
+                    vec.push(4);
+                    uleb128::write_usize(vec, n.to_bits() as usize);
+                }
+            }
+            TValue::String(s) => {
+                let s = unescape(s);
+                uleb128::write_usize(vec, 5 + s.len());
+                // i'm not happy about this either
+                vec.extend(s.as_bytes());
+            }
         }
-        BCOpMode::Upval => format!("^{val}"),
-        BCOpMode::Lits => format!("{}", val as i16),
-        BCOpMode::Pri => match val {
-            0 => "nil".to_owned(),
-            1 => "false".to_owned(),
-            2 => "true".to_owned(),
-            n => format!("{n}!"),
-        },
-        BCOpMode::Str | BCOpMode::Table | BCOpMode::CData | BCOpMode::Func | BCOpMode::Num => {
-            format!("#{}", !val as i16)
-        }
-        BCOpMode::Jump => format!("{}", u16::wrapping_sub(val, BCInstr::BIAS_J) as i16),
-        _ => format!("{val}"),
     }
 }
 

@@ -11,6 +11,7 @@ ariadne = "0.5.0"
 clap = "4.5"
 indexmap = "2.7.1"
 anstream = "0.6.18"
+yansi = "1.0.1"
 
 [profile.dev-rel]
 debug = 1
