@@ -1,4 +1,10 @@
-use std::{error::Error, path::PathBuf, time::Instant};
+use std::{
+    error::Error,
+    fs,
+    io::{self, Read},
+    path::{Path, PathBuf},
+    time::Instant,
+};
 
 use anstream::{eprintln, println};
 
@@ -46,9 +52,9 @@ fn build(args: &cli::Build) -> Result<(), Box<dyn Error>> {
         run_transpiler(&file, &expr_pool, &stmts)
     };
 
-    let mut output: Box<dyn std::io::Write> = match &args.output {
-        Some(file) => Box::new(std::fs::File::create(file)?),
-        None => Box::new(std::io::stdout()),
+    let mut output: Box<dyn io::Write> = match &args.output {
+        Some(file) => Box::new(fs::File::create(file)?),
+        None => Box::new(io::stdout()),
     };
 
     output.write_all(&result)?;
@@ -57,7 +63,13 @@ fn build(args: &cli::Build) -> Result<(), Box<dyn Error>> {
 }
 
 pub fn read_main(args: &cli::Read) -> Result<(), Box<dyn Error>> {
-    let dump = std::fs::read(&args.file)?;
+    let dump = if args.file == Path::new("-") {
+        let mut buf = Vec::new();
+        io::stdin().read_to_end(&mut buf)?;
+        buf
+    } else {
+        fs::read(&args.file)?
+    };
     let (header, protos) = read_dump(&dump);
     print_dump(&header, &protos);
 

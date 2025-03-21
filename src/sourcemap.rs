@@ -1,5 +1,6 @@
 use std::{
-    fs, io,
+    fs,
+    io::{self, Read},
     path::{Path, PathBuf},
     rc::Rc,
 };
@@ -15,7 +16,14 @@ pub struct SourceFile {
 
 impl SourceFile {
     pub fn read(path: &Path, start_pos: SrcLoc) -> io::Result<Self> {
-        let src = fs::read_to_string(path)?.into();
+        let src = if path == Path::new("-") {
+            let mut buf = String::new();
+            io::stdin().read_to_string(&mut buf)?;
+            buf.into()
+        } else {
+            fs::read_to_string(path)?.into()
+        };
+
         Ok(Self {
             path: Box::from(path),
             src,
