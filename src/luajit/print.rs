@@ -163,7 +163,16 @@ impl fmt::Display for TemplateTable {
                 {
                     let f = &mut indented(f);
 
-                    for (k, v) in &self.hash {
+                    let mut entries = Vec::from_iter(&self.hash);
+
+                    entries.sort_by(|a, b| {
+                        type ByteSlice = [u8; std::mem::size_of::<TValue>()];
+                        let a = unsafe { &*(std::ptr::from_ref(a.0).cast::<ByteSlice>()) };
+                        let b = unsafe { &*(std::ptr::from_ref(b.0).cast::<ByteSlice>()) };
+                        a.cmp(b)
+                    });
+
+                    for (k, v) in &entries {
                         writeln!(f, "[{k}]: {v},")?;
                     }
                 }
