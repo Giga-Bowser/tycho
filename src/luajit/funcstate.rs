@@ -5,6 +5,7 @@ use rustc_hash::FxHashMap;
 
 use crate::luajit::{
     bytecode::{BCInstr, BCOp, BCPos, BCReg, Bytecode, ProtoFlags, TemplateTable, NO_JMP, NO_REG},
+    utils::unescape::unescape,
     ExprDesc, ExprKind, TValue, VarFlags, VarInfo,
 };
 
@@ -109,7 +110,7 @@ impl FuncState {
     }
 
     pub(super) fn const_str(&mut self, s: &str) -> BCReg {
-        match self.kt.entry(TValue::String(s.to_owned())) {
+        match self.kt.entry(TValue::String(unescape(s).into_owned())) {
             Entry::Occupied(occupied_entry) => *occupied_entry.get(),
             Entry::Vacant(vacant_entry) => {
                 let nkgc = self.num_kgc;

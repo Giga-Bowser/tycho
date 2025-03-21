@@ -5,7 +5,7 @@ use crate::{
             UVFlags, NO_JMP,
         },
         funcstate::{FuncScope, FuncState, ScopeFlags, VarIdx},
-        utils::numlit,
+        utils::{numlit, unescape::unescape},
         ExprDesc, ExprKind, TValue, VarFlags, VarInfo,
     },
     parser::{
@@ -1138,7 +1138,7 @@ impl<'a> LJCompiler<'a> {
                 let k = match key.kind {
                     ExprKind::KFalse => TValue::False,
                     ExprKind::KTrue => TValue::True,
-                    ExprKind::KString(s) => TValue::String(s.to_owned()),
+                    ExprKind::KString(s) => TValue::String(unescape(s).into_owned()),
                     ExprKind::KNumber(n) => TValue::Number(n),
                     _ => unreachable!(),
                 };
@@ -1148,7 +1148,7 @@ impl<'a> LJCompiler<'a> {
                         ExprKind::KNil => TValue::Nil,
                         ExprKind::KFalse => TValue::False,
                         ExprKind::KTrue => TValue::True,
-                        ExprKind::KString(s) => TValue::String(s.to_owned()),
+                        ExprKind::KString(s) => TValue::String(unescape(s).into_owned()),
                         ExprKind::KNumber(n) => TValue::Number(n),
                         _ => unreachable!(),
                     };

@@ -822,7 +822,6 @@ impl TValue {
                 }
             }
             TValue::String(s) => {
-                let s = unescape(s);
                 uleb128::write_usize(vec, 5 + s.len());
                 // i'm not happy about this either
                 vec.extend(s.as_bytes());
