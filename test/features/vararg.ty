@@ -1,0 +1,11 @@
+print("testing vararg")
+
+f := func(a: [any]any, ...) -> number {
+	x := {n = select("#", ...), ...}
+	for i in 1..x.n { assert(a[i] == x[i]) }
+	return x.n
+}
+
+assert(f({}) == 0)
+assert(f({1,2,3}, 1, 2, 3) == 3)
+assert(f({"alo", nil, 45, f, nil}, "alo", nil, 45, f, nil) == 5)
