@@ -881,6 +881,11 @@ impl<'a> LJCompiler<'a> {
         };
 
         for param in params {
+            if let ast::TypeNode::VariadicType(_) = &param.ty {
+                self.func_state.flags |= ProtoFlags::VARARG;
+                break;
+            }
+
             self.var_new(num_params, param.name.to_str(self.file));
             num_params += 1;
         }
