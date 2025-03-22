@@ -956,6 +956,7 @@ impl TypeChecker<'_> {
                 kind: TypeKind::Variadic,
                 span: Some(*span),
             })),
+            ast::TypeNode::ParenType(paren_type) => self.resolve_type_node(&paren_type.inner),
         }
     }
 

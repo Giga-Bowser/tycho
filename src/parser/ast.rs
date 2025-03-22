@@ -333,6 +333,7 @@ pub enum TypeNode {
     TableType(TableType),
     OptionalType(OptionalType),
     VariadicType(Span),
+    ParenType(ParenType),
 }
 
 #[derive(Debug, Clone)]
@@ -379,6 +380,14 @@ pub struct OptionalType {
 
     // for diagnostics
     pub question: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct ParenType {
+    pub inner: Box<TypeNode>,
+
+    // for diagnostics
+    pub span: Span,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

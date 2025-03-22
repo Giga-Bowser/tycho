@@ -350,6 +350,7 @@ mod ast {
                 ast::TypeNode::FunctionType(function_type) => function_type.span(),
                 ast::TypeNode::TableType(table_type) => table_type.span(),
                 ast::TypeNode::OptionalType(optional_type) => optional_type.span(),
+                ast::TypeNode::ParenType(paren_type) => paren_type.span(),
             }
         }
     }
@@ -384,6 +385,12 @@ mod ast {
     impl Spanned for ast::OptionalType {
         fn span(&self) -> Span {
             Span::cover(self.inner.as_ref().span(), self.question)
+        }
+    }
+
+    impl Spanned for ast::ParenType {
+        fn span(&self) -> Span {
+            self.span
         }
     }
 }

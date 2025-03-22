@@ -882,6 +882,16 @@ impl Parser<'_> {
                 let ty = self.parse_func_header()?;
                 Ok(TypeNode::FunctionType(ty))
             }
+            LParen => {
+                let start = self.tokens.pop_front().span.start;
+                let inner = Box::new(self.parse_type()?);
+                let end = self.tokens.expect(RParen)?.span.end;
+
+                Ok(TypeNode::ParenType(ParenType {
+                    inner,
+                    span: Span::new(start, end),
+                }))
+            }
             _ => Err(UnexpectedToken::err(
                 self.tokens[0].clone(),
                 [Name, Nil, LSquare, Func],

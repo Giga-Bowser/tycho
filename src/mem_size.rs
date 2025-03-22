@@ -264,6 +264,7 @@ mod parser {
                 TypeNode::OptionalType(optional_type) => {
                     optional_type.inner.deep_size_of_children()
                 }
+                TypeNode::ParenType(paren_type) => paren_type.inner.deep_size_of_children(),
             }
         }
     }
