@@ -802,8 +802,8 @@ impl<'a> LJCompiler<'a> {
                 let str = str.to_str(self.file);
                 str.get_unchecked(1..str.len() - 1)
             })),
-            ast::SimpleExpr::Bool(str) => match str.to_str(self.file).chars().next().unwrap() {
-                't' => ExprDesc::new(ExprKind::KTrue),
+            ast::SimpleExpr::Bool(str) => match str.to_str(self.file).as_bytes()[0] {
+                b't' => ExprDesc::new(ExprKind::KTrue),
                 _ => ExprDesc::new(ExprKind::KFalse),
             },
             ast::SimpleExpr::Nil(_) => ExprDesc::new(ExprKind::KNil),
