@@ -232,7 +232,8 @@ mod parser {
                 SimpleExpr::Num(_)
                 | SimpleExpr::Str(_)
                 | SimpleExpr::Bool(_)
-                | SimpleExpr::Nil(_) => 0,
+                | SimpleExpr::Nil(_)
+                | SimpleExpr::Variadic(_) => 0,
                 SimpleExpr::FuncNode(func_node) => func_node.deep_size_of_children(),
                 SimpleExpr::TableNode(table_node) => table_node.fields.deep_size_of_children(),
                 SimpleExpr::SuffixedExpr(suffixed_expr) => suffixed_expr.deep_size_of_children(),

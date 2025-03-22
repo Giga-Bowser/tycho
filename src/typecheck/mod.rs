@@ -489,6 +489,10 @@ impl TypeChecker<'_> {
                 kind: TypeKind::Nil,
                 span: Some(*s),
             })),
+            ast::SimpleExpr::Variadic(s) => Ok(self.tcx.pool.add(Type {
+                kind: TypeKind::Variadic,
+                span: Some(*s),
+            })),
             ast::SimpleExpr::FuncNode(func) => self.check_func(func),
             ast::SimpleExpr::TableNode(table_node) => {
                 let table_type = self.check_table(table_node)?;

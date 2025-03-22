@@ -475,7 +475,7 @@ impl Parser<'_> {
 
     fn parse_primary_expr(&mut self) -> PResult<ExprRef> {
         match self.tokens[0].kind {
-            Name | Elipsis => {
+            Name => {
                 let name = self.tokens[0].span;
                 self.tokens.pop_front();
                 Ok(self.expr_pool.add(Expr::Name(name)))
@@ -490,10 +490,7 @@ impl Parser<'_> {
                     span: Span::new(start, end),
                 })))
             }
-            _ => Err(UnexpectedToken::err(
-                self.tokens[0].clone(),
-                [Name, Elipsis, LParen],
-            )),
+            _ => Err(UnexpectedToken::err(self.tokens[0].clone(), [Name, LParen])),
         }
     }
 
@@ -534,23 +531,27 @@ impl Parser<'_> {
     }
 
     fn simple_expr(&mut self) -> PResult<SimpleExpr> {
-        let str = self.tokens[0].span;
+        let span = self.tokens[0].span;
         match self.tokens[0].kind {
             NumLit => {
                 self.tokens.pop_front();
-                Ok(SimpleExpr::Num(str))
+                Ok(SimpleExpr::Num(span))
             }
             StrLit => {
                 self.tokens.pop_front();
-                Ok(SimpleExpr::Str(str))
+                Ok(SimpleExpr::Str(span))
             }
             True | False => {
                 self.tokens.pop_front();
-                Ok(SimpleExpr::Bool(str))
+                Ok(SimpleExpr::Bool(span))
             }
             Nil => {
                 self.tokens.pop_front();
-                Ok(SimpleExpr::Nil(str))
+                Ok(SimpleExpr::Nil(span))
+            }
+            Elipsis => {
+                self.tokens.pop_front();
+                Ok(SimpleExpr::Variadic(span))
             }
             LCurly => Ok(SimpleExpr::TableNode(self.table_constructor()?)),
             Func => Ok(SimpleExpr::FuncNode(Box::new(self.func_constructor()?))),

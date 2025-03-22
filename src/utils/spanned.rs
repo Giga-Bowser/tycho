@@ -226,7 +226,8 @@ mod ast {
                 ast::SimpleExpr::Num(span)
                 | ast::SimpleExpr::Str(span)
                 | ast::SimpleExpr::Bool(span)
-                | ast::SimpleExpr::Nil(span) => *span,
+                | ast::SimpleExpr::Nil(span)
+                | ast::SimpleExpr::Variadic(span) => *span,
                 ast::SimpleExpr::FuncNode(func_node) => self.wrap(func_node.as_ref()).span(),
                 ast::SimpleExpr::TableNode(table_node) => table_node.span,
                 ast::SimpleExpr::SuffixedExpr(suffixed_expr) => self.wrap(suffixed_expr).span(),

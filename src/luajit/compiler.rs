@@ -807,8 +807,26 @@ impl<'a> LJCompiler<'a> {
                 _ => ExprDesc::new(ExprKind::KFalse),
             },
             ast::SimpleExpr::Nil(_) => ExprDesc::new(ExprKind::KNil),
-            ast::SimpleExpr::FuncNode(func_node) => self.compile_func::<false>(func_node), // self.compile_func(func_node)
-            ast::SimpleExpr::TableNode(table_node) => self.compile_table(&table_node.fields), // self.compile_table(table_node)
+            ast::SimpleExpr::Variadic(_) => {
+                assert!(
+                    self.func_state.flags.contains(ProtoFlags::VARARG),
+                    "`...` used in non-variadic function"
+                );
+
+                self.func_state.bcreg_reserve(1);
+                let base = self.func_state.free_reg - 1;
+                ExprDesc::new(ExprKind::Call {
+                    instr_idx: self.bcemit(BCInstr::new_abc(
+                        BCOp::VARG,
+                        base as u8,
+                        2,
+                        self.func_state.num_params,
+                    )),
+                    base,
+                })
+            }
+            ast::SimpleExpr::FuncNode(func_node) => self.compile_func::<false>(func_node),
+            ast::SimpleExpr::TableNode(table_node) => self.compile_table(&table_node.fields),
             ast::SimpleExpr::SuffixedExpr(suffixed_expr) => {
                 self.compile_suffixed_expr(suffixed_expr)
             }

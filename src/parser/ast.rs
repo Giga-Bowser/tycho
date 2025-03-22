@@ -258,6 +258,7 @@ pub enum SimpleExpr {
     Str(Span),
     Bool(Span),
     Nil(Span),
+    Variadic(Span),
     FuncNode(Box<FuncNode>),
     TableNode(TableNode),
     SuffixedExpr(SuffixedExpr),

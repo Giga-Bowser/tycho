@@ -227,10 +227,11 @@ impl<'a> Transpiler<'a> {
 
     fn transpile_simple_expr(&mut self, simple_expr: &ast::SimpleExpr) {
         match simple_expr {
-            ast::SimpleExpr::Num(str)
-            | ast::SimpleExpr::Str(str)
-            | ast::SimpleExpr::Bool(str)
-            | ast::SimpleExpr::Nil(str) => self.result += str.to_str(self.file),
+            ast::SimpleExpr::Num(span)
+            | ast::SimpleExpr::Str(span)
+            | ast::SimpleExpr::Bool(span)
+            | ast::SimpleExpr::Nil(span)
+            | ast::SimpleExpr::Variadic(span) => self.result += span.to_str(self.file),
             ast::SimpleExpr::FuncNode(func_node) => self.transpile_func(func_node),
             ast::SimpleExpr::TableNode(table_node) => self.transpile_table(table_node),
             ast::SimpleExpr::SuffixedExpr(suffixed_expr) => {
