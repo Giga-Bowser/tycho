@@ -1,4 +1,7 @@
-use std::fmt::{self, Write as _};
+use std::{
+    cmp::Ordering,
+    fmt::{self, Write as _},
+};
 
 use yansi::Paint;
 
@@ -165,11 +168,31 @@ impl fmt::Display for TemplateTable {
 
                     let mut entries = Vec::from_iter(&self.hash);
 
-                    entries.sort_by(|a, b| {
-                        type ByteSlice = [u8; std::mem::size_of::<TValue>()];
-                        let a = unsafe { &*(std::ptr::from_ref(a.0).cast::<ByteSlice>()) };
-                        let b = unsafe { &*(std::ptr::from_ref(b.0).cast::<ByteSlice>()) };
-                        a.cmp(b)
+                    entries.sort_by(|(a, _), (b, _)| {
+                        match (a, b) {
+                            (TValue::String(a), TValue::String(b)) => return a.cmp(b),
+                            (TValue::Number(a), TValue::Number(b)) => {
+                                return a.partial_cmp(b).unwrap_or(Ordering::Equal)
+                            }
+                            _ => (),
+                        }
+
+                        let a_kind = match a {
+                            TValue::Nil => 0,
+                            TValue::False => 1,
+                            TValue::True => 2,
+                            TValue::String(_) => 3,
+                            TValue::Number(_) => 4,
+                        };
+                        let b_kind = match b {
+                            TValue::Nil => 0,
+                            TValue::False => 1,
+                            TValue::True => 2,
+                            TValue::String(_) => 3,
+                            TValue::Number(_) => 4,
+                        };
+
+                        a_kind.cmp(&b_kind)
                     });
 
                     for (k, v) in &entries {
