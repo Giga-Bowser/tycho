@@ -24,10 +24,8 @@ local function encode_nil(val)
 	return "null"
 end
 local function encode_table(val, stack)
-	local res = {
-	}
-	stack = (stack or {
-	})
+	local res = {}
+	stack = (stack or {})
 	if stack[val] then
 		error("circular reference")
 	end
@@ -84,13 +82,11 @@ encode = function(val, stack)
 	error("unexpected type '" .. t .. "'")
 end
 json.encode = function(val)
-	return encode(val, {
-	})
+	return encode(val, {})
 end
 local parse
 local function create_set(...)
-	local res = {
-	}
+	local res = {}
 	for i = 1, select("#", ...) do
 		res[select(i, ...)] = true
 	end
@@ -197,8 +193,7 @@ local function parse_literal(str, i)
 	return literal_map[word], x
 end
 local function parse_array(str, i)
-	local res = {
-	}
+	local res = {}
 	local n = 1
 	i = i + 1
 	while true do
@@ -224,8 +219,7 @@ local function parse_array(str, i)
 	return res, i
 end
 local function parse_object(str, i)
-	local res = {
-	}
+	local res = {}
 	i = i + 1
 	while true do
 		local key
@@ -437,10 +431,8 @@ test("decode escape", function()
 end)
 test("decode empty", function()
 	local t = {
-		["[]"] = {
-	},
-		["{}"] = {
-	},
+		["[]"] = {},
+		["{}"] = {},
 		["\"\""] = "",
 	}
 	for k, v in pairs(t) do

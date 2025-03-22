@@ -196,8 +196,7 @@ local a = {
 print("hello, world")
 local T = {}
 T.__index = T
-local tests = {
-}
+local tests = {}
 local function test(name, f)
 	tests[name] = f
 end

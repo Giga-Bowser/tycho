@@ -320,6 +320,10 @@ impl<'a> Transpiler<'a> {
     }
 
     fn transpile_table(&mut self, table_node: &ast::TableNode) {
+        if table_node.fields.is_empty() {
+            self.result += "{}";
+            return;
+        }
         self.result += "{";
         self.result += &self.newline();
         for field in &table_node.fields {
