@@ -10,10 +10,7 @@ use bitflags::bitflags;
 use rustc_hash::FxHashMap;
 
 use crate::{
-    luajit::{
-        utils::{uleb128, unescape::unescape},
-        TValue,
-    },
+    luajit::{utils::uleb128, TValue},
     parser::ast,
 };
 
@@ -703,7 +700,6 @@ impl GCConstant {
                 table.write(vec);
             }
             GCConstant::Str(s) => {
-                let s = unescape(s);
                 uleb128::write_usize(vec, discrim + s.len());
                 vec.extend(s.as_bytes());
             }
