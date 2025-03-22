@@ -881,12 +881,15 @@ impl<'a> LJCompiler<'a> {
         };
 
         for param in params {
-            if let ast::TypeNode::VariadicType(_) = &param.ty {
-                self.func_state.flags |= ProtoFlags::VARARG;
-                break;
+            match param {
+                ast::Param::Named { name, .. } => self.var_new(num_params, name.to_str(self.file)),
+                ast::Param::Anon(_) => self.var_new(num_params, ""),
+                ast::Param::Variadic(_) => {
+                    self.func_state.flags |= ProtoFlags::VARARG;
+                    break;
+                }
             }
 
-            self.var_new(num_params, param.name.to_str(self.file));
             num_params += 1;
         }
 
@@ -992,7 +995,17 @@ impl<'a> LJCompiler<'a> {
                 self.var_new(0, "_self");
                 let mut num_params = 1;
                 for param in &constructor.ty.params {
-                    self.var_new(num_params, param.name.to_str(self.file));
+                    match param {
+                        ast::Param::Named { name, .. } => {
+                            self.var_new(num_params, name.to_str(self.file));
+                        }
+                        ast::Param::Anon(_) => self.var_new(num_params, ""),
+                        ast::Param::Variadic(_) => {
+                            self.func_state.flags |= ProtoFlags::VARARG;
+                            break;
+                        }
+                    }
+
                     num_params += 1;
                 }
 

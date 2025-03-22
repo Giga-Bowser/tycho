@@ -278,7 +278,10 @@ mod parser {
 
     impl DeepSize for Param {
         fn deep_size_of_children(&self) -> usize {
-            self.ty.deep_size_of_children()
+            match self {
+                Param::Named { ty, .. } | Param::Anon(ty) => ty.deep_size_of_children(),
+                Param::Variadic(_) => 0,
+            }
         }
     }
 }
@@ -295,7 +298,7 @@ mod typecheck {
 
     mod types {
         use super::DeepSize;
-        use crate::typecheck::types::{Function, Struct, Type, TypeKind};
+        use crate::typecheck::types::{Function, Param, Struct, Type, TypeKind};
 
         impl DeepSize for Type {
             fn deep_size_of_children(&self) -> usize {
@@ -312,6 +315,12 @@ mod typecheck {
         impl DeepSize for Function {
             fn deep_size_of_children(&self) -> usize {
                 self.params.deep_size_of_children() + self.returns.deep_size_of_children()
+            }
+        }
+
+        impl DeepSize for Param {
+            fn deep_size_of_children(&self) -> usize {
+                0
             }
         }
 

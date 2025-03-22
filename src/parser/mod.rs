@@ -647,29 +647,22 @@ impl Parser<'_> {
             loop {
                 if self.tokens[0].kind == Elipsis {
                     let span = self.tokens.pop_front().span;
-                    params.push(Param {
-                        name: span,
-                        ty: TypeNode::VariadicType(span),
-                    });
+                    params.push(Param::Variadic(span));
                     break self.tokens.expect(RParen)?.span.end;
                     // TODO: diagnostic here for params after variadic
                 }
 
                 if self.tokens[0].kind == Name && self.tokens[1].kind == Colon {
-                    let argname = self.tokens[0].span;
+                    let name = self.tokens[0].span;
                     self.tokens.pop_front();
                     self.tokens.pop_front();
 
-                    params.push(Param {
-                        name: argname,
+                    params.push(Param::Named {
+                        name,
                         ty: self.parse_type()?,
                     });
                 } else {
-                    let offset = self.tokens[0].span.start;
-                    params.push(Param {
-                        name: Span::empty(offset),
-                        ty: self.parse_type()?,
-                    });
+                    params.push(Param::Anon(self.parse_type()?));
                 }
 
                 if self.tokens[0].kind == RParen {
@@ -761,10 +754,7 @@ impl Parser<'_> {
             loop {
                 if self.tokens[0].kind == Elipsis {
                     let span = self.tokens.pop_front().span;
-                    params.push(Param {
-                        name: span,
-                        ty: TypeNode::VariadicType(span),
-                    });
+                    params.push(Param::Variadic(span));
                     break self.tokens.expect(RParen)?.span.end;
                     // TODO: diagnostic here for params after variadic
                 }
@@ -774,16 +764,12 @@ impl Parser<'_> {
                     self.tokens.pop_front();
                     self.tokens.pop_front();
 
-                    params.push(Param {
+                    params.push(Param::Named {
                         name,
                         ty: self.parse_type()?,
                     });
                 } else {
-                    let offset = self.tokens[0].span.start;
-                    params.push(Param {
-                        name: Span::empty(offset),
-                        ty: self.parse_type()?,
-                    });
+                    params.push(Param::Anon(self.parse_type()?));
                 }
 
                 if self.tokens[0].kind == RParen {

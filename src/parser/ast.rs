@@ -352,10 +352,17 @@ pub enum ReturnType {
     Multiple(MultipleType),
 }
 
+// #[derive(Debug, Clone)]
+// pub struct Param {
+//     pub name: Span,
+//     pub ty: TypeNode,
+// }
+
 #[derive(Debug, Clone)]
-pub struct Param {
-    pub name: Span,
-    pub ty: TypeNode,
+pub enum Param {
+    Named { name: Span, ty: TypeNode },
+    Anon(TypeNode),
+    Variadic(Span),
 }
 
 #[derive(Debug, Clone)]

@@ -7,8 +7,14 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub struct Function {
-    pub params: Vec<(Span, TypeRef)>,
+    pub params: Vec<Param>,
     pub returns: TypeRef,
+}
+
+#[derive(Debug, Clone)]
+pub struct Param {
+    pub name: Option<Span>,
+    pub ty: TypeRef,
 }
 
 #[derive(Debug, Clone)]
@@ -125,12 +131,11 @@ impl fmt::Debug for PooledType<'_> {
                 let inner = function
                     .params
                     .iter()
-                    .map(|(name, ty)| {
-                        let ty = self.wrap(*ty);
-                        if name.is_empty() {
-                            format!("{ty}")
-                        } else {
-                            format!("{name:?}: {ty}")
+                    .map(|param| {
+                        let ty = self.wrap(param.ty);
+                        match param.name {
+                            Some(name) => format!("{name:?}: {ty}"),
+                            None => format!("{ty}"),
                         }
                     })
                     .collect::<Vec<String>>()

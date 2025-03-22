@@ -13,7 +13,7 @@ use crate::{
         pool::{ExprPool, ExprRef},
     },
     sourcemap::SourceFile,
-    typecheck::{error::*, func_ctx::FuncCtxStack, pool::TypePool},
+    typecheck::{error::*, func_ctx::FuncCtxStack, pool::TypePool, types::Param},
     utils::{spanned::Spanned, Ident, Span, Symbol},
 };
 
@@ -523,13 +523,15 @@ impl TypeChecker<'_> {
             }
 
             let func_ty = this.resolve_function_type(&func.ty, self_ty)?;
-            for (name, ty) in &func_ty.params {
-                let ident = if let TypeKind::Variadic = &this.tcx.pool[*ty].kind {
+            for param in &func_ty.params {
+                let ident = if let TypeKind::Variadic = &this.tcx.pool[param.ty].kind {
                     Ident::from_str("...")
-                } else {
+                } else if let Some(name) = param.name {
                     name.ident(this.file)
+                } else {
+                    continue;
                 };
-                this.tcx.value_map.insert_value(ident, *ty);
+                this.tcx.value_map.insert_value(ident, param.ty);
             }
 
             this.func_ctx.push(func_ty.returns);
@@ -730,7 +732,7 @@ impl TypeChecker<'_> {
                     arg_types.len(),
                 ));
             };
-            let TypeKind::Variadic = self.tcx.pool[last_param.1].kind else {
+            let TypeKind::Variadic = self.tcx.pool[last_param.ty].kind else {
                 return Err(ArgCount::err(
                     call_span,
                     func_ty.params.len(),
@@ -739,16 +741,16 @@ impl TypeChecker<'_> {
             };
         }
 
-        for (arg_ty, (_, param_ty)) in arg_types.iter().zip(&func_ty.params) {
-            if !self.can_equal(*param_ty, *arg_ty) {
-                return Err(CheckErr::new(MismatchedTypes::new(*param_ty, *arg_ty)));
+        for (arg_ty, param) in arg_types.iter().zip(&func_ty.params) {
+            if !self.can_equal(param.ty, *arg_ty) {
+                return Err(CheckErr::new(MismatchedTypes::new(param.ty, *arg_ty)));
             }
         }
 
         // ensure remaining params can be skipped
         // should we allow skipping non-optional nil params?
-        for (_, param_ty) in func_ty.params.iter().skip(arg_types.len()) {
-            if !self.can_equal(*param_ty, TypePool::nil()) {
+        for param in func_ty.params.iter().skip(arg_types.len()) {
+            if !self.can_equal(param.ty, TypePool::nil()) {
                 // probably not great
                 return Err(ArgCount::err(
                     call_span,
@@ -987,14 +989,35 @@ impl TypeChecker<'_> {
 
         let mut params = if let Some(self_ty) = self_ty {
             let mut v = Vec::with_capacity(function_type.params.len() + 1);
-            v.push((Span::DUMMY, self_ty));
+            v.push(Param {
+                name: None,
+                ty: self_ty,
+            });
             v
         } else {
             Vec::with_capacity(function_type.params.len())
         };
 
         for param in &function_type.params {
-            params.push((param.name, self.resolve_type_node(&param.ty)?));
+            let res = match param {
+                ast::Param::Named { name, ty } => Param {
+                    name: Some(*name),
+                    ty: self.resolve_type_node(ty)?,
+                },
+                ast::Param::Anon(ty) => Param {
+                    name: None,
+                    ty: self.resolve_type_node(ty)?,
+                },
+                ast::Param::Variadic(span) => Param {
+                    name: None,
+                    ty: self.tcx.pool.add(Type {
+                        kind: TypeKind::Variadic,
+                        span: Some(*span),
+                    }),
+                },
+            };
+
+            params.push(res);
         }
 
         Ok(Function { params, returns })

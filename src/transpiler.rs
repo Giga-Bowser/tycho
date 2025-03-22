@@ -120,7 +120,7 @@ impl<'a> Transpiler<'a> {
 
         for param in &method_decl.func.ty.params {
             self.result += ", ";
-            self.result += param.name.to_str(self.file);
+            self.transpile_param(param);
         }
 
         self.result.push(')');
@@ -245,11 +245,11 @@ impl<'a> Transpiler<'a> {
         let params = &func_node.ty.params;
 
         if !params.is_empty() {
-            self.result += params[0].name.to_str(self.file);
+            self.transpile_param(&params[0]);
 
             for param in &params[1..] {
                 self.result += ", ";
-                self.result += param.name.to_str(self.file);
+                self.transpile_param(param);
             }
         }
 
@@ -258,16 +258,24 @@ impl<'a> Transpiler<'a> {
         self.result += "end";
     }
 
+    fn transpile_param(&mut self, param: &ast::Param) {
+        match param {
+            ast::Param::Named { name, .. } => self.result += name.to_str(self.file),
+            ast::Param::Anon(_) => self.result.push('_'),
+            ast::Param::Variadic(_) => self.result += "...",
+        }
+    }
+
     fn transpile_local_func(&mut self, func_node: &ast::FuncNode, name: &str) {
         format_to!(self.result, "local function {name}(");
         let params = &func_node.ty.params;
 
         if !params.is_empty() {
-            self.result += params[0].name.to_str(self.file);
+            self.transpile_param(&params[0]);
 
             for param in &params[1..] {
                 self.result += ", ";
-                self.result += param.name.to_str(self.file);
+                self.transpile_param(param);
             }
         }
 
@@ -299,7 +307,7 @@ impl<'a> Transpiler<'a> {
             format_to!(self.result, "{name}.new = function(_self");
             for param in &constructor.ty.params {
                 self.result.push_str(", ");
-                self.result += param.name.to_str(self.file);
+                self.transpile_param(param);
             }
             format_to!(self.result, "){newline}\t");
             self.result += "local self = {}";
